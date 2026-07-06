@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Forecaster Light — VIZ prediction markets</title>
+<meta name="description" content="Thin, non-custodial VIZ prediction-market client.">
+<meta name="theme-color" content="#4a90d9">
+<link rel="stylesheet" href="styles.css">
+<!-- PWA / icons -->
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+<link rel="apple-touch-icon" href="apple-icon-180x180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Forecaster">
+<meta name="mobile-web-app-capable" content="yes">
+</head>
+<body>
+
+<!-- Top bar: brand + node status + lock -->
+<header class="topbar">
+  <div class="bar-inner">
+    <div class="brand" data-nav="#/markets">
+      <img class="brand-logo" src="logo.png" alt="">
+      <img class="brand-text" src="logo-text.svg" alt="Forecaster">
+    </div>
+    <div class="topbar-right">
+      <span class="node-status" id="node-status" title="Node connection">● offline</span>
+      <select class="lang-sel" id="lang-sel" title="Language" aria-label="Language"></select>
+      <button class="icon-btn" id="btn-settings" title="Node settings">⚙</button>
+      <button class="icon-btn hide" id="btn-lock" title="Lock wallet">🔒</button>
+    </div>
+  </div>
+</header>
+
+<!-- Toast messages -->
+<div class="messages" id="messages"></div>
+
+<!-- Scrollable area (the WebView itself doesn't scroll → fixes the Android PWA 100vh bug) -->
+<main class="scroll" id="scroll">
+  <!-- Wrapper caps content width on wide screens; one screen rendered here at a time -->
+  <div class="content" id="content"></div>
+</main>
+
+<!-- Bottom tab bar (mirrors the prototype: Markets / Create / Balance / Profile) -->
+<nav class="tabs" id="tabs">
+  <div class="bar-inner">
+    <a class="tab active" data-nav="#/markets"><span class="tab-ico">📈</span><span>Markets</span></a>
+    <a class="tab tab-create hide" data-nav="#/create"><span class="tab-ico">➕</span><span>Create</span></a>
+    <a class="tab tab-auth hide" data-nav="#/balance"><span class="tab-ico">💰</span><span>Balance</span></a>
+    <a class="tab tab-auth hide" data-nav="#/activity"><span class="tab-ico">📊</span><span>Activity</span></a>
+    <a class="tab" data-nav="#/profile" id="tab-profile"><span class="tab-ico">👤</span><span>Profile</span></a>
+  </div>
+</nav>
+
+<!-- Corner notifications (market lifecycle events) -->
+<div id="notifs" class="notifs"></div>
+
+<!-- Modal host -->
+<div id="modal-host"></div>
+
+<!--
+  viz-js-lib is the ONLY external library. app.js verifies window.viz before booting.
+  Vendored locally (viz.min.js = npm viz-js-lib@0.13.4 dist), which includes the full
+  prediction_market_api (reads) and all pm_* broadcast operations (writes).
+  To update: re-download the bundle from npm, e.g.
+      curl -fsSL https://unpkg.com/viz-js-lib@0.13.4/dist/viz.min.js -o viz.min.js
+  (or `npm i viz-js-lib` and copy node_modules/viz-js-lib/dist/viz.min.js here).
+  Prefer a pinned version; bump it when a newer viz-js-lib is published.
+-->
+<script src="viz.min.js"></script>
+<!--
+  Optional: Chart.js (single UMD file) for a nicer interactive market chart.
+  If it is absent/blocked, the app falls back to a built-in inline-SVG chart — no dependency required.
+-->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="i18n.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

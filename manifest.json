@@ -1,0 +1,19 @@
+{
+  "name": "Forecaster Light — VIZ prediction markets",
+  "short_name": "Forecaster",
+  "description": "Thin, non-custodial VIZ prediction-market client.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f5f7",
+  "theme_color": "#4a90d9",
+  "icons": [
+    { "src": "favicon-96x96.png", "sizes": "96x96", "type": "image/png" },
+    { "src": "android-icon-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "logo.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
