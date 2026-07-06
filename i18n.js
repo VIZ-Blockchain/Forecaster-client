@@ -241,6 +241,52 @@ var EN = {
   'md.accept_by':'Awaiting oracle acceptance by {T} ({IN}).','md.expired':'expired','md.in_min':'in {N} min','md.in_hr':'in {N} h','md.in_day':'in {N} d',
   'cr.info_note':'The creation fee is non-refundable (goes to the DAO fund). The oracle must accept within the acceptance window below — otherwise your seed liquidity is refunded (the creation fee is not) and the market is voided. If the oracle rejects, your liquidity is refunded in full; a missed resolution deadline is penalized from the oracle’s insurance, not from you.',
 
+  /* risk notice (parimutuel / not fixed odds) */
+  'risk.not_fixed_odds':'These are NOT fixed odds. Payouts float with the pool — your return depends on the final distribution of all bets and can be lower than implied. Never bet more than you can lose.',
+
+  /* transfer position */
+  'md.col_transfer':'Transfer',
+  'xfer.title':'Transfer position','xfer.desc':'Hand bet #{ID} (or part of it) to another account.',
+  'xfer.shares':'Shares to transfer','xfer.send':'Transfer','xfer.fill':'Enter a recipient and amount',
+  'txn.transfer_position':'Transfer position',
+
+  /* liquidity withdraw */
+  'lq.risk_notice':'Providing liquidity is at risk: in parimutuel/LMSR markets your withdrawable amount floats with market exposure and may be less than deposited.',
+  'lq.mine_title':'My liquidity','lq.none_mine':'You have no liquidity in this market.',
+  'lq.withdraw':'Withdraw','lq.col_id':'Position','lq.col_amount':'Amount',
+  'lq.withdraw_title':'Withdraw liquidity','txn.withdraw_liq':'Withdraw liquidity',
+
+  /* leverage */
+  'lev.title':'Leverage (advanced)','lev.disabled':'Leverage is disabled on this network.',
+  'lev.risk_notice':'HIGH RISK. Leverage borrows from the pool to enlarge your position. It can be LIQUIDATED and you can lose your whole collateral. Payouts are NOT fixed odds — they float with the pool.',
+  'lev.collateral':'Collateral (VIZ)','lev.loan':'Loan (VIZ)','lev.min_tokens':'Min tokens','lev.max_slippage':'Max slippage %',
+  'lev.quote_btn':'Quote','lev.open_btn':'Open position','lev.unlock':'Unlock your wallet to open a leveraged position.',
+  'lev.mine_title':'My leverage positions','lev.quote_result':'Estimated tokens: {T}',
+  'lev.need_collateral':'Enter collateral','lev.open_confirm':'Leverage can be liquidated — you may lose all collateral. Continue?',
+  'lev.none_mine':'No leverage positions in this market.','lev.close':'Close','lev.convert':'Convert',
+  'lev.col_id':'Position','lev.col_collateral':'Collateral','lev.col_loan':'Loan',
+  'lev.close_title':'Close leverage position','lev.min_return':'Min return (tokens)','lev.min_return_hint':'0 = accept any return',
+  'lev.close_preview':'Estimated return: {V}','lev.preview_na':'Preview unavailable',
+  'lev.convert_title':'Convert leverage position','lev.convert_desc':'Convert borrowed exposure into an owned position by paying the profit-cost fee.',
+  'lev.profit_cost':'Profit cost %','lev.convert_preview':'Estimated tokens after convert: {V}',
+  'txn.leverage_open':'Open leverage','txn.leverage_close':'Close leverage','txn.leverage_convert':'Convert leverage',
+  'lev.screen_title':'Leverage positions','lev.none_all':'You have no leverage positions.',
+  'lev.lead':'Borrowed (leveraged) bets across all markets — manage or close them.','lev.open_screen_btn':'Open leverage positions',
+
+  /* unban (resolver governance) */
+  'unban.title':'Unban account','unban.desc':'As a resolver you can lift a ban on an oracle and/or a market creator.',
+  'unban.check':'Check','unban.oracle':'Unban as oracle','unban.creator':'Unban as creator',
+  'unban.submit':'Unban','unban.enter_acc':'Enter an account','unban.is_banned':'Banned until {T}',
+  'unban.not_banned':'Not banned (creator).','unban.status_na':'Ban status unavailable','unban.pick_one':'Pick at least one role',
+  'unban.done':'Unban submitted','or.assigned':'Assigned markets','txn.unban':'Unban',
+
+  /* read views (phase 2): dispute votes / recent bets / lazy allocation */
+  'dp.no_votes':'No DAO votes cast yet.','dp.votes_title':'Vote tally ({N})',
+  'md.recent_bets':'Recent bets','md.no_bets':'No bets yet.','md.bet_who':'Account','md.lazy_alloc':'Lazy-pool allocation',
+  'ors.title':'Oracles','ors.lead':'Reliability leaderboard — pick a trustworthy oracle for your market.',
+  'ors.none':'No registered oracles yet.','ors.resolved':'{N} resolved','ors.disputes_lost':'{N} disputes lost',
+  'ors.use':'Use in create','cr.browse_oracles':'Browse',
+
   /* boot */
   'boot.viz_missing':'viz-js-lib not found.',
   'boot.viz_hint':'viz-js-lib did not load. Download <span class="mono">viz.min.js</span> from the viz-js-lib repo and place it next to index.html, then reload.'
@@ -460,6 +506,53 @@ var RU = {
   'md.accept_by':'Ожидает принятия оракулом до {T} ({IN}).','md.expired':'истекло','md.in_min':'через {N} мин','md.in_hr':'через {N} ч','md.in_day':'через {N} дн',
   'cr.info_note':'Комиссия за создание невозвратная (идёт в фонд DAO). Оракул должен принять рынок в течение окна принятия (ниже) — иначе ваша начальная ликвидность возвращается (комиссия за создание — нет), а рынок аннулируется. Если оракул отклонит рынок, ликвидность возвращается полностью; пропуск дедлайна разрешения штрафуется из страховки оракула, а не из ваших средств.',
 
+  /* risk notice (parimutuel / not fixed odds) */
+  'risk.not_fixed_odds':'Это НЕ фиксированные коэффициенты. Выплаты плавающие — зависят от итогового распределения всех ставок в пуле и могут быть НИЖЕ ожидаемых. Не ставьте больше, чем готовы потерять.',
+
+  /* transfer position */
+  'md.col_transfer':'Передать',
+  'xfer.title':'Передача позиции','xfer.desc':'Передать ставку #{ID} (или её часть) другому аккаунту.',
+  'xfer.shares':'Доли к передаче','xfer.send':'Передать','xfer.fill':'Укажите получателя и сумму',
+  'txn.transfer_position':'Передача позиции',
+
+  /* liquidity withdraw */
+  'lq.risk_notice':'Предоставление ликвидности — с риском: в parimutuel/LMSR-рынках сумма к выводу плавает вместе с экспозицией рынка и может быть меньше внесённой.',
+  'lq.mine_title':'Моя ликвидность','lq.none_mine':'У вас нет ликвидности в этом рынке.',
+  'lq.withdraw':'Вывести','lq.col_id':'Позиция','lq.col_amount':'Сумма',
+  'lq.withdraw_title':'Вывод ликвидности','txn.withdraw_liq':'Вывод ликвидности',
+
+  /* leverage */
+  'lev.title':'Плечо (продвинутое)','lev.disabled':'Плечо отключено в этой сети.',
+  'lev.risk_notice':'ВЫСОКИЙ РИСК. Плечо занимает средства из пула для увеличения позиции. Позиция может быть ЛИКВИДИРОВАНА, и вы можете потерять весь залог. Выплаты НЕ фиксированные — плавают вместе с пулом.',
+  'lev.collateral':'Залог (VIZ)','lev.loan':'Заём (VIZ)','lev.min_tokens':'Мин. токенов','lev.max_slippage':'Макс. проскальзывание %',
+  'lev.quote_btn':'Оценить','lev.open_btn':'Открыть позицию','lev.unlock':'Разблокируйте кошелёк, чтобы открыть позицию с плечом.',
+  'lev.mine_title':'Мои позиции с плечом','lev.quote_result':'Оценка токенов: {T}',
+  'lev.need_collateral':'Укажите залог','lev.open_confirm':'Позицию с плечом могут ликвидировать — можно потерять весь залог. Продолжить?',
+  'lev.none_mine':'В этом рынке нет позиций с плечом.','lev.close':'Закрыть','lev.convert':'Конвертировать',
+  'lev.col_id':'Позиция','lev.col_collateral':'Залог','lev.col_loan':'Заём',
+  'lev.close_title':'Закрыть позицию с плечом','lev.min_return':'Мин. возврат (токены)','lev.min_return_hint':'0 = принять любой возврат',
+  'lev.close_preview':'Оценка возврата: {V}','lev.preview_na':'Предпросмотр недоступен',
+  'lev.convert_title':'Конвертация позиции с плечом','lev.convert_desc':'Конвертировать заёмную экспозицию в собственную позицию, уплатив комиссию profit-cost.',
+  'lev.profit_cost':'Стоимость прибыли %','lev.convert_preview':'Оценка токенов после конвертации: {V}',
+  'txn.leverage_open':'Открытие плеча','txn.leverage_close':'Закрытие плеча','txn.leverage_convert':'Конвертация плеча',
+  'lev.screen_title':'Позиции с плечом','lev.none_all':'У вас нет позиций с плечом.',
+  'lev.lead':'Заёмные (плечевые) ставки по всем рынкам — управляйте или закрывайте их.','lev.open_screen_btn':'Открыть позиции с плечом',
+
+  /* unban (resolver governance) */
+  'unban.title':'Снять бан','unban.desc':'Как резолвер вы можете снять бан с оракула и/или создателя рынка.',
+  'unban.check':'Проверить','unban.oracle':'Снять бан как с оракула','unban.creator':'Снять бан как с создателя',
+  'unban.submit':'Снять бан','unban.enter_acc':'Укажите аккаунт','unban.is_banned':'Забанен до {T}',
+  'unban.not_banned':'Не забанен (создатель).','unban.status_na':'Статус бана недоступен','unban.pick_one':'Выберите хотя бы одну роль',
+  'unban.done':'Разбан отправлен','or.assigned':'Назначенные рынки','txn.unban':'Снять бан',
+
+  /* read views (phase 2): dispute votes / recent bets / lazy allocation */
+  'dp.no_votes':'Голосов DAO пока нет.','dp.votes_title':'Подсчёт голосов ({N})',
+  'md.recent_bets':'Недавние ставки','md.no_bets':'Ставок пока нет.','md.bet_who':'Аккаунт','md.lazy_alloc':'Аллокация lazy-пула',
+  'ors.title':'Оракулы','ors.lead':'Рейтинг надёжности — выберите доверенного оракула для своего рынка.',
+  'ors.none':'Зарегистрированных оракулов пока нет.','ors.resolved':'решено {N}','ors.disputes_lost':'проиграно диспутов: {N}',
+  'ors.use':'Выбрать в создании','cr.browse_oracles':'Обзор',
+
+  /* boot */
   'boot.viz_missing':'viz-js-lib не найден.',
   'boot.viz_hint':'viz-js-lib не загрузился. Скачайте <span class="mono">viz.min.js</span> из репозитория viz-js-lib и положите рядом с index.html, затем перезагрузите.'
 };
@@ -677,6 +770,54 @@ var ZH = {
   'md.oracle_hint_underfunded':'⚠️ 预言机看起来可靠，但相对该市场规模资金不足。',
   'md.accept_by':'等待预言机在 {T} 前接受（{IN}）。','md.expired':'已过期','md.in_min':'{N} 分钟后','md.in_hr':'{N} 小时后','md.in_day':'{N} 天后',
   'cr.info_note':'创建费不可退还（进入 DAO 基金）。预言机必须在下方的接受窗口内接受 — 否则你的初始流动性将被退还（创建费不退），且市场作废。若预言机拒绝，流动性全额退还；错过裁决截止的罚金从预言机保证金扣除，而非从你处扣除。',
+
+  /* risk notice (parimutuel / not fixed odds) */
+  'risk.not_fixed_odds':'这不是固定赔率。赔付随资金池浮动——你的回报取决于所有投注的最终分布，可能低于预期。切勿投入超过你能承受的损失。',
+
+  /* transfer position */
+  'md.col_transfer':'转移',
+  'xfer.title':'转移仓位','xfer.desc':'将投注 #{ID}（或其一部分）转给另一个账户。',
+  'xfer.shares':'转移的份额','xfer.send':'转移','xfer.fill':'请输入接收方和数量',
+  'txn.transfer_position':'转移仓位',
+
+  /* liquidity withdraw */
+  'lq.risk_notice':'提供流动性有风险：在 parimutuel/LMSR 市场中，可提取的金额随市场敞口浮动，可能少于存入的金额。',
+  'lq.mine_title':'我的流动性','lq.none_mine':'你在该市场没有流动性。',
+  'lq.withdraw':'提取','lq.col_id':'仓位','lq.col_amount':'金额',
+  'lq.withdraw_title':'提取流动性','txn.withdraw_liq':'提取流动性',
+
+  /* leverage */
+  'lev.title':'杠杆（高级）','lev.disabled':'本网络已禁用杠杆。',
+  'lev.risk_notice':'高风险。杠杆会从资金池借入以放大你的仓位。它可能被强制平仓，你可能损失全部保证金。赔付不是固定赔率——随资金池浮动。',
+  'lev.collateral':'保证金（VIZ）','lev.loan':'借款（VIZ）','lev.min_tokens':'最少代币','lev.max_slippage':'最大滑点 %',
+  'lev.quote_btn':'报价','lev.open_btn':'开仓','lev.unlock':'请解锁钱包以开立杠杆仓位。',
+  'lev.mine_title':'我的杠杆仓位','lev.quote_result':'预计代币：{T}',
+  'lev.need_collateral':'请输入保证金','lev.open_confirm':'杠杆仓位可能被强制平仓——你可能损失全部保证金。是否继续？',
+  'lev.none_mine':'该市场没有杠杆仓位。','lev.close':'平仓','lev.convert':'转换',
+  'lev.col_id':'仓位','lev.col_collateral':'保证金','lev.col_loan':'借款',
+  'lev.close_title':'平掉杠杆仓位','lev.min_return':'最少回报（代币）','lev.min_return_hint':'0 = 接受任何回报',
+  'lev.close_preview':'预计回报：{V}','lev.preview_na':'预览不可用',
+  'lev.convert_title':'转换杠杆仓位','lev.convert_desc':'通过支付利润成本费，将借入的敞口转换为自有仓位。',
+  'lev.profit_cost':'利润成本 %','lev.convert_preview':'转换后预计代币：{V}',
+  'txn.leverage_open':'开立杠杆','txn.leverage_close':'平掉杠杆','txn.leverage_convert':'转换杠杆',
+  'lev.screen_title':'杠杆仓位','lev.none_all':'你没有杠杆仓位。',
+  'lev.lead':'所有市场中的借入（杠杆）投注——管理或平仓。','lev.open_screen_btn':'打开杠杆仓位',
+
+  /* unban (resolver governance) */
+  'unban.title':'解除封禁','unban.desc':'作为裁决者，你可以解除对预言机和/或市场创建者的封禁。',
+  'unban.check':'检查','unban.oracle':'解除预言机封禁','unban.creator':'解除创建者封禁',
+  'unban.submit':'解除封禁','unban.enter_acc':'请输入账户','unban.is_banned':'封禁至 {T}',
+  'unban.not_banned':'未封禁（创建者）。','unban.status_na':'封禁状态不可用','unban.pick_one':'至少选择一个角色',
+  'unban.done':'已提交解封','or.assigned':'已分配的市场','txn.unban':'解除封禁',
+
+  /* read views: dispute votes / recent bets / lazy allocation */
+  'dp.no_votes':'尚无 DAO 投票。','dp.votes_title':'投票统计（{N}）',
+  'md.recent_bets':'最近投注','md.no_bets':'暂无投注。','md.bet_who':'账户','md.lazy_alloc':'惰性池分配',
+
+  /* oracle leaderboard */
+  'ors.title':'预言机','ors.lead':'可靠性排行榜——为你的市场选择可信的预言机。',
+  'ors.none':'暂无注册的预言机。','ors.resolved':'已裁决 {N}','ors.disputes_lost':'败诉争议：{N}',
+  'ors.use':'在创建中使用','cr.browse_oracles':'浏览',
 
   'boot.viz_missing':'未找到 viz-js-lib。',
   'boot.viz_hint':'viz-js-lib 未加载。请从 viz-js-lib 仓库下载 <span class="mono">viz.min.js</span> 并放到 index.html 旁边，然后刷新。'
