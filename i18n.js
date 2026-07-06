@@ -60,6 +60,11 @@ var EN = {
   /* markets */
   'mk.title':'Markets','mk.f_all':'All','mk.f_active':'Active','mk.f_resolved':'Resolved','mk.f_closed':'Closed',
   'mk.all_cats':'All cats','mk.show_risky':'show risky / under-collateralized','mk.none':'No markets found.',
+  /* market categories (canonical keys → localized labels; missing key ⇒ raw from node) */
+  'cat.politics':'Politics','cat.geopolitics':'Geopolitics','cat.world':'World',
+  'cat.crypto':'Crypto','cat.sports':'Sports','cat.esports':'Esports','cat.games':'Games',
+  'cat.economy':'Economy','cat.business':'Business','cat.tech':'Tech','cat.science':'Science',
+  'cat.culture':'Culture','cat.weather':'Weather','cat.health':'Health','cat.commodities':'Commodities','cat.other':'Other',
   'mk.load_failed':'Failed to load markets: {E}','mk.binary':'Binary','mk.multi':'Multi ({N})',
   'mk.oracle':'oracle: {O}','mk.vol':'vol: {V}','mk.risky':'risky',
   'mk.view_all':'All','mk.view_feed':'⭐ My feed','mk.view_popular':'🔥 Popular','mk.edit_favorites':'★ Favorites',
@@ -337,6 +342,11 @@ var RU = {
 
   'mk.title':'Рынки','mk.f_all':'Все','mk.f_active':'Активные','mk.f_resolved':'Разрешённые','mk.f_closed':'Закрытые',
   'mk.all_cats':'Все категории','mk.show_risky':'показывать рискованные / недообеспеченные','mk.none':'Рынки не найдены.',
+  /* категории рынков (канон-ключ → локализованная метка; нет ключа ⇒ показываем как прислала нода) */
+  'cat.politics':'Политика','cat.geopolitics':'Геополитика','cat.world':'Мир',
+  'cat.crypto':'Крипто','cat.sports':'Спорт','cat.esports':'Киберспорт','cat.games':'Игры',
+  'cat.economy':'Экономика','cat.business':'Бизнес','cat.tech':'Технологии','cat.science':'Наука',
+  'cat.culture':'Культура','cat.weather':'Погода','cat.health':'Здоровье','cat.commodities':'Сырьё','cat.other':'Прочее',
   'mk.load_failed':'Не удалось загрузить рынки: {E}','mk.binary':'Бинарный','mk.multi':'Мульти ({N})',
   'mk.oracle':'оракул: {O}','mk.vol':'объём: {V}','mk.risky':'риск',
   'mk.view_all':'Все','mk.view_feed':'⭐ Моя лента','mk.view_popular':'🔥 Популярное','mk.edit_favorites':'★ Избранное',
@@ -602,6 +612,11 @@ var ZH = {
 
   'mk.title':'市场','mk.f_all':'全部','mk.f_active':'进行中','mk.f_resolved':'已裁决','mk.f_closed':'已关闭',
   'mk.all_cats':'全部分类','mk.show_risky':'显示高风险 / 抵押不足','mk.none':'未找到市场。',
+  /* 市场分类（规范键 → 本地化标签；缺失时显示节点返回的原值） */
+  'cat.politics':'政治','cat.geopolitics':'地缘政治','cat.world':'世界',
+  'cat.crypto':'加密货币','cat.sports':'体育','cat.esports':'电竞','cat.games':'游戏',
+  'cat.economy':'经济','cat.business':'商业','cat.tech':'科技','cat.science':'科学',
+  'cat.culture':'文化','cat.weather':'天气','cat.health':'健康','cat.commodities':'大宗商品','cat.other':'其他',
   'mk.load_failed':'加载市场失败：{E}','mk.binary':'二元','mk.multi':'多选 ({N})',
   'mk.oracle':'预言机：{O}','mk.vol':'成交量：{V}','mk.risky':'风险',
   'mk.view_all':'全部','mk.view_feed':'⭐ 我的动态','mk.view_popular':'🔥 热门','mk.edit_favorites':'★ 收藏',
