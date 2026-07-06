@@ -350,7 +350,9 @@ function parseMeta(m){
 function metaImage(meta){ var u=meta&&(meta.image||meta.icon); return (typeof u==='string' && /^https?:\/\//i.test(u))?u:''; }
 function thumb(url,style){ return url?'<img src="'+esc(url)+'" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display=&#39;none&#39;" style="'+style+'">':''; }
 function marketId(m){ return m.id!=null?m.id:(m.market_id!=null?m.market_id:m.market); }
-function marketTitle(m){ var meta=parseMeta(m); return meta.title||meta.q||meta.question||meta.name||('Market #'+marketId(m)); }
+// title/image can live as flat fields on the node meta object (get_market_full.meta,
+// list_markets_by_category), or inside a metadata JSON blob — check both.
+function marketTitle(m){ var meta=parseMeta(m); return meta.title||m.title||meta.q||meta.question||meta.name||('Market #'+marketId(m)); }
 function marketStatus(m){ var s=m.status; return s==null?1:Number(s); }
 function statusLabel(s){ return t('st.'+s); }
 function statusBadge(m){ var s=marketStatus(m); return '<span class="badge st-'+s+'">'+esc(statusLabel(s))+'</span>'; }
@@ -724,7 +726,7 @@ function marketCard(m){
   var risky=(m.risk_score!=null && m.risk_score<50)||m.under_collateralized;
   return h(
     '<div class="card click" data-nav="#/market/'+id+'">',
-      thumb(metaImage(meta),'width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px;display:block'),
+      thumb(metaImage(meta)||metaImage(m),'width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px;display:block'),
       '<div class="card-q">'+esc(marketTitle(m))+'</div>',
       '<div class="card-meta">',
         statusBadge(m),
@@ -748,7 +750,8 @@ async function screenMarket(id){
   try{ full=await api('getMarketFull', id, SESSION?SESSION.account:''); }
   catch(e){ try{ full=await api('getMarket', id); }catch(e2){ setContent('<div class="box err">'+esc(errText(e2))+'</div>');return; } }
   try{ dispute=await api('getDispute', id); }catch(e){}
-  var m=full.market||full; var meta=parseMeta(m); var ocs=marketOutcomes(m);
+  // merge the node meta object (full.meta: title/image/category/…) over any metadata blob
+  var m=full.market||full; var meta=Object.assign({}, parseMeta(m), full.meta||{}); var ocs=marketOutcomes(m);
   var status=marketStatus(m); var isMulti=Number(m.market_type)===1;
   var mine=full.account||full.positions||full.bets; // best-effort account section
   var isOracle=SESSION && m.oracle===SESSION.account;
@@ -757,7 +760,7 @@ async function screenMarket(id){
 
   var html='';
   html+='<div class="row"><a class="mut" data-nav="#/markets">'+esc(t('common.back_markets'))+'</a></div>';
-  html+='<div class="title" style="margin-top:6px">'+esc(marketTitle(m))+'</div>';
+  html+='<div class="title" style="margin-top:6px">'+esc(meta.title||marketTitle(m))+'</div>';
   html+=thumb(metaImage(meta),'width:100%;max-height:220px;object-fit:cover;border-radius:10px;margin:6px 0;display:block');
   html+='<div class="card-meta mb">'+statusBadge(m)+
         '<span>'+(isMulti?esc(t('md.onix_multi')):esc(t('md.onix_binary')))+'</span>'+
