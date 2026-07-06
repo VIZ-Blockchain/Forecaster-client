@@ -621,7 +621,12 @@ var catCache=null;               // getMarketCategories result, cached per sessi
 function getFavCats(){ try{var a=JSON.parse(localStorage.getItem(LS_FAV)); return Array.isArray(a)?a.map(String):[];}catch(e){return [];} }
 function setFavCats(a){ localStorage.setItem(LS_FAV, JSON.stringify((a||[]).map(String))); }
 function catId(c){ return c.id!=null?c.id:(c.category!=null?c.category:c); }
-function catName(c){ return c.name||c.title||catId(c); }
+function catName(c){
+  var id=catId(c), k='cat.'+id, lab=t(k);
+  // t() returns the key itself when missing → fall back to node-provided name/id
+  if(lab && lab!==k) return lab;
+  return c.name||c.title||id;
+}
 async function ensureCategories(){ if(catCache)return catCache; try{ catCache=(await api('getMarketCategories'))||[]; }catch(e){ catCache=[]; } return catCache; }
 function viewChip(v,label){ return '<button class="btn chip'+(mkFilter.view===v?' active':'')+'" data-view="'+v+'">'+esc(label)+'</button>'; }
 
