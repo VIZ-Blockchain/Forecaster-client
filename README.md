@@ -314,8 +314,9 @@ wording). They are fully translated in all three languages:
   the return may be lower (slippage).
 - **Create market** — a note on what happens to liquidity if the oracle doesn't accept / rejects.
 
-Custodial-only notices (TON/USDT deposit conversion) and leverage/"boost" notices were **not**
-ported — they don't apply to this thin client.
+Custodial-only notices (TON/USDT deposit conversion) were **not** ported — they don't apply to
+this non-custodial thin client. Leverage **is** supported (open / close / convert) with an explicit
+high-risk / liquidation notice; it is chain-gated on `pm_leverage_enabled`.
 
 ## Deliberate simplifications / notes for developers
 

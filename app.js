@@ -346,6 +346,9 @@ function parseMeta(m){
   if(typeof s==='object')return s;
   try{return JSON.parse(s);}catch(e){return {};}
 }
+/* metadata image is untrusted (any creator sets it) — only allow http(s) URLs (e.g. Polymarket CDN via the parser) */
+function metaImage(meta){ var u=meta&&(meta.image||meta.icon); return (typeof u==='string' && /^https?:\/\//i.test(u))?u:''; }
+function thumb(url,style){ return url?'<img src="'+esc(url)+'" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display=&#39;none&#39;" style="'+style+'">':''; }
 function marketId(m){ return m.id!=null?m.id:(m.market_id!=null?m.market_id:m.market); }
 function marketTitle(m){ var meta=parseMeta(m); return meta.title||meta.q||meta.question||meta.name||('Market #'+marketId(m)); }
 function marketStatus(m){ var s=m.status; return s==null?1:Number(s); }
@@ -428,9 +431,11 @@ function route(){
     if(scr==='create')  return screenCreate();
     if(scr==='balance') return screenBalance();
     if(scr==='pool')    return screenPool();
+    if(scr==='leverage')return screenLeverage();
     if(scr==='activity')return screenActivity();
     if(scr==='profile') return screenProfile();
     if(scr==='oracle')  return screenOracle();
+    if(scr==='oracles') return screenOracles();
     if(scr==='node')    return screenNode();
     if(scr==='login')   return screenLogin();
     if(scr==='unlock')  return screenUnlock();
@@ -714,6 +719,7 @@ function marketCard(m){
   var risky=(m.risk_score!=null && m.risk_score<50)||m.under_collateralized;
   return h(
     '<div class="card click" data-nav="#/market/'+id+'">',
+      thumb(metaImage(meta),'width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px;display:block'),
       '<div class="card-q">'+esc(marketTitle(m))+'</div>',
       '<div class="card-meta">',
         statusBadge(m),
@@ -747,6 +753,7 @@ async function screenMarket(id){
   var html='';
   html+='<div class="row"><a class="mut" data-nav="#/markets">'+esc(t('common.back_markets'))+'</a></div>';
   html+='<div class="title" style="margin-top:6px">'+esc(marketTitle(m))+'</div>';
+  html+=thumb(metaImage(meta),'width:100%;max-height:220px;object-fit:cover;border-radius:10px;margin:6px 0;display:block');
   html+='<div class="card-meta mb">'+statusBadge(m)+
         '<span>'+(isMulti?esc(t('md.onix_multi')):esc(t('md.onix_binary')))+'</span>'+
         (m.oracle?'<span><a data-nav="#/market/'+id+'">'+esc(t('md.oracle',{O:m.oracle}))+'</a></span>':'')+
@@ -786,13 +793,18 @@ async function screenMarket(id){
     (m.result_expiration?kv(t('md.result_deadline'), tsToLocal(assetTime(m.result_expiration))):'')+
     (m.volume!=null?kv(t('md.volume'), fmtShares(m.volume)+' VIZ'):'')+
     (meta.jurisdiction?kv(t('md.jurisdiction'), meta.jurisdiction):'')+
+    '<div id="mkt-lazy-alloc"></div>'+   // getMarketLazyAllocation
     (meta.rules_url||m.url?('<div class="kv"><b>'+esc(t('md.rules'))+'</b><a href="'+esc(meta.rules_url||m.url)+'" target="_blank">'+esc(t('md.open_ext'))+'</a></div>'):'')+
     rawBlock(full)+
   '</div>';
 
+  // Recent bets (getMarketBets) — transparency into the order flow
+  html+='<div class="card"><details class="raw"><summary>'+esc(t('md.recent_bets'))+'</summary><div id="mkt-bets"><span class="spin"></span> '+esc(t('common.loading'))+'</div></details></div>';
+
   // Betting form (active only)
   if(status===1){
     html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('md.place_bet'))+'</div>';
+    html+='<div class="box warn">'+esc(t('risk.not_fixed_odds'))+'</div>';
     if(!isUnlocked()) html+='<div class="box info">'+esc(t('md.unlock_to_bet'))+'</div>';
     if(risky) html+='<div class="box err">'+esc(t('bet.risk_warning'))+'</div>';
     if(instantDisabled) html+='<div class="box warn">'+esc(t('md.instant_disabled'))+'</div>';
@@ -808,13 +820,24 @@ async function screenMarket(id){
     html+='<button class="btn ok block mt" id="bt-go">'+esc(t('md.place_bet_btn'))+'</button></div>';
   }
 
-  // Liquidity
-  if(status===0||status===1){
+  // Liquidity (add + withdraw own positions)
+  if(status===0||status===1||status===2){
     html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('md.liquidity'))+'</div>'+
-      '<div class="field"><label class="lab">'+esc(t('md.add_liq'))+'</label><input id="lq-amt" type="number" step="0.001" min="0.001" placeholder="50.000"></div>'+
+      '<div class="box warn">'+esc(t('lq.risk_notice'))+'</div>';
+    if(status===0||status===1){
+      html+='<div class="field"><label class="lab">'+esc(t('md.add_liq'))+'</label><input id="lq-amt" type="number" step="0.001" min="0.001" placeholder="50.000"></div>'+
       '<button class="btn ghost" id="lq-go">'+esc(t('md.add_liq_btn'))+'</button>'+
-      (isMulti?'<div class="hint">'+esc(t('md.multi_lmsr'))+'</div>':'')+
-    '</div>';
+      (isMulti?'<div class="hint">'+esc(t('md.multi_lmsr'))+'</div>':'');
+    }
+    html+='<div class="section-title">'+esc(t('lq.mine_title'))+'</div><div id="lq-mine">'+
+      (isUnlocked()?'<span class="spin"></span> '+esc(t('common.loading')):'<div class="mut">'+esc(t('md.unlock_view'))+'</div>')+'</div>';
+    html+='</div>';
+  }
+
+  // Leverage (open / manage borrowed positions) — high-risk, chain-gated
+  if(status===0||status===1){
+    html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('lev.title'))+'</div>'+
+      '<div id="lev-box"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>';
   }
 
   // My positions on this market
@@ -843,7 +866,37 @@ async function screenMarket(id){
   if(m.oracle) loadOracleHint(m.oracle, m.volume!=null?Number(m.volume)/1000:0);
   loadKline(id, ocs, isMulti);
   if(isUnlocked()) loadMyPositions(id);
+  if(isUnlocked()) loadMyLiquidity(id, status);
+  if(status===0||status===1) loadLeverage(id, ocs, isMulti);
+  if(dispute&&(dispute.id!=null||dispute.disputer||dispute.status!=null)) loadDisputeVotes(id, ocs);
+  loadMarketBets(id, ocs, isMulti);
+  loadMarketLazyAlloc(id);
   scheduleMarketRefresh(id, m);
+}
+/* getMarketBets(id,from,limit) — recent bets on this market */
+async function loadMarketBets(id, ocs, isMulti){
+  var box=el('mkt-bets'); if(!box)return;
+  try{
+    var bets=await api('getMarketBets', id, 0, 50);
+    bets=Array.isArray(bets)?bets:((bets&&bets.bets)||[]);
+    if(!bets.length){ box.innerHTML='<div class="mut">'+esc(t('md.no_bets'))+'</div>'; return; }
+    var rows=bets.map(function(b){
+      var oc=(b.outcome_index!=null?ocs[b.outcome_index]:(b.side!=null?(b.side===0?ocs[0]:ocs[1]):null));
+      return '<tr><td>'+esc(b.bettor||b.account||'')+'</td><td>'+esc(oc!=null?oc:(b.outcome_index!=null?('#'+b.outcome_index):'—'))+'</td>'+
+        '<td>'+fmtShares(b.amount||b.stake||0)+'</td><td>'+esc(b.timestamp?tsToLocal(assetTime(b.timestamp)):'')+'</td></tr>';
+    }).join('');
+    box.innerHTML='<table class="tbl"><tr><th>'+esc(t('md.bet_who'))+'</th><th>'+esc(t('act.col_outcome'))+'</th><th>'+esc(t('act.col_amount'))+'</th><th>'+esc(t('bal.col_time'))+'</th></tr>'+rows+'</table>';
+  }catch(e){ box.innerHTML='<div class="mut">'+esc(t('md.no_bets'))+'</div>'; }
+}
+/* getMarketLazyAllocation(id) — how much lazy-pool liquidity backs this market */
+async function loadMarketLazyAlloc(id){
+  var box=el('mkt-lazy-alloc'); if(!box)return;
+  try{
+    var a=await api('getMarketLazyAllocation', id);
+    var amt=a&&(a.allocated!=null?a.allocated:(a.amount!=null?a.amount:a.allocation));
+    if(amt==null||Number(amt)<=0){ box.innerHTML=''; return; }
+    box.innerHTML=kv(t('md.lazy_alloc'), fmtShares(amt)+' VIZ');
+  }catch(e){ box.innerHTML=''; }
 }
 /* Reload the viewed market a few seconds after its next expiration boundary, so status
    (active → closed → resolvable/disputable) updates live without a manual refresh. */
@@ -990,6 +1043,7 @@ function disputeBlock(id,m,ocs,dispute){
       (dispute.proposed_outcome!=null?esc(t('dp.claims',{O:ocs[dispute.proposed_outcome]||('outcome '+dispute.proposed_outcome)})):'')+
       (dispute.reason?'<br>“'+esc(dispute.reason)+'”':'')+
       (dispute.oracle_response?'<br><b>'+esc(t('dp.oracle_response'))+'</b> '+esc(dispute.oracle_response):'')+'</div>';
+    out+='<div id="dp-votes" class="mt"></div>';   // getDisputeVotes tally
     out+=rawBlock(dispute);
     // vote / resolve / respond
     out+='<div class="row">'+
@@ -1003,6 +1057,23 @@ function disputeBlock(id,m,ocs,dispute){
     else out+='<div class="hint">'+esc(t('dp.after_resolution'))+'</div>';
   }
   return out;
+}
+/* getDisputeVotes(id) — DAO vote tally (weighted %) for an open dispute */
+async function loadDisputeVotes(id, ocs){
+  var box=el('dp-votes'); if(!box)return;
+  try{
+    var votes=await api('getDisputeVotes', id);
+    var list=Array.isArray(votes)?votes:(votes&&votes.votes)||[];
+    if(!list.length){ box.innerHTML='<div class="hint">'+esc(t('dp.no_votes'))+'</div>'; return; }
+    var tally={}, total=0;
+    list.forEach(function(v){ var oc=(v.outcome!=null?v.outcome:(v.proposed_outcome!=null?v.proposed_outcome:v.vote));
+      var w=Number(v.weight!=null?v.weight:(v.percent!=null?v.percent:1))||0; oc=String(oc); tally[oc]=(tally[oc]||0)+w; total+=w; });
+    var label=function(oc){ oc=Number(oc); return oc<0?t('dp.uphold'):(ocs[oc]!=null?ocs[oc]:('outcome '+oc)); };
+    var rows=Object.keys(tally).map(function(oc){ var pct=total>0?(tally[oc]/total*100):0;
+      return '<div class="oc"><div class="oc-row"><span class="oc-name">'+esc(label(oc))+'</span><span>'+pct.toFixed(1)+'%</span></div>'+
+        '<div class="oc-bar"><div class="oc-fill" style="width:'+Math.max(2,pct)+'%"></div></div></div>'; }).join('');
+    box.innerHTML='<div class="section-title">'+esc(t('dp.votes_title',{N:list.length}))+'</div>'+rows;
+  }catch(e){ box.innerHTML=''; } // getDisputeVotes returns default when absent; ignore
 }
 
 function wireMarket(id,m,ocs,isMulti){
@@ -1065,10 +1136,12 @@ async function loadMyPositions(id){
     if(!mine.length){ box.innerHTML='<div class="mut">'+esc(t('md.no_positions'))+'</div>'; return; }
     var rows=mine.map(function(p){
       var bid=p.id!=null?p.id:p.bet_id;
+      var shares=Number(p.tokens||p.shares||0);
       return '<tr><td>'+esc(p.outcome_name||('oc '+(p.outcome_index!=null?p.outcome_index:p.side)))+'</td>'+
         '<td>'+fmtShares(p.amount||p.stake)+'</td>'+
-        '<td>'+fmtShares(p.tokens||p.shares||0)+'</td>'+
-        '<td><button class="btn small bad" data-cancel="'+bid+'">'+esc(t('md.col_cancel'))+'</button></td></tr>';
+        '<td>'+fmtShares(shares)+'</td>'+
+        '<td><button class="btn small" data-xfer="'+bid+'" data-sh="'+shares+'">'+esc(t('md.col_transfer'))+'</button> '+
+        '<button class="btn small bad" data-cancel="'+bid+'">'+esc(t('md.col_cancel'))+'</button></td></tr>';
     }).join('');
     box.innerHTML='<table class="tbl"><tr><th>'+esc(t('md.col_outcome'))+'</th><th>'+esc(t('md.col_amount'))+'</th><th>'+esc(t('md.col_tokens'))+'</th><th></th></tr>'+rows+'</table>';
     $all('[data-cancel]',box).forEach(function(b){ b.onclick=function(){
@@ -1076,7 +1149,189 @@ async function loadMyPositions(id){
       var bid=Number(b.getAttribute('data-cancel'));
       tx(t('txn.cancel_bet'),function(){return bc('pmCancelBet',wifFor('active'),SESSION.account,bid,0,[]);},function(){setTimeout(function(){screenMarket(id);},1200);});
     };});
+    $all('[data-xfer]',box).forEach(function(b){ b.onclick=function(){
+      transferPosition(id, Number(b.getAttribute('data-xfer')), Number(b.getAttribute('data-sh'))||0);
+    };});
   }catch(e){ box.innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
+}
+
+/* pm_transfer_position — hand a position (by bet_id, in shares) to another account */
+function transferPosition(marketId, betId, haveShares){
+  if(!requireUnlock())return;
+  openModal(t('xfer.title'), h(
+    '<div class="hint mb">'+esc(t('xfer.desc',{ID:betId}))+'</div>',
+    '<label class="lab">'+esc(t('common.to'))+'</label><input id="xf-to" type="text" autocomplete="off" spellcheck="false" placeholder="account">',
+    '<label class="lab">'+esc(t('xfer.shares'))+'</label><input id="xf-sh" type="number" step="0.001" min="0.001" value="'+fmtShares(haveShares).replace(/[^\d.]/g,'')+'">',
+    '<div class="hint">'+esc(t('pool.you_have',{S:fmtShares(haveShares)}))+'</div>',
+    '<label class="lab">'+esc(t('common.memo'))+'</label><input id="xf-memo" type="text">'
+  ),[{label:t('common.cancel'),cls:'ghost',act:closeModal},{label:t('xfer.send'),cls:'',act:function(){
+    var to=el('xf-to').value.trim().toLowerCase();
+    var amount=Math.round((Number(el('xf-sh').value)||0)*1000); // display shares → raw ×1000
+    var memo=el('xf-memo').value||'';
+    if(!to||!(amount>0)){ toast('warn',t('xfer.fill')); return; }
+    closeModal();
+    tx(t('txn.transfer_position'),function(){return bc('pmTransferPosition',wifFor('active'),SESSION.account,betId,to,amount,memo,[]);},
+      function(){setTimeout(function(){screenMarket(marketId);},1200);});
+  }}]);
+}
+
+/* pm_withdraw_liquidity — my LP positions on this market + partial/full withdraw */
+async function loadMyLiquidity(id, status){
+  var box=el('lq-mine'); if(!box)return;
+  try{
+    var all=await api('getMarketLiquidity', id, 0, 1000);
+    var mine=(all||[]).filter(function(l){ return (l.provider||l.owner||l.account)===SESSION.account; });
+    if(!mine.length){ box.innerHTML='<div class="mut">'+esc(t('lq.none_mine'))+'</div>'; return; }
+    var rows=mine.map(function(l){
+      var lid=l.id!=null?l.id:(l.liquidity_id!=null?l.liquidity_id:l.liquidity);
+      var amt=l.amount!=null?l.amount:(l.balance!=null?l.balance:l.shares);
+      return '<tr><td>#'+esc(lid)+'</td><td>'+fmtShares(amt)+' VIZ</td>'+
+        '<td><button class="btn small" data-wl="'+esc(lid)+'" data-amt="'+esc(assetNum(amt)*1000)+'">'+esc(t('lq.withdraw'))+'</button></td></tr>';
+    }).join('');
+    box.innerHTML='<table class="tbl"><tr><th>'+esc(t('lq.col_id'))+'</th><th>'+esc(t('lq.col_amount'))+'</th><th></th></tr>'+rows+'</table>';
+    $all('[data-wl]',box).forEach(function(b){ b.onclick=function(){
+      withdrawLiquidity(id, b.getAttribute('data-wl'), Number(b.getAttribute('data-amt'))||0);
+    };});
+  }catch(e){ box.innerHTML='<div class="mut">'+esc(t('lq.none_mine'))+'</div>'; } // plugin/HF may be inactive
+}
+function withdrawLiquidity(marketId, liquidityId, haveRaw){
+  if(!requireUnlock())return;
+  openModal(t('lq.withdraw_title'), h(
+    '<div class="box warn">'+esc(t('lq.risk_notice'))+'</div>',
+    '<label class="lab">'+esc(t('common.amount_viz'))+'</label>',
+    '<input id="wl-amt" type="number" step="0.001" min="0.001" value="'+(haveRaw/1000).toFixed(3)+'">',
+    '<div class="hint">'+esc(t('pool.you_have',{S:fmtShares(haveRaw)+' VIZ'}))+'</div>'
+  ),[{label:t('common.cancel'),cls:'ghost',act:closeModal},{label:t('lq.withdraw'),cls:'',act:function(){
+    var amt=el('wl-amt').value; if(!(assetNum(amt)>0)){ toast('warn',t('common.enter_amount')); return; }
+    closeModal();
+    tx(t('txn.withdraw_liq'),function(){return bc('pmWithdrawLiquidity',wifFor('active'),SESSION.account,Number(liquidityId),toAsset(amt),[]);},
+      function(){setTimeout(function(){screenMarket(marketId);},1300);});
+  }}]);
+}
+
+/* ---- Leverage: open + list my positions + close/convert (all high-risk) ---- */
+async function loadLeverage(id, ocs, isMulti){
+  var box=el('lev-box'); if(!box)return;
+  var props=null; try{ props=await api('getPmChainProperties'); }catch(e){}
+  var enabled=!(props&&props.pm_leverage_enabled===false);
+  if(!enabled){ box.innerHTML='<div class="mut">'+esc(t('lev.disabled'))+'</div>'; return; }
+  var html='<div class="box err">'+esc(t('lev.risk_notice'))+'</div>';
+  if(isUnlocked()){
+    html+='<div class="field"><label class="lab">'+esc(t('md.outcome'))+'</label><select id="lv-oc">'+
+      ocs.map(function(n,i){return '<option value="'+i+'">'+esc(n)+'</option>';}).join('')+'</select></div>'+
+      '<div class="row"><div class="grow"><label class="lab">'+esc(t('lev.collateral'))+'</label><input id="lv-col" type="number" step="0.001" min="0.001" placeholder="10.000"></div>'+
+      '<div class="grow"><label class="lab">'+esc(t('lev.loan'))+'</label><input id="lv-loan" type="number" step="0.001" min="0" placeholder="20.000"></div></div>'+
+      '<div class="row"><div class="grow"><label class="lab">'+esc(t('lev.min_tokens'))+'</label><input id="lv-min" type="number" step="1" min="0" value="0"></div>'+
+      '<div class="grow"><label class="lab">'+esc(t('lev.max_slippage'))+'</label><input id="lv-slip" type="number" step="0.1" min="0" value="5"></div></div>'+
+      '<div class="row mt"><button class="btn ghost" id="lv-quote">'+esc(t('lev.quote_btn'))+'</button>'+
+      '<button class="btn ok" id="lv-open">'+esc(t('lev.open_btn'))+'</button></div>'+
+      '<div id="lv-quote-out" class="hint"></div>';
+  } else {
+    html+='<div class="box info">'+esc(t('lev.unlock'))+'</div>';
+  }
+  html+='<div class="section-title">'+esc(t('lev.mine_title'))+'</div><div id="lev-mine">'+
+    (isUnlocked()?'<span class="spin"></span>':'<div class="mut">'+esc(t('md.unlock_view'))+'</div>')+'</div>';
+  box.innerHTML=html;
+
+  if(el('lv-quote')) el('lv-quote').onclick=async function(){
+    var out=el('lv-quote-out'); out.textContent=t('common.loading');
+    try{ var q=await api('getLeverageQuote', id, Number(el('lv-oc').value), toAsset(el('lv-col').value||'0'));
+      out.innerHTML=esc(t('lev.quote_result',{T:fmtShares(q&&(q.tokens!=null?q.tokens:q.expected_tokens)||0)}));
+    }catch(e){ out.innerHTML='<span class="neg">'+esc(errText(e))+'</span>'; }
+  };
+  if(el('lv-open')) el('lv-open').onclick=function(){
+    if(!requireUnlock())return;
+    var oc=Number(el('lv-oc').value), col=el('lv-col').value, loan=el('lv-loan').value||'0';
+    var minT=Number(el('lv-min').value)||0, slip=toBP(el('lv-slip').value);
+    if(!(assetNum(col)>0)){ toast('warn',t('lev.need_collateral')); return; }
+    if(!confirm(t('lev.open_confirm'))) return;
+    tx(t('txn.leverage_open'),function(){return bc('pmLeverageOpen',wifFor('active'),SESSION.account,id,oc,toAsset(col),toAsset(loan),minT,slip,[]);},
+      function(){setTimeout(function(){screenMarket(id);},1300);});
+  };
+  if(isUnlocked()) loadMyLeverage(id, ocs);
+}
+async function loadMyLeverage(id, ocs){
+  var box=el('lev-mine'); if(!box)return;
+  try{
+    var all=await api('getAccountLeveragePositions', SESSION.account, 0, 1000);
+    var mine=(all||[]).filter(function(p){ return Number(p.market_id!=null?p.market_id:p.market)===Number(id); });
+    if(!mine.length){ box.innerHTML='<div class="mut">'+esc(t('lev.none_mine'))+'</div>'; return; }
+    var rows=mine.map(function(p){
+      var pid=p.id!=null?p.id:p.position_id;
+      var oc=ocs[p.outcome_index]!=null?ocs[p.outcome_index]:('#'+p.outcome_index);
+      return '<tr><td>#'+esc(pid)+'</td><td>'+esc(oc)+'</td><td>'+fmtShares(p.collateral||0)+'</td><td>'+fmtShares(p.loan||0)+'</td>'+
+        '<td><button class="btn small" data-lc="'+esc(pid)+'">'+esc(t('lev.close'))+'</button> '+
+        '<button class="btn small ghost" data-lcv="'+esc(pid)+'">'+esc(t('lev.convert'))+'</button></td></tr>';
+    }).join('');
+    box.innerHTML='<table class="tbl"><tr><th>'+esc(t('lev.col_id'))+'</th><th>'+esc(t('act.col_outcome'))+'</th><th>'+esc(t('lev.col_collateral'))+'</th><th>'+esc(t('lev.col_loan'))+'</th><th></th></tr>'+rows+'</table>';
+    $all('[data-lc]',box).forEach(function(b){ b.onclick=function(){ leverageClose(id, b.getAttribute('data-lc')); }; });
+    $all('[data-lcv]',box).forEach(function(b){ b.onclick=function(){ leverageConvert(id, b.getAttribute('data-lcv')); }; });
+  }catch(e){ box.innerHTML='<div class="mut">'+esc(t('lev.none_mine'))+'</div>'; }
+}
+function leverageClose(marketId, positionId, reload){
+  if(!requireUnlock())return;
+  var after=reload||function(){screenMarket(marketId);};
+  openModal(t('lev.close_title'), h(
+    '<div id="lc-preview" class="box info">'+esc(t('common.loading'))+'</div>',
+    '<label class="lab">'+esc(t('lev.min_return'))+'</label><input id="lc-min" type="number" step="1" min="0" value="0">',
+    '<div class="hint">'+esc(t('lev.min_return_hint'))+'</div>'
+  ),[{label:t('common.cancel'),cls:'ghost',act:closeModal},{label:t('lev.close'),cls:'',act:function(){
+    var minR=Number(el('lc-min').value)||0; closeModal();
+    tx(t('txn.leverage_close'),function(){return bc('pmLeverageClose',wifFor('active'),SESSION.account,Number(positionId),minR,[]);},
+      function(){setTimeout(after,1300);});
+  }}]);
+  api('getLeverageClosePreview', Number(positionId)).then(function(p){ var b=el('lc-preview'); if(!b)return;
+    b.innerHTML=esc(t('lev.close_preview',{V:fmtShares(p&&(p.return_value!=null?p.return_value:p.bettor_received)||0)}));
+  }).catch(function(){ var b=el('lc-preview'); if(b) b.innerHTML=esc(t('lev.preview_na')); });
+}
+function leverageConvert(marketId, positionId, reload){
+  if(!requireUnlock())return;
+  var after=reload||function(){screenMarket(marketId);};
+  openModal(t('lev.convert_title'), h(
+    '<div class="box info">'+esc(t('lev.convert_desc'))+'</div>',
+    '<div id="lcv-preview" class="hint">'+esc(t('common.loading'))+'</div>',
+    '<label class="lab">'+esc(t('lev.profit_cost'))+'</label><input id="lcv-cost" type="number" step="0.1" min="0" value="0">'
+  ),[{label:t('common.cancel'),cls:'ghost',act:closeModal},{label:t('lev.convert'),cls:'',act:function(){
+    var cost=toBP(el('lcv-cost').value); closeModal();
+    tx(t('txn.leverage_convert'),function(){return bc('pmLeverageConvert',wifFor('active'),SESSION.account,Number(positionId),cost,[]);},
+      function(){setTimeout(after,1300);});
+  }}]);
+  api('getLeverageConvertPreview', Number(positionId)).then(function(p){ var b=el('lcv-preview'); if(!b)return;
+    b.innerHTML=esc(t('lev.convert_preview',{V:fmtShares(p&&(p.tokens!=null?p.tokens:p.expected_tokens)||0)}));
+  }).catch(function(){ var b=el('lcv-preview'); if(b) b.innerHTML=esc(t('lev.preview_na')); });
+}
+
+/* ========================================================================= *
+ *  SCREEN: Leverage — all my leveraged positions across markets
+ * ========================================================================= */
+async function screenLeverage(){
+  if(!requireUnlock())return;
+  setContent('<div class="title">'+esc(t('lev.screen_title'))+'</div>'+
+    '<div class="box err">'+esc(t('lev.risk_notice'))+'</div>'+
+    '<div id="lev-all"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
+  try{
+    var list=await api('getAccountLeveragePositions', SESSION.account, 0, 1000);
+    list=list||[];
+    if(!list.length){ el('lev-all').innerHTML='<div class="empty">'+esc(t('lev.none_all'))+'</div>'; return; }
+    // group by market for readable outcome labels; fetch each market once
+    var ids={}; list.forEach(function(p){ var mid=Number(p.market_id!=null?p.market_id:p.market); if(!isNaN(mid)) ids[mid]=1; });
+    var mkts={};
+    await Promise.all(Object.keys(ids).map(function(mid){ return api('getMarket', Number(mid)).then(function(m){ mkts[mid]=m; }).catch(function(){}); }));
+    var rows=list.map(function(p){
+      var mid=Number(p.market_id!=null?p.market_id:p.market);
+      var ocs=mkts[mid]?marketOutcomes(mkts[mid]):[];
+      var oc=ocs[p.outcome_index]!=null?ocs[p.outcome_index]:('#'+p.outcome_index);
+      var pid=p.id!=null?p.id:p.position_id;
+      return '<tr><td><a data-nav="#/market/'+mid+'">#'+mid+'</a></td><td>'+esc(oc)+'</td>'+
+        '<td>'+fmtShares(p.collateral||0)+'</td><td>'+fmtShares(p.loan||0)+'</td>'+
+        '<td><button class="btn small" data-lc="'+esc(pid)+'" data-m="'+mid+'">'+esc(t('lev.close'))+'</button> '+
+        '<button class="btn small ghost" data-lcv="'+esc(pid)+'" data-m="'+mid+'">'+esc(t('lev.convert'))+'</button></td></tr>';
+    }).join('');
+    el('lev-all').innerHTML='<div class="card"><table class="tbl"><tr><th>'+esc(t('pf.col_market'))+'</th><th>'+esc(t('act.col_outcome'))+'</th>'+
+      '<th>'+esc(t('lev.col_collateral'))+'</th><th>'+esc(t('lev.col_loan'))+'</th><th></th></tr>'+rows+'</table></div>';
+    $all('[data-lc]',el('lev-all')).forEach(function(b){ b.onclick=function(){ leverageClose(Number(b.getAttribute('data-m')), b.getAttribute('data-lc'), screenLeverage); }; });
+    $all('[data-lcv]',el('lev-all')).forEach(function(b){ b.onclick=function(){ leverageConvert(Number(b.getAttribute('data-m')), b.getAttribute('data-lcv'), screenLeverage); }; });
+  }catch(e){ el('lev-all').innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
 }
 
 /* dispute modals */
@@ -1138,7 +1393,7 @@ function screenCreate(){
       '<div id="c-bin"><label class="lab">'+esc(t('cr.question'))+'</label><input id="c-q" type="text" placeholder="'+esc(t('cr.question_ph'))+'"></div>',
       '<div id="c-multi" class="hide"><label class="lab">'+esc(t('cr.outcomes'))+'</label><textarea id="c-outs" placeholder="Option A\nOption B\nOption C"></textarea></div>',
       '<label class="lab">'+esc(t('cr.oracle'))+'</label>',
-      '<div class="row"><input id="c-oracle" class="grow" type="text" autocomplete="off" spellcheck="false" placeholder="'+esc(t('cr.oracle_ph'))+'"><button class="btn ghost" id="c-oracle-load" style="white-space:nowrap">'+esc(t('cr.load_terms'))+'</button></div>',
+      '<div class="row"><input id="c-oracle" class="grow" type="text" autocomplete="off" spellcheck="false" placeholder="'+esc(t('cr.oracle_ph'))+'"><button class="btn ghost" id="c-oracle-browse" style="white-space:nowrap">'+esc(t('cr.browse_oracles'))+'</button><button class="btn ghost" id="c-oracle-load" style="white-space:nowrap">'+esc(t('cr.load_terms'))+'</button></div>',
       '<div id="c-oracle-info" class="hint"></div>',
       '<label class="lab">'+esc(t('cr.liq'))+'</label><input id="c-liq" type="number" step="0.001" min="0.001" value="50.000">',
       '<label class="lab">'+esc(t('cr.creation_fee'))+'</label><input id="c-creation-fee" type="text" disabled value="…">',
@@ -1168,6 +1423,10 @@ function screenCreate(){
     '</div>'
   ));
   el('c-type').onchange=function(){var multi=this.value==='1';el('c-multi').classList.toggle('hide',!multi);el('c-bin').classList.toggle('hide',multi);};
+  if(el('c-oracle-browse')) el('c-oracle-browse').onclick=function(){ go('#/oracles'); };
+  // prefill oracle picked from the leaderboard (#/oracles → "use")
+  try{ var picked=sessionStorage.getItem('lc_pick_oracle'); if(picked){ sessionStorage.removeItem('lc_pick_oracle');
+    if(el('c-oracle')){ el('c-oracle').value=picked; if(el('c-oracle-load')) el('c-oracle-load').click(); } } }catch(e){}
   // surface the live network fees/limits from chain properties
   var lazyMinPct=null;
   function checkLpFee(){ var w=el('c-lp-warn'); if(!w||lazyMinPct==null)return; var v=Number(el('c-lfee').value)||0; w.innerHTML=(v<lazyMinPct)?esc(t('cr.lazy_warn',{MIN:lazyMinPct})):''; }
@@ -1263,6 +1522,9 @@ async function screenBalance(){
     html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('bal.lazy_pool'))+'</div>'+
       '<div class="hint mb">'+esc(t('pool.lead'))+'</div>'+
       '<button class="btn block" data-nav="#/pool">'+esc(t('pool.open_btn'))+'</button></div>';
+    html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('lev.screen_title'))+'</div>'+
+      '<div class="hint mb">'+esc(t('lev.lead'))+'</div>'+
+      '<button class="btn block" data-nav="#/leverage">'+esc(t('lev.open_screen_btn'))+'</button></div>';
     html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('bal.recent'))+'</div><div id="hist-box"><span class="spin"></span></div><div id="hist-more" class="center mt"></div></div>';
     el('bal-box').innerHTML=html;
 
@@ -1681,13 +1943,78 @@ function oracleInsuranceModal(){
  * ========================================================================= */
 async function screenOracle(){
   if(!requireUnlock())return;
-  setContent('<div class="title">'+esc(t('or.title'))+'</div><div id="or-list"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
+  setContent('<div class="title">'+esc(t('or.title'))+'</div>'+
+    '<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('unban.title'))+'</div>'+
+      '<div class="hint mb">'+esc(t('unban.desc'))+'</div>'+
+      '<div class="row"><input id="ub-acc" class="grow" type="text" autocomplete="off" spellcheck="false" placeholder="account">'+
+        '<button class="btn ghost" id="ub-check" style="white-space:nowrap">'+esc(t('unban.check'))+'</button></div>'+
+      '<div id="ub-status" class="hint"></div>'+
+      '<label class="lab"><input type="checkbox" id="ub-oracle" checked> '+esc(t('unban.oracle'))+'</label>'+
+      '<label class="lab"><input type="checkbox" id="ub-creator"> '+esc(t('unban.creator'))+'</label>'+
+      '<button class="btn block mt" id="ub-go">'+esc(t('unban.submit'))+'</button>'+
+    '</div>'+
+    '<div class="section-title">'+esc(t('or.assigned'))+'</div>'+
+    '<div id="or-list"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
+  if(el('ub-check')) el('ub-check').onclick=async function(){
+    var acc=el('ub-acc').value.trim().toLowerCase(), s=el('ub-status');
+    if(!acc){ toast('warn',t('unban.enter_acc')); return; }
+    s.innerHTML='<span class="spin"></span>';
+    try{ var b=await api('getCreatorBan', acc);
+      var banned=b&&(b.banned===true||b.until!=null||b.ban_expiration!=null||b.expiration!=null);
+      s.innerHTML=banned?'<span class="neg">'+esc(t('unban.is_banned',{T:tsToLocal(assetTime(b.until||b.ban_expiration||b.expiration))}))+'</span>'
+                        :'<span class="pos">'+esc(t('unban.not_banned'))+'</span>';
+    }catch(e){ s.innerHTML='<span class="mut">'+esc(t('unban.status_na'))+'</span>'; }
+  };
+  if(el('ub-go')) el('ub-go').onclick=function(){
+    var target=el('ub-acc').value.trim().toLowerCase();
+    var uo=el('ub-oracle').checked, uc=el('ub-creator').checked;
+    if(!target){ toast('warn',t('unban.enter_acc')); return; }
+    if(!uo&&!uc){ toast('warn',t('unban.pick_one')); return; }
+    tx(t('txn.unban'),function(){return bc('pmUnban',wifFor('active'),SESSION.account,target,uo,uc,[]);},
+      function(){ toast('ok',t('unban.done')); });
+  };
   try{
     var list=await api('listMarketsByOracle', SESSION.account, 0, 100);
     list=list||[];
     if(!list.length){el('or-list').innerHTML='<div class="empty">'+esc(t('or.none'))+'</div>';return;}
     el('or-list').innerHTML=list.map(marketCard).join('');
   }catch(e){ el('or-list').innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
+}
+
+/* ========================================================================= *
+ *  SCREEN: Oracles — leaderboard (listOracles), pick one for market creation
+ * ========================================================================= */
+async function screenOracles(){
+  setContent('<div class="title">'+esc(t('ors.title'))+'</div>'+
+    '<div class="hint mb">'+esc(t('ors.lead'))+'</div>'+
+    '<div id="ors-list"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
+  try{
+    var list=await api('listOracles', 0, 200);
+    list=list||[];
+    if(!list.length){ el('ors-list').innerHTML='<div class="empty">'+esc(t('ors.none'))+'</div>'; return; }
+    var score=function(o){ var s=o.reliability_score!=null?o.reliability_score:o.score; return s==null?-1:Number(s); };
+    list.sort(function(a,b){ return score(b)-score(a); });
+    var cards=list.map(function(o){
+      var owner=o.owner||o.account||o.name||'';
+      var resolved=o.markets_resolved!=null?o.markets_resolved:(o.resolved||0);
+      var s=o.reliability_score!=null?o.reliability_score:o.score;
+      return '<div class="card"><div class="card-q">@'+esc(owner)+' '+(s!=null?relBadge(s):'')+'</div>'+
+        '<div class="card-meta">'+
+          '<span>'+esc(t('pf.fee_pct'))+' '+fromBP(o.fee_percent||0)+'%</span>'+
+          (o.fixed_fee!=null&&assetNum(o.fixed_fee)>0?'<span>+'+esc(typeof o.fixed_fee==='string'?o.fixed_fee:toAsset(assetNum(o.fixed_fee)))+'</span>':'')+
+          (o.insurance!=null?'<span>'+esc(t('pf.insurance'))+' '+esc(fmtVizParam(o.insurance))+'</span>':'')+
+          '<span>'+esc(t('ors.resolved',{N:resolved}))+'</span>'+
+          (o.disputes_lost?'<span class="badge risk">'+esc(t('ors.disputes_lost',{N:o.disputes_lost}))+'</span>':'')+
+        '</div>'+
+        ((o.rules_url||o.rules)?'<div class="hint"><a href="'+esc(o.rules_url||o.rules)+'" target="_blank">'+esc(t('md.rules'))+'</a></div>':'')+
+        '<button class="btn small mt" data-pick="'+esc(owner)+'">'+esc(t('ors.use'))+'</button></div>';
+    }).join('');
+    el('ors-list').innerHTML=cards;
+    $all('[data-pick]',el('ors-list')).forEach(function(b){ b.onclick=function(){
+      try{ sessionStorage.setItem('lc_pick_oracle', b.getAttribute('data-pick')); }catch(e){}
+      go('#/create');
+    };});
+  }catch(e){ el('ors-list').innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
 }
 
 /* ------------------------------------------------------------------- modal */
