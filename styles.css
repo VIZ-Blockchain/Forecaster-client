@@ -73,6 +73,10 @@ small{font-size:.85em}
 .pbar-no{color:var(--no); font-weight:700}
 .pbar-track{height:6px; background:var(--no); border-radius:4px; overflow:hidden}
 .pbar-track > i{display:block; height:100%; background:var(--yes)}
+.perr-bar{position:fixed; left:0; right:0; bottom:0; z-index:200; background:var(--bad); color:#fff; box-shadow:0 -2px 12px rgba(0,0,0,.18)}
+.perr-in{max-width:var(--app-maxw); margin:0 auto; padding:10px 16px; display:flex; align-items:flex-start; gap:10px; font-size:13px; line-height:1.4}
+.perr-in span{flex:1; word-break:break-word}
+.perr-x{background:transparent; border:0; color:#fff; font-size:20px; line-height:1; cursor:pointer; padding:0 4px}
 .card-meta{display:flex; gap:10px; flex-wrap:wrap; color:var(--muted); font-size:12.5px}
 
 /* Buttons */

@@ -67,6 +67,31 @@ function tsToLocal(t){t=Number(t);if(!t)return '—';return new Date(t*1000).toL
 function toEpoch(localValue){ if(!localValue) return 0; var d=new Date(localValue); return Math.floor(d.getTime()/1000); }
 function fmtDuration(sec){ sec=Number(sec)||0; if(sec<=0)return '—'; if(sec%86400===0)return (sec/86400)+' d'; if(sec%3600===0)return (sec/3600)+' h'; if(sec%60===0)return (sec/60)+' min'; return sec+' s'; }
 function fmtIn(ts){ var d=(Number(ts)||0)-now(); if(d<=0)return t('md.expired'); if(d<3600)return t('md.in_min',{N:Math.max(1,Math.round(d/60))}); if(d<86400)return t('md.in_hr',{N:(d/3600).toFixed(1)}); return t('md.in_day',{N:Math.round(d/86400)}); }
+/* Chain time → unixtime seconds. Accepts a unixtime number/string or an ISO "YYYY-MM-DDThh:mm:ss"
+   (the node emits UTC without a 'Z' — treat it as UTC, not local). Returns 0 if unparseable. */
+function chainTime(v){
+  if(v==null) return 0;
+  if(typeof v==='number') return v;
+  var s=String(v).trim();
+  if(/^\d+$/.test(s)) return Number(s);
+  if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(s)) s+='Z';   // bare UTC ISO → mark as UTC
+  var ms=Date.parse(s); return isFinite(ms)?Math.floor(ms/1000):0;
+}
+/* get_account_positions / get_market_full.my_positions wrap the bet as {bet:{…}, expected_payout,
+   market_status, resolved_outcome}. Flatten so callers can read fields directly (market/amount/side/id). */
+function normPos(p){
+  if(!p || !p.bet) return p;
+  return Object.assign({}, p.bet, {expected_payout:p.expected_payout, market_status:p.market_status, resolved_outcome:p.resolved_outcome});
+}
+/* Persistent error bar (survives modal close / screen change) — last failed op + chain error.
+   Toast stays as secondary feedback; this is the durable one for the user and QA. */
+function persistErr(label, msg){
+  var bar=el('perr-bar');
+  if(!bar){ bar=document.createElement('div'); bar.id='perr-bar'; bar.className='perr-bar'; document.body.appendChild(bar); }
+  bar.innerHTML='<div class="perr-in"><b>'+esc(label)+'</b>: <span>'+esc(msg)+'</span><button class="perr-x" type="button" aria-label="close">&times;</button></div>';
+  bar.querySelector('.perr-x').onclick=function(){ if(bar.parentNode) bar.remove(); };
+}
+function clearPersistErr(){ var bar=el('perr-bar'); if(bar&&bar.parentNode) bar.remove(); }
 
 /* ------------------------------------------------------------------- toasts */
 function toast(type,text,timeout){
@@ -137,8 +162,8 @@ function refreshMarketCard(id){
 async function seedWatch(){
   if(!isUnlocked()) return;
   try{
-    var pos=await api('getAccountPositions', SESSION.account, 0, 200);
-    var ids={}; (pos||[]).forEach(function(p){ var id=Number(p.market_id!=null?p.market_id:p.market); if(!isNaN(id)) ids[id]=1; });
+    var pos=((await api('getAccountPositions', SESSION.account, 0, 200))||[]).map(normPos);
+    var ids={}; pos.forEach(function(p){ var id=Number(p.market_id!=null?p.market_id:p.market); if(!isNaN(id)) ids[id]=1; });
     await Promise.all(Object.keys(ids).map(function(id){ return api('getMarket', id).then(watchMarket).catch(function(){}); }));
     checkExpiries();
   }catch(e){}
@@ -333,10 +358,14 @@ function requireUnlock(){ if(!isUnlocked()){ toast('warn',t('toast.unlock_first'
 
 /* generic broadcast-with-feedback */
 async function tx(label, promiseFactory, after){
+  clearPersistErr();                       // a new attempt supersedes the last error
   var tg=toast('info','<span class="spin"></span> '+esc(label)+'…', false);
   try{ var r=await promiseFactory(); if(tg.parentNode)tg.remove(); toast('ok',esc(label)+' ✓');
        if(after)after(r); return r; }
-  catch(e){ if(tg.parentNode)tg.remove(); toast('err',t('common.failed',{LABEL:esc(label),E:esc(errText(e))}),8000); throw e; }
+  catch(e){ if(tg.parentNode)tg.remove(); var msg=errText(e);
+       toast('err',t('common.failed',{LABEL:esc(label),E:esc(msg)}),8000);
+       persistErr(label, msg);             // durable: stays until next attempt or dismissed
+       throw e; }
 }
 
 /* ------------------------------------------------------------- market utils */
@@ -731,6 +760,12 @@ async function loadMarketList(){
     } else {
       if(mkFilter.category!==''){
         list=await api('listMarketsByCategory', mkFilter.category, 0, 50, jur||'', '', '', 'newest');
+      } else if(mkFilter.status===-1){
+        // node list_markets keys on an EXACT status; -1 is not "all" → aggregate real statuses
+        var STS=[1,2,3,0]; // active, closed, resolved, waiting
+        var parts=await Promise.all(STS.map(function(s){ return api('listMarkets', s, 0, 50, !!mkFilter.showRisky).catch(function(){return [];}); }));
+        list=dedupeMarkets([].concat.apply([], parts));
+        list.sort(function(a,b){ return marketId(b)-marketId(a); }); // newest first
       } else {
         list=await api('listMarkets', mkFilter.status, 0, 50, !!mkFilter.showRisky);
       }
@@ -1165,8 +1200,8 @@ function placeHiddenBet(id,side,oc,amt,min){
 async function loadMyPositions(id){
   var box=el('mine-box'); if(!box)return;
   try{
-    var all=await api('getAccountPositions', SESSION.account, 0, 200);
-    var mine=(all||[]).filter(function(p){return Number(p.market_id!=null?p.market_id:p.market)===Number(id);});
+    var all=((await api('getAccountPositions', SESSION.account, 0, 200))||[]).map(normPos);
+    var mine=all.filter(function(p){return Number(p.market_id!=null?p.market_id:p.market)===Number(id);});
     if(!mine.length){ box.innerHTML='<div class="mut">'+esc(t('md.no_positions'))+'</div>'; return; }
     var rows=mine.map(function(p){
       var bid=p.id!=null?p.id:p.bet_id;
@@ -1219,8 +1254,9 @@ async function loadMyLiquidity(id, status){
     var rows=mine.map(function(l){
       var lid=l.id!=null?l.id:(l.liquidity_id!=null?l.liquidity_id:l.liquidity);
       var amt=l.amount!=null?l.amount:(l.balance!=null?l.balance:l.shares);
+      // amt is already raw (fmtShares divides by 1000); pass it through as raw — do NOT ×1000 again
       return '<tr><td>#'+esc(lid)+'</td><td>'+fmtShares(amt)+' VIZ</td>'+
-        '<td><button class="btn small" data-wl="'+esc(lid)+'" data-amt="'+esc(assetNum(amt)*1000)+'">'+esc(t('lq.withdraw'))+'</button></td></tr>';
+        '<td><button class="btn small" data-wl="'+esc(lid)+'" data-amt="'+esc(Number(amt)||0)+'">'+esc(t('lq.withdraw'))+'</button></td></tr>';
     }).join('');
     box.innerHTML='<table class="tbl"><tr><th>'+esc(t('lq.col_id'))+'</th><th>'+esc(t('lq.col_amount'))+'</th><th></th></tr>'+rows+'</table>';
     $all('[data-wl]',box).forEach(function(b){ b.onclick=function(){
@@ -1429,7 +1465,7 @@ function screenCreate(){
       '<label class="lab">'+esc(t('cr.oracle'))+'</label>',
       '<div class="row"><input id="c-oracle" class="grow" type="text" autocomplete="off" spellcheck="false" placeholder="'+esc(t('cr.oracle_ph'))+'"><button class="btn ghost" id="c-oracle-browse" style="white-space:nowrap">'+esc(t('cr.browse_oracles'))+'</button><button class="btn ghost" id="c-oracle-load" style="white-space:nowrap">'+esc(t('cr.load_terms'))+'</button></div>',
       '<div id="c-oracle-info" class="hint"></div>',
-      '<label class="lab">'+esc(t('cr.liq'))+'</label><input id="c-liq" type="number" step="0.001" min="0.001" value="50.000">',
+      '<label class="lab">'+esc(t('cr.liq'))+'</label><input id="c-liq" type="number" step="0.001" min="100.000" value="100.000">',
       '<label class="lab">'+esc(t('cr.creation_fee'))+'</label><input id="c-creation-fee" type="text" disabled value="…">',
       '<div class="hint">'+esc(t('cr.creation_fee_hint'))+'</div>',
       '<div id="c-fees"></div>',
@@ -1468,6 +1504,8 @@ function screenCreate(){
   api('getPmChainProperties').then(function(p){
     p=p||{};
     if(el('c-creation-fee')) el('c-creation-fee').value=fmtVizParam(p.pm_market_creation_fee);
+    if(p.pm_min_liquidity!=null){ var minL=(Number(p.pm_min_liquidity)/1000); var li=el('c-liq'); // enforce live chain minimum
+      if(li){ li.min=minL.toFixed(3); if((Number(li.value)||0)<minL) li.value=minL.toFixed(3); } }
     var maxTotal=p.pm_max_total_fee_percent, maxOracle=p.pm_max_oracle_fee_percent;
     var box=el('c-fees'); if(box){
       var rows=kv(t('cr.creation_fee'), fmtVizParam(p.pm_market_creation_fee));
@@ -1518,6 +1556,8 @@ function screenCreate(){
     if(type===1 && (outcomes.length<2||outcomes.length>10)){toast('warn',t('cr.provide_outcomes'));return;}
     var oracle=el('c-oracle').value.trim().toLowerCase();
     if(!oracle){toast('warn',t('cr.oracle_required'));return;}
+    var minLiq=Number(el('c-liq').min)||0;                        // live chain minimum (set from props)
+    if((Number(el('c-liq').value)||0)<minLiq){ toast('warn',t('cr.min_liquidity')+': '+minLiq.toFixed(3)+' VIZ'); return; }
     var meta={ title: type===1?(el('c-q').value||t('cr.multi_default_title')):el('c-q').value, outcomes:outcomes };
     var jur=el('c-jur').value.trim(); if(jur)meta.jurisdiction=jur;
     var args=[
@@ -1652,7 +1692,7 @@ async function screenPool(){
   } else {
     hasPos=true;
     var uShares=num(user.shares); myShares=uShares;
-    var principal=num(user.principal), pending=num(user.pending_rewards), unlockTime=num(user.unlock_time);
+    var principal=num(user.principal), pending=num(user.pending_rewards), unlockTime=chainTime(user.unlock_time);
     // MasterChef: accrued = live unsettled + carried pending; value = principal + accrued
     var live=(user.reward_snapshot!=null)?(rewardPerShare-num(user.reward_snapshot))*uShares/1e9:0;
     var accrued=Math.max(0,live)+pending;
@@ -1717,7 +1757,7 @@ function disputeOpen(d){
 }
 async function ensureMy(){
   if(ACT.loaded) return;
-  ACT.positions = (await api('getAccountPositions', SESSION.account, 0, 300)) || [];
+  ACT.positions = ((await api('getAccountPositions', SESSION.account, 0, 300)) || []).map(normPos);
   var idset={}; ACT.positions.forEach(function(p){ var id=Number(p.market_id!=null?p.market_id:p.market); if(!isNaN(id)) idset[id]=1; });
   ACT.ids = Object.keys(idset).map(Number);
   ACT.markets={}; ACT.disputes={};
@@ -1880,7 +1920,7 @@ async function screenProfile(){
   $all('[data-reveal]').forEach(function(b){b.onclick=function(){revealPending(Number(b.getAttribute('data-reveal')));};});
   // positions
   api('getAccountPositions',SESSION.account,0,100).then(function(list){
-    list=list||[]; var box=el('pf-pos'); if(!box)return;
+    list=(list||[]).map(normPos); var box=el('pf-pos'); if(!box)return;
     if(!list.length){box.innerHTML='<div class="mut">'+esc(t('common.none'))+'</div>';return;}
     box.innerHTML='<table class="tbl"><tr><th>'+esc(t('pf.col_market'))+'</th><th>'+esc(t('pf.col_outcome'))+'</th><th>'+esc(t('pf.col_amount'))+'</th></tr>'+list.map(function(p){
       var mid=p.market_id!=null?p.market_id:p.market;
@@ -1929,9 +1969,11 @@ function addRegularKey(){
     }}
   ]);
 }
-function oracleRegisterModal(){
+async function oracleRegisterModal(){
+  var props={}; try{ props=(await api('getPmChainProperties'))||{}; }catch(e){}
+  var minIns=(props.pm_min_oracle_insurance!=null)?(Number(props.pm_min_oracle_insurance)/1000):5000; // live chain minimum
   openModal(t('pf.reg_title'), h(
-    '<label class="lab">'+esc(t('pf.insurance_deposit'))+'</label><input id="o-ins" type="number" step="0.001" min="0" value="10.000">',
+    '<label class="lab">'+esc(t('pf.insurance_deposit'))+'</label><input id="o-ins" type="number" step="0.001" min="'+minIns.toFixed(3)+'" value="'+minIns.toFixed(3)+'">',
     '<label class="lab">'+esc(t('pf.fee_pct'))+'</label><input id="o-fee" type="number" step="0.1" min="0" value="1">',
     '<label class="lab">'+esc(t('pf.rules_url'))+'</label><input id="o-url" type="url" placeholder="https://…">',
     '<div class="box info">'+esc(t('pf.auto_desc'))+'</div>',
@@ -1939,6 +1981,7 @@ function oracleRegisterModal(){
     '<label class="lab">'+esc(t('pf.auto_creator'))+'</label><input id="o-acr" type="text" autocomplete="off" spellcheck="false" placeholder="'+esc(t('pf.account_opt'))+'">',
     '<label class="lab">'+esc(t('pf.auto_resolver'))+'</label><input id="o-ars" type="text" autocomplete="off" spellcheck="false" placeholder="'+esc(t('pf.account_opt'))+'">'
   ),[{label:t('common.cancel'),cls:'ghost',act:closeModal},{label:t('pf.register'),cls:'',act:function(){
+    if((Number(el('o-ins').value)||0)<minIns){ toast('warn',t('pf.insurance_deposit')+' ≥ '+minIns.toFixed(3)+' VIZ'); return; } // keep modal open on invalid
     var ins=toAsset(el('o-ins').value), fee=toBP(el('o-fee').value), url=el('o-url').value||'';
     var acr=el('o-acr').value.trim().toLowerCase(), ars=el('o-ars').value.trim().toLowerCase(), auto=el('o-auto').checked;
     closeModal(); tx(t('txn.register_oracle'),function(){return bc('pmOracleRegister',wifFor('active'),SESSION.account,ins,fee,'0.000 VIZ',url,acr,ars,auto,[]);},function(){setTimeout(screenProfile,1500);});
