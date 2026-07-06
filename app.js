@@ -361,6 +361,30 @@ function marketOutcomes(m){
   if(!o)return (Number(m.market_type)===1?[]:['Yes','No']);
   return o.map(function(x){ return typeof x==='string'?x:(x.name||x.title||x.label||String(x)); });
 }
+/* share_type may serialize as a number, numeric string, or {amount} — normalize to Number */
+function num(x){ if(x==null)return 0; if(typeof x==='object')x=(x.amount!=null?x.amount:(x.value!=null?x.value:0)); var n=Number(x); return isFinite(n)?n:0; }
+/* Binary CPMM implied probability of outcome[0] from collateral reserves: pA=reserve_a/(a+b).
+   Money-weighted, bounded 0..1 (fresh market = 50%). The exact per-outcome weight-based % lives
+   on the detail (get_market_full.weight_sums); multi markets have no card-level reserves → null. */
+function binaryProb(m){
+  if(Number(m.market_type)!==0) return null;
+  var a=num(m.reserve_a), b=num(m.reserve_b), s=a+b;
+  if(s<=0) return null;
+  return a/s;
+}
+/* Glanceable probability strip for binary cards: "Yes 63% · No 37%" + a two-tone bar. */
+function probBar(m){
+  var p=binaryProb(m); if(p==null) return '';
+  var ocs=marketOutcomes(m), yes=ocs[0]||'Yes', no=ocs[1]||'No';
+  var pctY=Math.round(p*100), pctN=100-pctY;
+  return h(
+    '<div class="pbar">',
+      '<div class="pbar-row"><span class="pbar-yes">'+esc(yes)+' '+pctY+'%</span>'+
+        '<span class="pbar-no">'+esc(no)+' '+pctN+'%</span></div>',
+      '<div class="pbar-track"><i style="width:'+pctY+'%"></i></div>',
+    '</div>'
+  );
+}
 function relClass(score){ score=Number(score);
   if(score>=80)return['rel-ex','rel.excellent'];if(score>=65)return['rel-go','rel.good'];
   if(score>=50)return['rel-av','rel.average'];if(score>=40)return['rel-nw','rel.new'];
@@ -724,10 +748,12 @@ function marketCard(m){
   var id=marketId(m), ocs=marketOutcomes(m), meta=parseMeta(m);
   var vol=m.volume!=null?m.volume:(m.total_volume!=null?m.total_volume:null);
   var risky=(m.risk_score!=null && m.risk_score<50)||m.under_collateralized;
+  var img=metaImage(meta)||metaImage(m);   // hybrid: image if present, else a denser card
   return h(
-    '<div class="card click" data-nav="#/market/'+id+'">',
-      thumb(metaImage(meta)||metaImage(m),'width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px;display:block'),
+    '<div class="card click'+(img?'':' card-dense')+'" data-nav="#/market/'+id+'">',
+      thumb(img,'width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px;display:block'),
       '<div class="card-q">'+esc(marketTitle(m))+'</div>',
+      probBar(m),
       '<div class="card-meta">',
         statusBadge(m),
         '<span>'+(Number(m.market_type)===1?esc(t('mk.multi',{N:ocs.length})):esc(t('mk.binary')))+'</span>',
