@@ -83,6 +83,15 @@ function normPos(p){
   if(!p || !p.bet) return p;
   return Object.assign({}, p.bet, {expected_payout:p.expected_payout, market_status:p.market_status, resolved_outcome:p.resolved_outcome});
 }
+/* get_oracle wraps the record as {oracle:{owner,fee_percent,insurance,…}, reliability_score}.
+   list_oracles rows are already flat. Flatten the wrapped shape (keeping reliability_score)
+   so callers can read o.owner/o.fee_percent/o.insurance directly; pass flat rows through. */
+function unwrapOracle(o){
+  if(o && o.oracle && typeof o.oracle==='object'){
+    return Object.assign({}, o.oracle, {reliability_score:(o.reliability_score!=null?o.reliability_score:o.oracle.reliability_score)});
+  }
+  return o;
+}
 /* Persistent error bar (survives modal close / screen change) — last failed op + chain error.
    Toast stays as secondary feedback; this is the durable one for the user and QA. */
 function persistErr(label, msg){
@@ -986,7 +995,7 @@ function scheduleMarketRefresh(id, m){
 async function loadOracleHint(owner, marketVolViz){
   var box=el('oracle-info'); if(!box)return;
   try{
-    var o=await api('getOracle', owner); if(!o){box.innerHTML='';return;}
+    var o=unwrapOracle(await api('getOracle', owner)); if(!o){box.innerHTML='';return;}
     var score=o.reliability_score!=null?o.reliability_score:o.score;
     var resolved=Number(o.markets_resolved!=null?o.markets_resolved:(o.resolved||0));
     var ins=assetNum(o.insurance!=null?o.insurance:o.insurance_fund);
@@ -1531,7 +1540,7 @@ function screenCreate(){
     if(!acc){ toast('warn',t('cr.enter_oracle')); return; }
     info.innerHTML='<span class="spin"></span>';
     try{
-      var o=await api('getOracle', acc);
+      var o=unwrapOracle(await api('getOracle', acc));
       if(o && (o.owner||o.fee_percent!=null||o.insurance)){
         el('c-oracle').style.borderColor='var(--ok)';
         var feePct=fromBP(o.fee_percent||0);
@@ -1864,7 +1873,7 @@ async function screenProfile(){
     return;
   }
   setContent('<div class="title">@'+esc(SESSION.account)+'</div><div id="pf-box"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
-  var oracle=null; try{ oracle=await api('getOracle', SESSION.account); }catch(e){}
+  var oracle=null; try{ oracle=unwrapOracle(await api('getOracle', SESSION.account)); }catch(e){}
   var html='';
   html+='<div class="card">'+
     kv(t('bal.account'),'@'+SESSION.account)+
