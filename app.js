@@ -21,6 +21,11 @@ var LS_ACCT   = 'lc_account';  // plaintext account name (label only)
 var LS_JUR    = 'lc_jur';      // user jurisdiction ISO code ('' = no jurisdiction / show all)
 var LS_TERMS  = 'lc_terms';    // software-agreement acceptance {v, at}
 var LS_FAV    = 'lc_fav_cats'; // favorite category ids (JSON array) for the personalized feed
+var LS_CAT_TAX = 'lc_cat_taxonomy'; // cached get_market_categories {ts,cats,tags} (TTL) for instant paint / offline
+var LS_MKT_IDX = 'lc_mkt_index';    // compact market index {ts,items:[{id,title,cat,sub,tags,exp,status,vol,upd}]} for instant feed + fast local search
+var CACHE_TAX_TTL = 900;            // taxonomy freshness, seconds (15 min)
+var CACHE_IDX_TTL = 300;            // market index freshness, seconds (5 min) — DISCOVERY ONLY, never bet off it
+var CACHE_IDX_CAP = 500;            // max markets kept in the local index
 var LS_AUTOLOCK = 'lc_autolock_sec'; // PIN auto-lock inactivity timeout (seconds)
 var SS_SESSION  = 'lc_session';      // sessionStorage: unlocked session (survives reload, cleared on browser/tab close)
 var LS_LOCK     = 'lc_lock_signal';  // localStorage broadcast to lock every tab
@@ -49,6 +54,7 @@ var WATCH = {};        // expiry registry: market_id -> {betting,result,status,t
 function $(sel,root){return (root||document).querySelector(sel);}
 function $all(sel,root){return Array.prototype.slice.call((root||document).querySelectorAll(sel));}
 function el(id){return document.getElementById(id);}
+function debounce(fn,ms){ var timer; return function(){ var self=this,args=arguments; clearTimeout(timer); timer=setTimeout(function(){ fn.apply(self,args); }, ms||200); }; }
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function h(strings){ // tagged-ish: just returns joined; used as plain string builder
@@ -675,11 +681,12 @@ function screenUnlock(){
 /* ========================================================================= *
  *  SCREEN: Markets list + filters
  * ========================================================================= */
-var mkFilter={status:-1, showRisky:false, category:'', view:'all'}; // view: all | feed | popular
+var mkFilter={status:-1, showRisky:false, category:'', view:'hot', q:''}; // view: hot | all | feed | popular; q = local search
 var actTab='history';           // current Activity sub-tab
 var ACT={loaded:false};          // per-visit cache of the user's positions/markets/disputes
 var histState={from:-1,done:false}; // account-history pagination cursor (from=-1 → newest)
-var catCache=null;               // getMarketCategories result, cached per session
+var catCache=null;               // category list (from node get_market_categories.categories), cached per session
+var catHotTags=[];               // hot_tags from get_market_categories, cached per session
 
 /* favorite categories (personalized feed) */
 function getFavCats(){ try{var a=JSON.parse(localStorage.getItem(LS_FAV)); return Array.isArray(a)?a.map(String):[];}catch(e){return [];} }
@@ -691,16 +698,59 @@ function catName(c){
   if(lab && lab!==k) return lab;
   return c.name||c.title||id;
 }
-async function ensureCategories(){ if(catCache)return catCache; try{ catCache=(await api('getMarketCategories'))||[]; }catch(e){ catCache=[]; } return catCache; }
+/* -------- localStorage cache (DISCOVERY ONLY — never bet/act off cached data) -------- */
+function cacheGet(key,ttl){ try{ var o=JSON.parse(localStorage.getItem(key)); if(o&&o.ts&&(now()-o.ts)<=ttl) return o; return o?Object.assign(o,{_stale:true}):null; }catch(e){ return null; } }
+function cacheSet(key,obj){ try{ obj.ts=now(); localStorage.setItem(key, JSON.stringify(obj)); }catch(e){} }
+/* Built-in fallback taxonomy — used only on first paint / offline when the node call fails and no cache. */
+var FALLBACK_CATS=['Politics','Sports','Crypto','Economy','Tech','Culture','World','Science'].map(function(c){return {category:c};});
+
+/* Fetch live taxonomy, normalizing the node shape {categories,hot_tags}; cache to LS; fallback if all fails.
+   fresh=true forces a network refresh (used for stale-while-revalidate). */
+async function ensureCategories(fresh){
+  if(catCache && !fresh) return catCache;
+  var c=cacheGet(LS_CAT_TAX, CACHE_TAX_TTL);
+  if(c && !c._stale && !fresh){ catCache=c.cats||[]; catHotTags=c.tags||[]; return catCache; } // fresh cache → use, skip network
+  try{
+    var res=await api('getMarketCategories');
+    var cats=(res&&res.categories)?res.categories:(Array.isArray(res)?res:[]);
+    var tags=(res&&res.hot_tags)?res.hot_tags:[];
+    catCache=cats; catHotTags=tags; cacheSet(LS_CAT_TAX,{cats:cats,tags:tags});
+  }catch(e){
+    if(c){ catCache=c.cats||[]; catHotTags=c.tags||[]; }              // network failed → last known cache (even stale)
+    else { catCache=catCache||FALLBACK_CATS; catHotTags=catHotTags||[]; } // nothing at all → preset
+  }
+  return catCache;
+}
+
+/* Compact market index in LS: instant paint of the discovery feed + fast local search over known markets. */
+function idxRow(m){ return {id:marketId(m), title:marketTitle(m), cat:(parseMeta(m).category||''), sub:(parseMeta(m).subcategory||''),
+  tags:(parseMeta(m).tags||m.tags||''), exp:assetTime(m.betting_expiration)||0, status:marketStatus(m), vol:volOf(m), upd:now()}; }
+function indexGet(){ var o=cacheGet(LS_MKT_IDX, CACHE_IDX_TTL); return o?{items:o.items||[], stale:!!o._stale, ts:o.ts}:null; }
+/* Merge fresh markets into the index by id, drop resolved/expired, cap size (newest-first). */
+function indexPut(list){
+  var m={}; var prev=indexGet(); if(prev) prev.items.forEach(function(r){ m[r.id]=r; });
+  (list||[]).forEach(function(mk){ var r=idxRow(mk); if(r.id!=null) m[r.id]=r; });
+  var items=Object.keys(m).map(function(k){return m[k];})
+    .filter(function(r){ return r.status<3 && (!r.exp || r.exp>now()-86400); }) // keep active/closed & recently-live
+    .sort(function(a,b){ return b.id-a.id; }).slice(0, CACHE_IDX_CAP);
+  cacheSet(LS_MKT_IDX,{items:items});
+  return items;
+}
 function viewChip(v,label){ return '<button class="btn chip'+(mkFilter.view===v?' active':'')+'" data-view="'+v+'">'+esc(label)+'</button>'; }
 
 async function screenMarkets(){
-  if(!mkFilter.view) mkFilter.view='all';
+  if(!mkFilter.view) mkFilter.view='hot';
   var views='<div class="filters" id="mk-views">'+
-    viewChip('all',t('mk.view_all'))+viewChip('feed',t('mk.view_feed'))+viewChip('popular',t('mk.view_popular'))+
+    viewChip('hot',t('mk.view_hot'))+viewChip('all',t('mk.view_all'))+viewChip('feed',t('mk.view_feed'))+viewChip('popular',t('mk.view_popular'))+
     '<button class="btn chip" id="mk-fav-edit">'+esc(t('mk.edit_favorites'))+'</button></div>';
+  var withCats=(mkFilter.view==='hot'||mkFilter.view==='all'); // hot & all support category browsing + local search
   var filters='';
-  if(mkFilter.view==='all'){
+  if(withCats){
+    filters+='<input id="mk-q" type="search" placeholder="'+esc(t('mk.search_ph'))+'" value="'+esc(mkFilter.q||'')+'" style="margin-bottom:8px;width:100%">';
+  }
+  if(mkFilter.view==='hot'){
+    filters+='<div class="hint">'+esc(t('mk.hot_hint'))+'</div><div class="filters" id="mk-cats"></div>';
+  } else if(mkFilter.view==='all'){
     filters+='<div class="filters" id="mk-status">'+chip('-1',t('mk.f_all'),mkFilter.status)+chip('1',t('mk.f_active'),mkFilter.status)+
       chip('3',t('mk.f_resolved'),mkFilter.status)+chip('2',t('mk.f_closed'),mkFilter.status)+'</div>'+
       '<div class="filters" id="mk-cats"></div>'+
@@ -716,11 +766,15 @@ async function screenMarkets(){
 
   $('#mk-views').addEventListener('click',function(e){
     if(e.target.closest('#mk-fav-edit')){ openFavModal(); return; }
-    var c=e.target.closest('[data-view]'); if(!c)return; mkFilter.view=c.getAttribute('data-view'); screenMarkets();
+    var c=e.target.closest('[data-view]'); if(!c)return; mkFilter.view=c.getAttribute('data-view'); mkFilter.q=''; screenMarkets();
   });
-  if(mkFilter.view==='all'){
-    $('#mk-status').addEventListener('click',function(e){var c=e.target.closest('[data-v]');if(!c)return;mkFilter.status=Number(c.getAttribute('data-v'));screenMarkets();});
-    el('mk-risky').onchange=function(){mkFilter.showRisky=this.checked;loadMarketList();};
+  if(withCats){
+    var qbox=el('mk-q');
+    if(qbox) qbox.addEventListener('input', debounce(function(){ mkFilter.q=qbox.value.trim(); loadMarketList(); }, 200));
+    if(mkFilter.view==='all'){
+      $('#mk-status').addEventListener('click',function(e){var c=e.target.closest('[data-v]');if(!c)return;mkFilter.status=Number(c.getAttribute('data-v'));screenMarkets();});
+      el('mk-risky').onchange=function(){mkFilter.showRisky=this.checked;loadMarketList();};
+    }
     ensureCategories().then(function(cats){
       var host=$('#mk-cats'); if(!host||!cats.length)return;
       host.innerHTML=chip('',t('mk.all_cats'),mkFilter.category)+cats.map(function(c){
@@ -750,10 +804,35 @@ async function openFavModal(){
 
 async function loadMarketList(){
   var host=el('mk-list'); if(!host)return;
-  host.innerHTML='<div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div>';
+  var jur=getJur(), list;
+  // Fast local search over the cached index (known markets) — instant, offline-friendly. DISCOVERY only.
+  if(mkFilter.q){
+    var q=mkFilter.q.toLowerCase(), idx=indexGet();
+    var hits=((idx&&idx.items)||[]).filter(function(r){
+      return (r.title&&r.title.toLowerCase().indexOf(q)>=0)||(String(r.tags||'').toLowerCase().indexOf(q)>=0)||(String(r.cat||'').toLowerCase().indexOf(q)>=0);
+    });
+    host.innerHTML=hits.length?hits.map(indexCard).join(''):'<div class="empty">'+esc(t('mk.search_none'))+'</div>';
+    return;
+  }
+  // Discovery feed: stale-while-revalidate — instant paint from cached index, then refresh live below.
+  if(mkFilter.view==='hot' && mkFilter.category===''){
+    var cx=indexGet();
+    host.innerHTML=(cx&&cx.items.length)?cx.items.slice(0,60).map(indexCard).join('')
+      :'<div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div>';
+  } else {
+    host.innerHTML='<div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div>';
+  }
   try{
-    var jur=getJur(), list;
-    if(mkFilter.view==='feed'){
+    if(mkFilter.view==='hot'){
+      // "New & relevant first" — client-side blend (option A): active, non-expired markets ranked by recency×activity.
+      if(mkFilter.category!==''){
+        list=(await api('listMarketsByCategory', mkFilter.category, 0, 50, jur||'', '', '', 'newest'))||[];
+      } else {
+        list=(await api('listMarkets', 1, 0, 100, !!mkFilter.showRisky))||[];
+        list=list.filter(function(m){ var e=assetTime(m.betting_expiration); return marketStatus(m)===1 && (!e||e>now()); }); // active & still bettable
+        list=rankHot(list);
+      }
+    } else if(mkFilter.view==='feed'){
       var favs=getFavCats();
       if(!favs.length){
         host.innerHTML='<div class="empty">'+esc(t('mk.feed_empty'))+'<div class="mt"><button class="btn small" id="mk-feed-pick">'+esc(t('mk.feed_pick'))+'</button></div></div>';
@@ -782,9 +861,24 @@ async function loadMarketList(){
       if(mkFilter.category!=='' && mkFilter.status!==-1) list=list.filter(function(m){return marketStatus(m)===mkFilter.status;});
     }
     if(jur) list=list.filter(function(m){return !marketBannedIn(m,jur);}); // '' jur = show all
+    try{ if(mkFilter.view==='hot'||mkFilter.view==='all'||mkFilter.view==='popular') indexPut(list); }catch(e){} // refresh discovery cache (never used for betting)
     if(!list.length){ host.innerHTML='<div class="empty">'+esc(t('mk.none'))+'</div>'; return; }
     host.innerHTML=list.map(marketCard).join('');
   }catch(e){ host.innerHTML='<div class="box err">'+esc(t('mk.load_failed',{E:errText(e)}))+'</div>'; }
+}
+/* "New & relevant" blend: normalize recency (market id) and activity (log volume), weight 0.55/0.45. */
+function rankHot(list){
+  if(!list||!list.length) return list||[];
+  var maxId=1,maxV=0;
+  list.forEach(function(m){ var id=marketId(m)||0; if(id>maxId)maxId=id; var v=Math.log(1+volOf(m)); if(v>maxV)maxV=v; });
+  function score(m){ var id=(marketId(m)||0)/maxId, v=maxV?Math.log(1+volOf(m))/maxV:0; return 0.55*id+0.45*v; }
+  return list.slice().sort(function(a,b){ return score(b)-score(a); });
+}
+/* Compact card for cached-index rows (instant paint / search results). Opening re-fetches live data. */
+function indexCard(r){
+  return '<div class="card click card-dense" data-nav="#/market/'+r.id+'">'
+    +'<div class="card-q">'+esc(r.title||('Market #'+r.id))+'</div>'
+    +'<div class="mut" style="font-size:12px">'+(r.cat?esc(r.cat)+' · ':'')+esc(statusLabel(r.status))+'</div></div>';
 }
 function dedupeMarkets(arr){ var seen={},out=[]; arr.forEach(function(m){var id=marketId(m); if(id!=null&&!seen[id]){seen[id]=1;out.push(m);}}); return out; }
 function volOf(m){ return Number(m.volume!=null?m.volume:(m.total_volume!=null?m.total_volume:(m.bets_sum!=null?m.bets_sum:(m.total_bets||0))))||0; }

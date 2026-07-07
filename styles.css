@@ -96,7 +96,7 @@ small{font-size:.85em}
 /* Forms */
 label.lab{display:block; font-size:12.5px; color:var(--muted); font-weight:600; margin:10px 0 4px}
 label.lab input[type=checkbox]{vertical-align:middle; margin:0 4px 0 0}
-input[type=text],input[type=number],input[type=password],input[type=url],input[type=datetime-local],select,textarea{
+input[type=text],input[type=number],input[type=password],input[type=url],input[type=datetime-local],input[type=search],select,textarea{
   width:100%; padding:9px 10px; border:1px solid #cfd4dc; border-radius:8px; font-size:15px; background:#fff; color:var(--ink)
 }
 textarea{min-height:70px; resize:vertical}
