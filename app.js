@@ -63,6 +63,9 @@ function now(){return Math.floor(Date.now()/1000);}
 
 /* money: pm read objects use share_type ints ×1000; asset fields are "10.000 VIZ" */
 function fmtShares(x){var n=Number(x)||0;return (n/1000).toLocaleString(undefined,{minimumFractionDigits:3,maximumFractionDigits:3});}
+/* VIZ amount from raw shares (3 decimals): drop trailing decimal zeros + append the VIZ mark Ƶ so a
+   bare "5,000" (= 5.000) isn't misread as five thousand. 5000 -> "5 Ƶ", 5500 -> "5.5 Ƶ". */
+function fmtViz(x){ return ((Number(x)||0)/1000).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:3})+' Ƶ'; }
 function assetNum(s){if(s==null)return 0;if(typeof s==='number')return s;var m=String(s).match(/-?[\d.]+/);return m?parseFloat(m[0]):0;}
 function toAsset(v){return (Number(v)||0).toFixed(3)+' VIZ';}
 function toBP(pct){return Math.round((Number(pct)||0)*100);}      // percent -> basis points (ALL PM fees + vote weights; 10000=100%)
@@ -1159,7 +1162,7 @@ async function screenMarket(id){
   wireMarket(id,m,ocs,isMulti);
   if(m.oracle) loadOracleHint(m.oracle, m.volume!=null?Number(m.volume)/1000:0);
   loadKline(id, ocs, isMulti);
-  if(isUnlocked()) loadMyPositions(id);
+  if(isUnlocked()) loadMyPositions(id, m);
   if(isUnlocked()) loadMyLiquidity(id, status);
   if(status===0||status===1) loadLeverage(id, ocs, isMulti);
   if(dispute&&(dispute.id!=null||dispute.disputer||dispute.status!=null)) loadDisputeVotes(id, ocs);
@@ -1422,17 +1425,21 @@ function placeHiddenBet(id,side,oc,amt,min){
       setTimeout(function(){screenMarket(id);},1200);
     });
 }
-async function loadMyPositions(id){
+async function loadMyPositions(id, mkt){
   var box=el('mine-box'); if(!box)return;
   try{
     var all=((await api('getAccountPositions', SESSION.account, 0, 200))||[]).map(normPos);
     var mine=all.filter(function(p){return Number(p.market_id!=null?p.market_id:p.market)===Number(id);});
     if(!mine.length){ box.innerHTML='<div class="mut">'+esc(t('md.no_positions'))+'</div>'; return; }
+    var ocs=mkt?marketOutcomes(mkt):[];
     var rows=mine.map(function(p){
       var bid=p.id!=null?p.id:p.bet_id;
       var shares=Number(p.tokens||p.shares||0);
-      return '<tr><td>'+esc(p.outcome_name||('oc '+(p.outcome_index!=null?p.outcome_index:p.side)))+'</td>'+
-        '<td>'+fmtShares(p.amount||p.stake)+'</td>'+
+      // binary bets carry side (0/1) with outcome_index=-1; multi carry outcome_index (>=0)
+      var idx=(p.outcome_index!=null && p.outcome_index>=0)?p.outcome_index:(p.side!=null?p.side:-1);
+      var oc=(idx>=0 && ocs[idx]!=null)?ocs[idx]:(idx>=0?('#'+idx):'—');
+      return '<tr><td>'+esc(oc)+'</td>'+
+        '<td>'+fmtViz(p.amount||p.stake)+'</td>'+
         '<td>'+fmtShares(shares)+'</td>'+
         '<td><button class="btn small" data-xfer="'+bid+'" data-sh="'+shares+'">'+esc(t('md.col_transfer'))+'</button> '+
         '<button class="btn small bad" data-cancel="'+bid+'">'+esc(t('md.col_cancel'))+'</button></td></tr>';
@@ -2112,8 +2119,16 @@ function renderActHistory(box){
   if(!ACT.positions.length){ box.innerHTML='<div class="empty">'+esc(t('act.none_history'))+'</div>'; return; }
   var rows=ACT.positions.map(function(p){
     var id=Number(p.market_id!=null?p.market_id:p.market);
-    var oc=p.outcome_name||(p.outcome_index!=null?('#'+p.outcome_index):(p.side!=null?('side '+p.side):'—'));
-    return '<tr><td><a data-nav="#/market/'+id+'">#'+id+'</a></td><td>'+esc(oc)+'</td><td>'+fmtShares(p.amount||p.stake||0)+'</td><td>'+esc(p.status!=null?String(p.status):'')+'</td></tr>';
+    var m=ACT.markets[id];
+    var title=m?marketTitle(m):('#'+id);
+    // outcome: multi bets carry outcome_index (>=0); binary bets carry side (0=A/Yes, 1=B/No),
+    // with outcome_index=-1. Map to the market's real label instead of showing a raw "-1".
+    var ocs=m?marketOutcomes(m):[];
+    var idx=(p.outcome_index!=null && p.outcome_index>=0)?p.outcome_index:(p.side!=null?p.side:-1);
+    var oc=(idx>=0 && ocs[idx]!=null)?ocs[idx]:(idx>=0?('#'+idx):'—');
+    var stt=m?statusLabel(marketStatus(m)):'';
+    return '<tr><td><a data-nav="#/market/'+id+'">'+esc(title)+'</a> <span class="mut">#'+id+'</span></td>'+
+      '<td>'+esc(oc)+'</td><td>'+fmtViz(p.amount||p.stake||0)+'</td><td>'+esc(stt)+'</td></tr>';
   }).join('');
   box.innerHTML='<table class="tbl"><tr><th>'+esc(t('act.col_market'))+'</th><th>'+esc(t('act.col_outcome'))+'</th><th>'+esc(t('act.col_amount'))+'</th><th>'+esc(t('act.col_status'))+'</th></tr>'+rows+'</table>';
 }
