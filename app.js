@@ -63,14 +63,16 @@ function now(){return Math.floor(Date.now()/1000);}
 
 /* money: pm read objects use share_type ints ×1000; asset fields are "10.000 VIZ" */
 function fmtShares(x){var n=Number(x)||0;return (n/1000).toLocaleString(undefined,{minimumFractionDigits:3,maximumFractionDigits:3});}
-/* VIZ amount from raw shares (3 decimals): drop trailing decimal zeros + append the VIZ mark Ƶ so a
-   bare "5,000" (= 5.000) isn't misread as five thousand. 5000 -> "5 Ƶ", 5500 -> "5.5 Ƶ". */
-function fmtViz(x){ return ((Number(x)||0)/1000).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:3})+' Ƶ'; }
+/* VIZ display amount → trim trailing decimal zeros + append the VIZ mark Ƶ so a bare "5,000" (=5.000)
+   isn't misread as five thousand. Accepts a raw-shares integer (÷1000) or an asset string like
+   "5.000 VIZ" (already in VIZ). 5000 -> "5 Ƶ", "5.000 VIZ" -> "5 Ƶ", 5500 -> "5.5 Ƶ". */
+function fmtViz(x){ var n; if(typeof x==='string'){ var m=x.match(/-?[\d.]+/); n=m?parseFloat(m[0]):0; } else { n=(Number(x)||0)/1000; }
+  return n.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:3})+' Ƶ'; }
 function assetNum(s){if(s==null)return 0;if(typeof s==='number')return s;var m=String(s).match(/-?[\d.]+/);return m?parseFloat(m[0]):0;}
 function toAsset(v){return (Number(v)||0).toFixed(3)+' VIZ';}
 function toBP(pct){return Math.round((Number(pct)||0)*100);}      // percent -> basis points (ALL PM fees + vote weights; 10000=100%)
 function fromBP(bp){return (Number(bp)||0)/100;}                  // basis points -> percent
-function fmtVizParam(v){ if(v==null)return '—'; if(typeof v==='string')return v; return fmtShares(v)+' VIZ'; }
+function fmtVizParam(v){ if(v==null)return '—'; return fmtViz(v); }   // Ƶ display (handles asset strings + raw shares)
 function shortKey(k){k=String(k||'');return k.length>14?k.slice(0,7)+'…'+k.slice(-5):k;}
 function tsToLocal(t){t=Number(t);if(!t)return '—';return new Date(t*1000).toLocaleString();}
 function toEpoch(localValue){ if(!localValue) return 0; var d=new Date(localValue); return Math.floor(d.getTime()/1000); }
@@ -489,6 +491,24 @@ function marketOutcomes(m){
   var o=m.outcomes||m.outcome_names||(parseMeta(m).outcomes);
   if(!o)return (Number(m.market_type)===1?[]:['Yes','No']);
   return o.map(function(x){ return typeof x==='string'?x:(x.name||x.title||x.label||String(x)); });
+}
+/* Human label for a bet's chosen outcome. Binary bets carry side (0=A/Yes, 1=B/No) with
+   outcome_index=-1; multi bets carry outcome_index (>=0). Use the market's real label when known,
+   else fall back to Yes/No (binary) or #index. */
+function betOutcomeLabel(p, m){
+  var ocs=m?marketOutcomes(m):[];
+  var idx=(p.outcome_index!=null && p.outcome_index>=0)?p.outcome_index:(p.side!=null?p.side:-1);
+  if(idx<0) return '—';
+  if(ocs[idx]!=null) return ocs[idx];
+  return idx===0?'Yes':(idx===1?'No':('#'+idx));
+}
+/* Fetch market titles for a set of ids (cached), for tables that only have ids. Returns {id:market}. */
+var MKT_CACHE={};
+async function marketsByIds(ids){
+  var need=ids.filter(function(id){ return MKT_CACHE[id]===undefined; });
+  if(need.length){ var got=await Promise.all(need.map(function(id){ return api('getMarket',id).catch(function(){return null;}); }));
+    need.forEach(function(id,i){ MKT_CACHE[id]=got[i]||null; }); }
+  var out={}; ids.forEach(function(id){ out[id]=MKT_CACHE[id]; }); return out;
 }
 /* share_type may serialize as a number, numeric string, or {amount} — normalize to Number */
 function num(x){ if(x==null)return 0; if(typeof x==='object')x=(x.amount!=null?x.amount:(x.value!=null?x.value:0)); var n=Number(x); return isFinite(n)?n:0; }
@@ -1020,7 +1040,7 @@ function marketCard(m){
         statusBadge(m),
         '<span>'+(Number(m.market_type)===1?esc(t('mk.multi',{N:ocs.length})):esc(t('mk.binary')))+'</span>',
         (m.oracle?'<span>'+esc(t('mk.oracle',{O:m.oracle}))+'</span>':''),
-        (vol!=null?'<span>'+esc(t('mk.vol',{V:fmtShares(vol)}))+'</span>':''),
+        (vol!=null?'<span>'+esc(t('mk.vol',{V:fmtViz(vol)}))+'</span>':''),
         (risky?'<span class="badge risk">'+esc(t('mk.risky'))+'</span>':''),
         (meta.jurisdiction?'<span>🌐 '+esc(meta.jurisdiction)+'</span>':''),
       '</div>',
@@ -1088,7 +1108,7 @@ async function screenMarket(id){
     (m.winning_outcome!=null&&status===3?kv(t('md.result'), ocs[m.winning_outcome]!=null?ocs[m.winning_outcome]:('outcome '+m.winning_outcome)):'')+
     (m.betting_expiration?kv(t('md.betting_until'), tsToLocal(assetTime(m.betting_expiration))):'')+
     (m.result_expiration?kv(t('md.result_deadline'), tsToLocal(assetTime(m.result_expiration))):'')+
-    (m.volume!=null?kv(t('md.volume'), fmtShares(m.volume)+' VIZ'):'')+
+    (m.volume!=null?kv(t('md.volume'), fmtViz(m.volume)):'')+
     (meta.jurisdiction?kv(t('md.jurisdiction'), meta.jurisdiction):'')+
     '<div id="mkt-lazy-alloc"></div>'+   // getMarketLazyAllocation
     (meta.rules_url||m.url?('<div class="kv"><b>'+esc(t('md.rules'))+'</b><a href="'+esc(meta.rules_url||m.url)+'" target="_blank">'+esc(t('md.open_ext'))+'</a></div>'):'')+
@@ -1180,7 +1200,7 @@ async function loadMarketBets(id, ocs, isMulti){
     var rows=bets.map(function(b){
       var oc=(b.outcome_index!=null?ocs[b.outcome_index]:(b.side!=null?(b.side===0?ocs[0]:ocs[1]):null));
       return '<tr><td>'+esc(b.bettor||b.account||'')+'</td><td>'+esc(oc!=null?oc:(b.outcome_index!=null?('#'+b.outcome_index):'—'))+'</td>'+
-        '<td>'+fmtShares(b.amount||b.stake||0)+'</td><td>'+esc(b.timestamp?tsToLocal(assetTime(b.timestamp)):'')+'</td></tr>';
+        '<td>'+fmtViz(b.amount||b.stake||0)+'</td><td>'+esc(b.timestamp?tsToLocal(assetTime(b.timestamp)):'')+'</td></tr>';
     }).join('');
     box.innerHTML='<table class="tbl"><tr><th>'+esc(t('md.bet_who'))+'</th><th>'+esc(t('act.col_outcome'))+'</th><th>'+esc(t('act.col_amount'))+'</th><th>'+esc(t('bal.col_time'))+'</th></tr>'+rows+'</table>';
   }catch(e){ box.innerHTML='<div class="mut">'+esc(t('md.no_bets'))+'</div>'; }
@@ -1192,7 +1212,7 @@ async function loadMarketLazyAlloc(id){
     var a=await api('getMarketLazyAllocation', id);
     var amt=a&&(a.allocated!=null?a.allocated:(a.amount!=null?a.amount:a.allocation));
     if(amt==null||Number(amt)<=0){ box.innerHTML=''; return; }
-    box.innerHTML=kv(t('md.lazy_alloc'), fmtShares(amt)+' VIZ');
+    box.innerHTML=kv(t('md.lazy_alloc'), fmtViz(amt));
   }catch(e){ box.innerHTML=''; }
 }
 /* Reload the viewed market a few seconds after its next expiration boundary, so status
@@ -1269,7 +1289,7 @@ function volumeSvg(series){
   var maxT=0; pts.forEach(function(p){ if(p.total>maxT) maxT=p.total; });
   var vh=44, vplotH=vh-6, vy=function(v){ return 4+(1-(maxT>0?v/maxT:0))*vplotH; };
   var va=[]; for(var vj=0;vj<pts.length;vj++){ var vx=xOf(pts[vj].t); if(vj>0) va.push([vx,vy(pts[vj-1].total)]); va.push([vx,vy(pts[vj].total)]); } va.push([xR,vy(last.total)]);
-  return '<div class="hint" style="margin-top:6px">'+esc(t('md.chart_volume'))+': <b>'+fmtShares(last.total)+' VIZ</b></div>'+
+  return '<div class="hint" style="margin-top:6px">'+esc(t('md.chart_volume'))+': <b>'+fmtViz(last.total)+'</b></div>'+
     '<svg viewBox="0 0 '+W+' '+vh+'" style="width:100%;height:auto;display:block"><polyline points="'+
     va.map(function(p){return p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' ')+'" fill="none" stroke="#4a90d9" stroke-width="1.5"/></svg>';
 }
@@ -1487,7 +1507,7 @@ async function loadMyLiquidity(id, status){
       var lid=l.id!=null?l.id:(l.liquidity_id!=null?l.liquidity_id:l.liquidity);
       var amt=l.amount!=null?l.amount:(l.balance!=null?l.balance:l.shares);
       // amt is already raw (fmtShares divides by 1000); pass it through as raw — do NOT ×1000 again
-      return '<tr><td>#'+esc(lid)+'</td><td>'+fmtShares(amt)+' VIZ</td>'+
+      return '<tr><td>#'+esc(lid)+'</td><td>'+fmtViz(amt)+'</td>'+
         '<td><button class="btn small" data-wl="'+esc(lid)+'" data-amt="'+esc(Number(amt)||0)+'">'+esc(t('lq.withdraw'))+'</button></td></tr>';
     }).join('');
     box.innerHTML='<table class="tbl"><tr><th>'+esc(t('lq.col_id'))+'</th><th>'+esc(t('lq.col_amount'))+'</th><th></th></tr>'+rows+'</table>';
@@ -1502,7 +1522,7 @@ function withdrawLiquidity(marketId, liquidityId, haveRaw){
     '<div class="box warn">'+esc(t('lq.risk_notice'))+'</div>',
     '<label class="lab">'+esc(t('common.amount_viz'))+'</label>',
     '<input id="wl-amt" type="number" step="0.001" min="0.001" value="'+(haveRaw/1000).toFixed(3)+'">',
-    '<div class="hint">'+esc(t('pool.you_have',{S:fmtShares(haveRaw)+' VIZ'}))+'</div>'
+    '<div class="hint">'+esc(t('pool.you_have',{S:fmtViz(haveRaw)}))+'</div>'
   ),[{label:t('common.cancel'),cls:'ghost',act:closeModal},{label:t('lq.withdraw'),cls:'',act:function(){
     var amt=el('wl-amt').value; if(!(assetNum(amt)>0)){ toast('warn',t('common.enter_amount')); return; }
     closeModal();
@@ -1561,7 +1581,7 @@ async function loadMyLeverage(id, ocs){
     var rows=mine.map(function(p){
       var pid=p.id!=null?p.id:p.position_id;
       var oc=ocs[p.outcome_index]!=null?ocs[p.outcome_index]:('#'+p.outcome_index);
-      return '<tr><td>#'+esc(pid)+'</td><td>'+esc(oc)+'</td><td>'+fmtShares(p.collateral||0)+'</td><td>'+fmtShares(p.loan||0)+'</td>'+
+      return '<tr><td>#'+esc(pid)+'</td><td>'+esc(oc)+'</td><td>'+fmtViz(p.collateral||0)+'</td><td>'+fmtViz(p.loan||0)+'</td>'+
         '<td><button class="btn small" data-lc="'+esc(pid)+'">'+esc(t('lev.close'))+'</button> '+
         '<button class="btn small ghost" data-lcv="'+esc(pid)+'">'+esc(t('lev.convert'))+'</button></td></tr>';
     }).join('');
@@ -1583,7 +1603,7 @@ function leverageClose(marketId, positionId, reload){
       function(){setTimeout(after,1300);});
   }}]);
   api('getLeverageClosePreview', Number(positionId)).then(function(p){ var b=el('lc-preview'); if(!b)return;
-    b.innerHTML=esc(t('lev.close_preview',{V:fmtShares(p&&(p.return_value!=null?p.return_value:p.bettor_received)||0)}));
+    b.innerHTML=esc(t('lev.close_preview',{V:fmtViz(p&&(p.return_value!=null?p.return_value:p.bettor_received)||0)}));
   }).catch(function(){ var b=el('lc-preview'); if(b) b.innerHTML=esc(t('lev.preview_na')); });
 }
 function leverageConvert(marketId, positionId, reload){
@@ -1625,7 +1645,7 @@ async function screenLeverage(){
       var oc=ocs[p.outcome_index]!=null?ocs[p.outcome_index]:('#'+p.outcome_index);
       var pid=p.id!=null?p.id:p.position_id;
       return '<tr><td><a data-nav="#/market/'+mid+'">#'+mid+'</a></td><td>'+esc(oc)+'</td>'+
-        '<td>'+fmtShares(p.collateral||0)+'</td><td>'+fmtShares(p.loan||0)+'</td>'+
+        '<td>'+fmtViz(p.collateral||0)+'</td><td>'+fmtViz(p.loan||0)+'</td>'+
         '<td><button class="btn small" data-lc="'+esc(pid)+'" data-m="'+mid+'">'+esc(t('lev.close'))+'</button> '+
         '<button class="btn small ghost" data-lcv="'+esc(pid)+'" data-m="'+mid+'">'+esc(t('lev.convert'))+'</button></td></tr>';
     }).join('');
@@ -1888,7 +1908,7 @@ async function screenBalance(){
     var energy=acc.energy;
     var html='<div class="card">'+
       kv(t('bal.account'),'@'+SESSION.account)+
-      kv(t('bal.liquid'), esc(acc.balance))+
+      kv(t('bal.liquid'), fmtViz(acc.balance))+
       (acc.vesting_shares?kv(t('bal.shares'), esc(acc.vesting_shares)):'')+
       (energy!=null?kv(t('bal.energy'), (energy/100).toFixed(2)+'%'):'')+
     '</div>';
@@ -1978,11 +1998,11 @@ async function screenPool(){
     '<ul class="terms-list">'+['how_1','how_2','how_3','how_4','how_5'].map(function(k){return '<li>'+t('pool.'+k)+'</li>';}).join('')+'</ul></div>';
   // pool state
   html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('pool.state_title'))+'</div>'+
-    kv(t('pool.total_value'), fmtShares(totalValue)+' VIZ')+
-    kv(t('pool.free'), fmtShares(free)+' VIZ')+
-    kv(t('pool.allocated'), fmtShares(allocated)+' VIZ')+
-    (leverageUsed>0?kv(t('pool.leverage_used'), fmtShares(leverageUsed)+' VIZ'):'')+
-    kv(t('pool.earned'), fmtShares(earned)+' VIZ')+
+    kv(t('pool.total_value'), fmtViz(totalValue))+
+    kv(t('pool.free'), fmtViz(free))+
+    kv(t('pool.allocated'), fmtViz(allocated))+
+    (leverageUsed>0?kv(t('pool.leverage_used'), fmtViz(leverageUsed)):'')+
+    kv(t('pool.earned'), fmtViz(earned))+
     kv(t('pool.total_shares'), fmtShares(totalShares))+
     kv(t('pool.lock_period'), Math.round(lockSec/86400)+' d')+
     (pool?rawBlock(pool):'')+'</div>';
@@ -2007,16 +2027,16 @@ async function screenPool(){
     var emergencyOut=value-penalty;
 
     html+=kv(t('pool.your_shares'), fmtShares(uShares))+
-      kv(t('pool.your_principal'), fmtShares(principal)+' VIZ')+
-      kv(t('pool.accrued'), fmtShares(accrued)+' VIZ')+
-      kv(t('pool.your_value'), fmtShares(value)+' VIZ')+
+      kv(t('pool.your_principal'), fmtViz(principal))+
+      kv(t('pool.accrued'), fmtViz(accrued))+
+      kv(t('pool.your_value'), fmtViz(value))+
       '<div class="kv"><b>'+esc(t('pool.status'))+'</b><span class="'+(locked?'neg':'pos')+'">'+
         esc(locked?t('pool.status_locked',{T:tsToLocal(unlockTime)}):t('pool.status_unlocked'))+'</span></div>'+
       rawBlock(user);
 
     html+='<div class="section-title">'+esc(t('pool.calc_title'))+'</div>';
-    html+='<div class="box info">'+t('pool.calc_now',{V:fmtShares(availableNow)})+'<br>'+t('pool.calc_total',{V:fmtShares(value)});
-    if(locked) html+='<br>'+t('pool.calc_emergency',{V:fmtShares(emergencyOut),P:fmtShares(penalty)});
+    html+='<div class="box info">'+t('pool.calc_now',{V:fmtViz(availableNow)})+'<br>'+t('pool.calc_total',{V:fmtViz(value)});
+    if(locked) html+='<br>'+t('pool.calc_emergency',{V:fmtViz(emergencyOut),P:fmtViz(penalty)});
     html+='</div><div class="hint">'+esc(t('pool.calc_note'))+'</div>';
   }
   html+='</div>';
@@ -2230,14 +2250,22 @@ async function screenProfile(){
   if(el('or-ins')) el('or-ins').onclick=function(){oracleInsuranceModal();};
   if(el('or-pending')) el('or-pending').onclick=function(){go('#/oracle');};
   $all('[data-reveal]').forEach(function(b){b.onclick=function(){revealPending(Number(b.getAttribute('data-reveal')));};});
-  // positions
-  api('getAccountPositions',SESSION.account,0,100).then(function(list){
+  // positions (preview): show market titles, readable outcome and Ƶ amounts. Titles fetched + cached.
+  api('getAccountPositions',SESSION.account,0,100).then(async function(list){
     list=(list||[]).map(normPos); var box=el('pf-pos'); if(!box)return;
     if(!list.length){box.innerHTML='<div class="mut">'+esc(t('common.none'))+'</div>';return;}
-    box.innerHTML='<table class="tbl"><tr><th>'+esc(t('pf.col_market'))+'</th><th>'+esc(t('pf.col_outcome'))+'</th><th>'+esc(t('pf.col_amount'))+'</th></tr>'+list.map(function(p){
-      var mid=p.market_id!=null?p.market_id:p.market;
-      return '<tr><td><a data-nav="#/market/'+mid+'">#'+mid+'</a></td><td>'+esc(p.outcome_name||(p.outcome_index!=null?p.outcome_index:p.side))+'</td><td>'+fmtShares(p.amount||p.stake)+'</td></tr>';
-    }).join('')+'</table>';
+    var PREVIEW=20, shown=list.slice(0,PREVIEW);
+    var ids=shown.map(function(p){ return Number(p.market_id!=null?p.market_id:p.market); });
+    var mkts={}; try{ mkts=await marketsByIds(ids); }catch(e){}
+    if(!el('pf-pos'))return;                                   // screen changed while awaiting
+    var rows=shown.map(function(p){
+      var mid=Number(p.market_id!=null?p.market_id:p.market), m=mkts[mid];
+      var title=m?marketTitle(m):('#'+mid);
+      return '<tr><td><a data-nav="#/market/'+mid+'">'+esc(title)+'</a> <span class="mut">#'+mid+'</span></td>'+
+        '<td>'+esc(betOutcomeLabel(p,m))+'</td><td>'+fmtViz(p.amount||p.stake)+'</td></tr>';
+    }).join('');
+    var more=list.length>PREVIEW?'<div class="hint">'+esc(t('pf.more_positions',{N:list.length-PREVIEW}))+'</div>':'';
+    box.innerHTML='<table class="tbl"><tr><th>'+esc(t('pf.col_market'))+'</th><th>'+esc(t('pf.col_outcome'))+'</th><th>'+esc(t('pf.col_amount'))+'</th></tr>'+rows+'</table>'+more;
   }).catch(function(e){var box=el('pf-pos');if(box)box.innerHTML='<div class="box err">'+esc(errText(e))+'</div>';});
 }
 function revealPending(idx){
