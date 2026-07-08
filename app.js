@@ -620,6 +620,7 @@ function route(){
     if(scr==='profile') return screenProfile();
     if(scr==='oracle')  return screenOracle();
     if(scr==='oracles') return parts[1]?screenOracleProfile(decodeURIComponent(parts[1])):screenOracles();
+    if(scr==='account') return screenAccount(decodeURIComponent(parts[1]||''));
     if(scr==='node')    return screenNode();
     if(scr==='login')   return screenLogin();
     if(scr==='unlock')  return screenUnlock();
@@ -1205,9 +1206,16 @@ async function loadMarketBets(id, ocs, isMulti){
     bets=Array.isArray(bets)?bets:((bets&&bets.bets)||[]);
     if(!bets.length){ box.innerHTML='<div class="mut">'+esc(t('md.no_bets'))+'</div>'; return; }
     var rows=bets.map(function(b){
-      var oc=(b.outcome_index!=null?ocs[b.outcome_index]:(b.side!=null?(b.side===0?ocs[0]:ocs[1]):null));
-      return '<tr><td>'+esc(b.bettor||b.account||'')+'</td><td>'+esc(oc!=null?oc:(b.outcome_index!=null?('#'+b.outcome_index):'—'))+'</td>'+
-        '<td>'+fmtViz(b.amount||b.stake||0)+'</td><td>'+esc(b.timestamp?tsToLocal(assetTime(b.timestamp)):'')+'</td></tr>';
+      var who=b.bettor||b.account||'';
+      // binary bets carry side (0=A/Yes, 1=B/No) with outcome_index=-1; multi carry outcome_index (>=0).
+      // Map to the market's real label instead of showing a raw "#-1".
+      var idx=(b.outcome_index!=null && b.outcome_index>=0)?b.outcome_index:(b.side!=null?b.side:-1);
+      var oc=(idx>=0 && ocs[idx]!=null)?ocs[idx]:(idx>=0?('#'+idx):'—');
+      // account → its public card (bets, results, balance) — we're on a public chain
+      var whoCell=who?'<a data-nav="#/account/'+encodeURIComponent(who)+'">'+esc(who)+'</a>':'';
+      var ts=b.created_time||b.timestamp||b.time;
+      return '<tr><td>'+whoCell+'</td><td>'+esc(oc)+'</td>'+
+        '<td>'+fmtViz(b.amount||b.stake||0)+'</td><td>'+esc(ts?tsToLocal(assetTime(ts)):'')+'</td></tr>';
     }).join('');
     box.innerHTML='<table class="tbl"><tr><th>'+esc(t('md.bet_who'))+'</th><th>'+esc(t('act.col_outcome'))+'</th><th>'+esc(t('act.col_amount'))+'</th><th>'+esc(t('bal.col_time'))+'</th></tr>'+rows+'</table>';
   }catch(e){ box.innerHTML='<div class="mut">'+esc(t('md.no_bets'))+'</div>'; }
@@ -2506,6 +2514,50 @@ async function screenOracleProfile(owner){
       el('orp-mk').innerHTML=mkHtml;
     }catch(e2){ el('orp-mk').innerHTML='<div class="box err">'+esc(t('orp.markets_error'))+'</div>'; }
   }catch(e){ el('orp-body').innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
+}
+
+/* Public account card: balance + this account's bets/results across markets.
+   Reached from any bettor name in a market's "recent bets" — public chain, anyone can inspect. */
+async function screenAccount(name){
+  name=String(name||'').trim().toLowerCase();
+  if(!name){ go('#/markets'); return; }
+  setContent('<div class="row"><a class="mut" data-nav="#/markets">'+esc(t('common.back_markets'))+'</a></div>'+
+    '<div class="title" style="margin-top:6px">@'+esc(name)+'</div>'+
+    '<div class="hint mb">'+esc(t('acc.public_note'))+'</div>'+
+    '<div id="acc-bal"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>'+
+    '<div class="section-title">'+esc(t('acc.bets'))+'</div>'+
+    '<div id="acc-bets"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
+  // balance
+  try{
+    var acc=(await api('getAccounts',[name]))[0];
+    if(!acc){ el('acc-bal').innerHTML='<div class="box err">'+esc(t('acc.not_found'))+'</div>'; el('acc-bets').innerHTML=''; return; }
+    var energy=acc.energy;
+    el('acc-bal').innerHTML='<div class="card">'+
+      kv(t('bal.liquid'), fmtViz(acc.balance))+
+      (acc.vesting_shares?kv(t('bal.shares'), acc.vesting_shares):'')+
+      (energy!=null?kv(t('bal.energy'), (energy/100).toFixed(2)+'%'):'')+
+      (acc.created?kv(t('acc.created'), tsToLocal(assetTime(acc.created))):'')+
+    '</div>';
+  }catch(e){ el('acc-bal').innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
+  // bets / positions across markets
+  try{
+    var all=((await api('getAccountPositions', name, 0, 100))||[]).map(normPos);
+    var box=el('acc-bets'); if(!box)return;
+    if(!all.length){ box.innerHTML='<div class="empty">'+esc(t('acc.no_bets'))+'</div>'; return; }
+    var ids=all.map(function(p){ return Number(p.market_id!=null?p.market_id:p.market); });
+    var mkts={}; try{ mkts=await marketsByIds(ids); }catch(e){}
+    if(!el('acc-bets'))return;                                   // screen changed while awaiting
+    var rows=all.map(function(p){
+      var mid=Number(p.market_id!=null?p.market_id:p.market), m=mkts[mid];
+      var title=m?marketTitle(m):('#'+mid);
+      var st=(p.market_status!=null?p.market_status:(m?marketStatus(m):1));
+      var res=esc(statusLabel(st));
+      if(assetNum(p.expected_payout)>0) res+=' <span class="ok">'+fmtViz(p.expected_payout)+'</span>';
+      return '<tr><td><a data-nav="#/market/'+mid+'">'+esc(title)+'</a> <span class="mut">#'+mid+'</span></td>'+
+        '<td>'+esc(betOutcomeLabel(p,m))+'</td><td>'+fmtViz(p.amount||p.stake)+'</td><td>'+res+'</td></tr>';
+    }).join('');
+    box.innerHTML='<table class="tbl"><tr><th>'+esc(t('pf.col_market'))+'</th><th>'+esc(t('pf.col_outcome'))+'</th><th>'+esc(t('pf.col_amount'))+'</th><th>'+esc(t('act.col_status'))+'</th></tr>'+rows+'</table>';
+  }catch(e){ var b2=el('acc-bets'); if(b2)b2.innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
 }
 
 /* ------------------------------------------------------------------- modal */
