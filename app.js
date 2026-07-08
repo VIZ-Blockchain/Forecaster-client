@@ -700,6 +700,7 @@ function screenLogin(){
       '</div>',
       '<label class="lab">'+esc(t('login.account'))+'</label>',
       '<input id="lg-acc" type="text" autocomplete="off" spellcheck="false" placeholder="'+esc(t('login.account_ph'))+'">',
+      '<div id="lg-acc-hint" class="hint">'+esc(t('login.account_autohint'))+'</div>',
       '<div id="lg-wif-fields">',
         '<label class="lab">'+esc(t('login.active'))+'</label>',
         '<input id="lg-active" type="password" autocomplete="off" class="mono" placeholder="5J… / 5K…">',
@@ -718,15 +719,34 @@ function screenLogin(){
   el('m-wif').onclick=function(){mode='wif';el('m-wif').classList.add('active');el('m-pass').classList.remove('active');el('lg-wif-fields').classList.remove('hide');el('lg-pass-fields').classList.add('hide');};
   el('lg-go').onclick=async function(){
     var acc=el('lg-acc').value.trim().toLowerCase();
-    if(!acc){toast('warn',t('login.enter_account'));return;}
     var btn=el('lg-go'); btn.disabled=true; btn.textContent=t('login.verifying');
     try{
+      // WIF mode with no login typed → resolve the account from the active key (the faucet hands out
+      // keys and users often don't note the generated name). get_key_references maps pubkey → account.
+      if(mode!=='pass' && !acc){ acc=await resolveAccountFromKey(el('lg-active').value.trim()); if(acc) el('lg-acc').value=acc; }
+      if(!acc){ btn.disabled=false; btn.textContent=t('login.verify'); toast('warn',t('login.enter_account_or_key')); return; }
       var sess = mode==='pass'
         ? await buildSessionFromPassword(acc, el('lg-pass').value)
         : await buildSessionFromWif(acc, el('lg-active').value.trim(), el('lg-regular').value.trim());
       askNewPin(sess);
     }catch(e){ toast('err',errText(e),7000); btn.disabled=false; btn.textContent=t('login.verify'); }
   };
+}
+
+/* Resolve a VIZ account name from an active private key via the account_by_key index
+   (get_key_references: pubkey → accounts). One match → use it; several → let the user pick. */
+async function resolveAccountFromKey(activeWif){
+  if(!activeWif || !viz.auth.isWif(activeWif)) throw new Error(t('login.enter_account_or_key'));
+  var pub; try{ pub=viz.auth.wifToPublic(activeWif); }catch(e){ throw new Error(t('err.active_not_wif')); }
+  var refs=(await api('getKeyReferences',[pub]))||[];
+  var names=(refs&&refs[0])||[];
+  if(!names.length) throw new Error(t('login.key_no_account'));
+  if(names.length===1) return names[0];
+  return await new Promise(function(res){
+    openModal(t('login.pick_account'),
+      names.map(function(n){return '<button class="btn block mt" data-pick-acc="'+esc(n)+'">@'+esc(n)+'</button>';}).join(''), []);
+    $all('[data-pick-acc]').forEach(function(b){ b.onclick=function(){ var n=b.getAttribute('data-pick-acc'); closeModal(); res(n); }; });
+  });
 }
 function askNewPin(sess){
   openModal(t('pin.set_title'), h(
