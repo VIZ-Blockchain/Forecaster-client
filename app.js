@@ -375,6 +375,11 @@ function wifFor(role){ // active default; regular used for dispute votes
 function setReturn(hash){ try{ if(hash && hash.indexOf('#/unlock')!==0 && hash.indexOf('#/login')!==0) sessionStorage.setItem('lc_return', hash); }catch(e){} }
 function takeReturn(){ var h=null; try{ h=sessionStorage.getItem('lc_return'); sessionStorage.removeItem('lc_return'); }catch(e){} return h||'#/markets'; }
 function requireUnlock(){ if(!isUnlocked()){ toast('warn',t('toast.unlock_first')); setReturn(location.hash); go(hasVault()?'#/unlock':'#/login'); return false;} return true; }
+/* inline unlock/login prompt with a clickable link — remembers current page as the return target */
+function unlockLink(msgKey){
+  var lab = hasVault()? t('common.unlock_wallet') : t('common.sign_in');
+  return esc(t(msgKey))+' <a href="#" data-unlock="1">'+esc(lab)+' →</a>';
+}
 
 /* generic broadcast-with-feedback */
 async function tx(label, promiseFactory, after){
@@ -570,6 +575,8 @@ function setContent(html){ el('content').innerHTML=html; var sc=el('scroll'); if
 
 /* delegated navigation */
 document.addEventListener('click',function(e){
+  var u=e.target.closest('[data-unlock]');
+  if(u){ e.preventDefault(); setReturn(location.hash); go(hasVault()?'#/unlock':'#/login'); return; }
   var n=e.target.closest('[data-nav]');
   if(n){ e.preventDefault(); go(n.getAttribute('data-nav')); }
 });
@@ -1122,7 +1129,7 @@ async function screenMarket(id){
   if(status===1){
     html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('md.place_bet'))+'</div>';
     html+='<div class="box warn">'+esc(t('risk.not_fixed_odds'))+'</div>';
-    if(!isUnlocked()) html+='<div class="box info">'+esc(t('md.unlock_to_bet'))+'</div>';
+    if(!isUnlocked()) html+='<div class="box info">'+unlockLink('md.unlock_to_bet')+'</div>';
     if(risky) html+='<div class="box err">'+esc(t('bet.risk_warning'))+'</div>';
     if(instantDisabled) html+='<div class="box warn">'+esc(t('md.instant_disabled'))+'</div>';
     html+='<div class="field"><label class="lab">'+esc(t('md.outcome'))+'</label><select id="bt-oc">'+
@@ -1147,7 +1154,7 @@ async function screenMarket(id){
       (isMulti?'<div class="hint">'+esc(t('md.multi_lmsr'))+'</div>':'');
     }
     html+='<div class="section-title">'+esc(t('lq.mine_title'))+'</div><div id="lq-mine">'+
-      (isUnlocked()?'<span class="spin"></span> '+esc(t('common.loading')):'<div class="mut">'+esc(t('md.unlock_view'))+'</div>')+'</div>';
+      (isUnlocked()?'<span class="spin"></span> '+esc(t('common.loading')):'<div class="mut">'+unlockLink('md.unlock_view')+'</div>')+'</div>';
     html+='</div>';
   }
 
@@ -1159,7 +1166,7 @@ async function screenMarket(id){
 
   // My positions on this market
   html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('md.my_positions'))+'</div><div id="mine-box">'+
-        (isUnlocked()?'<span class="spin"></span> '+esc(t('common.loading')):'<div class="mut">'+esc(t('md.unlock_view'))+'</div>')+'</div></div>';
+        (isUnlocked()?'<span class="spin"></span> '+esc(t('common.loading')):'<div class="mut">'+unlockLink('md.unlock_view')+'</div>')+'</div></div>';
 
   // Oracle actions
   if(isOracle){
@@ -1549,10 +1556,10 @@ async function loadLeverage(id, ocs, isMulti){
       '<button class="btn ok" id="lv-open">'+esc(t('lev.open_btn'))+'</button></div>'+
       '<div id="lv-quote-out" class="hint"></div>';
   } else {
-    html+='<div class="box info">'+esc(t('lev.unlock'))+'</div>';
+    html+='<div class="box info">'+unlockLink('lev.unlock')+'</div>';
   }
   html+='<div class="section-title">'+esc(t('lev.mine_title'))+'</div><div id="lev-mine">'+
-    (isUnlocked()?'<span class="spin"></span>':'<div class="mut">'+esc(t('md.unlock_view'))+'</div>')+'</div>';
+    (isUnlocked()?'<span class="spin"></span>':'<div class="mut">'+unlockLink('md.unlock_view')+'</div>')+'</div>';
   box.innerHTML=html;
 
   if(el('lv-quote')) el('lv-quote').onclick=async function(){
@@ -2010,7 +2017,7 @@ async function screenPool(){
   // your position + withdrawal estimate
   html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('pool.your_title'))+'</div>';
   if(!isUnlocked()){
-    html+='<div class="box info">'+esc(t('pool.unlock_to_act'))+'</div>';
+    html+='<div class="box info">'+unlockLink('pool.unlock_to_act')+'</div>';
   } else if(!user || !(num(user.shares)>0)){
     html+='<div class="mut">'+esc(t('pool.no_position'))+'</div>';
   } else {
@@ -2127,7 +2134,7 @@ async function renderActTab(){
   box.innerHTML='<div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div>';
   try{
     if(actTab==='alldisputes') return renderAllDisputes(box);
-    if(!isUnlocked()){ box.innerHTML='<div class="box info">'+esc(t('act.unlock'))+'</div>'; return; }
+    if(!isUnlocked()){ box.innerHTML='<div class="box info">'+unlockLink('act.unlock')+'</div>'; return; }
     await ensureMy();
     if(actTab==='history')    return renderActHistory(box);
     if(actTab==='active')     return renderActActive(box);
@@ -2189,7 +2196,7 @@ async function screenProfile(){
   if(!isUnlocked()){
     setContent(h('<div class="title">'+esc(t('tab.profile'))+'</div>',
       '<div class="card center"><div class="subtitle">'+esc(t('pf.not_signed'))+'</div>',
-      hasVault()?'<button class="btn block" data-nav="#/unlock">'+esc(t('common.unlock_wallet'))+'</button>':'<button class="btn block" data-nav="#/login">'+esc(t('common.sign_in'))+'</button>',
+      '<button class="btn block" data-unlock="1">'+esc(hasVault()?t('common.unlock_wallet'):t('common.sign_in'))+'</button>',
       '</div>',
       '<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('common.node'))+'</div><div class="kv"><b>'+esc(t('common.api'))+'</b><span class="mono">'+esc(loadNode().ws)+'</span></div><button class="btn ghost small mt" data-nav="#/node">'+esc(t('common.change_node'))+'</button></div>'
     ));
