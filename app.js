@@ -390,9 +390,42 @@ function parseMeta(m){
   if(typeof s==='object')return s;
   try{return JSON.parse(s);}catch(e){return {};}
 }
-/* metadata image is untrusted (any creator sets it) — only allow http(s) URLs (e.g. Polymarket CDN via the parser) */
-function metaImage(meta){ var u=meta&&(meta.image||meta.icon); return (typeof u==='string' && /^https?:\/\//i.test(u))?u:''; }
+/* -------- image privacy: metadata images are UNTRUSTED (any creator sets meta.image).
+ * A hostile creator could point it at a tracking pixel to fingerprint viewers. So by default we
+ * only render images whose host is on a user-managed trust whitelist. Modes: whitelist|all|off. -------- */
+var LS_IMG = 'lc_img_prefs';   // {mode:'whitelist'|'all'|'off', hosts:[...]}
+var DEFAULT_IMG_HOSTS = ['polymarket-upload.s3.us-east-2.amazonaws.com']; // Polymarket CDN (via the parser)
+function imgPrefs(){ try{ var o=JSON.parse(localStorage.getItem(LS_IMG)); if(o&&o.mode) return {mode:o.mode, hosts:Array.isArray(o.hosts)?o.hosts.map(String):DEFAULT_IMG_HOSTS.slice()}; }catch(e){} return {mode:'whitelist', hosts:DEFAULT_IMG_HOSTS.slice()}; }
+function saveImgPrefs(p){ try{ localStorage.setItem(LS_IMG, JSON.stringify({mode:p.mode, hosts:(p.hosts||[]).map(String)})); }catch(e){} }
+function imgHostAllowed(url){ var p=imgPrefs(); if(p.mode==='off') return false; if(p.mode==='all') return true;
+  try{ var host=new URL(url).hostname.toLowerCase(); return p.hosts.some(function(x){ x=String(x).trim().toLowerCase(); return x && (host===x || host.endsWith('.'+x)); }); }catch(e){ return false; } }
+/* metadata image is untrusted — allow only http(s) URLs whose host passes the trust policy above */
+function metaImage(meta){ var u=meta&&(meta.image||meta.icon); if(typeof u!=='string' || !/^https?:\/\//i.test(u)) return ''; return imgHostAllowed(u)?u:''; }
 function thumb(url,style){ return url?'<img src="'+esc(url)+'" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display=&#39;none&#39;" style="'+style+'">':''; }
+
+/* -------- local category icons (offline SVG fallback when a market has no trusted image) -------- */
+function categoryIcon(cat){
+  var c=String(cat||'').toLowerCase(), p='', vb='0 0 24 24';
+  function m(re){ return re.test(c); }
+  if(m(/politic|election|govern|senat|president|congress/))      p='<path d="M3 21h18M5 21V9m14 12V9M4 9l8-5 8 5M9 21v-6h6v6"/>';           // landmark
+  else if(m(/sport|nfl|nba|soccer|football|tennis|basket|game\b/))p='<circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16M6 6l12 12M18 6L6 18"/>'; // ball
+  else if(m(/crypto|bitcoin|ethereum|token|coin|defi|blockchain/))p='<circle cx="12" cy="12" r="8"/><path d="M10 8h4a2 2 0 010 4h-4m0 0h4a2 2 0 010 4h-4m0-8v10M11 6v2m0 8v2"/>'; // coin ₿
+  else if(m(/econom|financ|business|market|stock|inflation|gdp/)) p='<path d="M4 20V10M10 20V4M16 20v-6M22 20H2M4 14l6-6 4 3 6-7"/>';         // chart up
+  else if(m(/tech|ai\b|software|computer|robot|internet/))        p='<rect x="7" y="7" width="10" height="10" rx="1"/><path d="M10 2v3M14 2v3M10 19v3M14 19v3M2 10h3M2 14h3M19 10h3M19 14h3"/>'; // chip
+  else if(m(/scien|space|physics|nasa|research|climate|weather/)) p='<path d="M9 3h6M10 3v5l-5 9a2 2 0 002 3h10a2 2 0 002-3l-5-9V3M8 15h8"/>';  // flask
+  else if(m(/entertain|movie|film|music|celebrit|culture|tv|show/))p='<path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 22l-5.2-2.9 1-5.8L3.5 9.2l5.9-.9z"/>'; // star
+  else if(m(/health|medic|covid|disease|vaccin/))                 p='<path d="M12 21s-7-4.5-9-9a5 5 0 019-3 5 5 0 019 3c-2 4.5-9 9-9 9z"/>';     // heart
+  else if(m(/world|global|geopolit|internation|war|ukrain/))      p='<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>'; // globe
+  else if(m(/weather|storm|hurricane|temperature/))               p='<path d="M7 18a4 4 0 010-8 5 5 0 019.6-1.5A3.5 3.5 0 1118 18z"/>';         // cloud
+  else                                                            p='<path d="M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0l-7-7A2 2 0 013 12V4a1 1 0 011-1h8a2 2 0 011.4.6l7.2 7.2a2 2 0 010 2.6z"/><circle cx="7.5" cy="7.5" r="1.2"/>'; // tag (default)
+  return '<svg width="42" height="42" viewBox="'+vb+'" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+p+'</svg>';
+}
+/* square icon placeholder box (1:1) shown when there is no trusted image */
+function catIconBox(cat, rad){ return '<div style="width:100%;aspect-ratio:1/1;border-radius:'+(rad||8)+'px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;background:var(--card2,rgba(255,255,255,.04));color:var(--mut,#8a93a6)">'+categoryIcon(cat)+'</div>'; }
+/* pick the visual for a market: trusted image (1:1 contain) else local category icon */
+function marketThumb(meta, m, rad){ var img=metaImage(meta)||metaImage(m); rad=rad||8;
+  return img ? thumb(img,'width:100%;aspect-ratio:1/1;object-fit:contain;border-radius:'+rad+'px;margin-bottom:8px;display:block;background:var(--card2,rgba(255,255,255,.04))')
+             : catIconBox((meta&&meta.category)||(m&&m.category), rad); }
 function marketId(m){ return m.id!=null?m.id:(m.market_id!=null?m.market_id:m.market); }
 // title/image can live as flat fields on the node meta object (get_market_full.meta,
 // list_markets_by_category), or inside a metadata JSON blob — check both.
@@ -519,6 +552,7 @@ function route(){
 function screenNode(){
   var n=loadNode();
   var jur=getJur();
+  var ip=imgPrefs();
   var jurOptions='<option value="">'+esc(t('set.jur_none'))+'</option>'+
     COUNTRIES.map(function(c){return '<option value="'+c[0]+'"'+(c[0]===jur?' selected':'')+'>'+c[0]+' — '+esc(c[1])+'</option>';}).join('');
   var inList=jur && COUNTRIES.some(function(c){return c[0]===jur;});
@@ -554,6 +588,15 @@ function screenNode(){
       '<select id="s-autolock">'+[300,600,1800,3600].map(function(v){return '<option value="'+v+'"'+(autolockSec()===v?' selected':'')+'>'+esc(fmtDuration(v))+'</option>';}).join('')+'</select>',
       '<div class="hint">'+esc(t('set.autolock_hint'))+'</div>',
     '</div>',
+    /* --- images & privacy --- */
+    '<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('set.img_title'))+'</div>',
+      '<div class="hint mb">'+esc(t('set.img_desc'))+'</div>',
+      '<label class="lab">'+esc(t('set.img_mode'))+'</label>',
+      '<select id="img-mode">'+['whitelist','all','off'].map(function(v){return '<option value="'+v+'"'+(ip.mode===v?' selected':'')+'>'+esc(t('set.img_'+v))+'</option>';}).join('')+'</select>',
+      '<label class="lab" style="margin-top:8px">'+esc(t('set.img_hosts'))+'</label>',
+      '<div id="img-hosts">'+(ip.hosts.length?ip.hosts.map(function(hh){return '<div class="kv"><span class="mono">'+esc(hh)+'</span><button class="btn ghost sm" data-imgdel="'+esc(hh)+'">'+esc(t('set.img_remove'))+'</button></div>';}).join(''):'<div class="hint">'+esc(t('set.img_hosts_empty'))+'</div>')+'</div>',
+      '<div class="row mt"><input id="img-host-in" type="text" placeholder="'+esc(t('set.img_host_ph'))+'" autocapitalize="off" autocorrect="off"><button class="btn" id="img-host-add">'+esc(t('set.img_add'))+'</button></div>',
+    '</div>',
     /* --- agreement --- */
     '<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('terms.section'))+'</div>',
       '<div class="kv"><b>'+esc(t('terms.title'))+'</b><span class="'+(termsAccepted()?'pos':'neg')+'">'+esc(termsAccepted()?t('terms.status_accepted'):t('terms.status_not'))+'</span></div>',
@@ -567,6 +610,14 @@ function screenNode(){
   };
   el('t-review').onclick=function(){ showTerms(false); };
   if(el('s-autolock')) el('s-autolock').onchange=function(){ localStorage.setItem(LS_AUTOLOCK, this.value); touchSession(); toast('ok',t('set.autolock_saved')); };
+  if(el('img-mode')) el('img-mode').onchange=function(){ var p=imgPrefs(); p.mode=this.value; saveImgPrefs(p); toast('ok',t('set.img_saved')); };
+  if(el('img-host-add')) el('img-host-add').onclick=function(){
+    var v=(el('img-host-in').value||'').trim().toLowerCase().replace(/^https?:\/\//,'').replace(/\/.*$/,'');
+    if(!v) return; var p=imgPrefs(); if(p.hosts.indexOf(v)<0) p.hosts.push(v); saveImgPrefs(p); toast('ok',t('set.img_host_added')); screenNode();
+  };
+  Array.prototype.forEach.call(document.querySelectorAll('[data-imgdel]'), function(b){ b.onclick=function(){
+    var hh=this.getAttribute('data-imgdel'); var p=imgPrefs(); p.hosts=p.hosts.filter(function(x){return x!==hh;}); saveImgPrefs(p); toast('ok',t('set.img_host_removed')); screenNode();
+  }; });
   el('n-test').onclick=async function(){
     var cand={ws:el('n-ws').value.trim(),prefix:el('n-prefix').value.trim()||'VIZ',chain_id:el('n-chain').value.trim()};
     el('n-result').innerHTML='<span class="spin"></span> '+esc(t('node.connecting'));
@@ -886,10 +937,9 @@ function marketCard(m){
   var id=marketId(m), ocs=marketOutcomes(m), meta=parseMeta(m);
   var vol=m.volume!=null?m.volume:(m.total_volume!=null?m.total_volume:null);
   var risky=(m.risk_score!=null && m.risk_score<50)||m.under_collateralized;
-  var img=metaImage(meta)||metaImage(m);   // hybrid: image if present, else a denser card
   return h(
-    '<div class="card click'+(img?'':' card-dense')+'" data-nav="#/market/'+id+'">',
-      thumb(img,'width:100%;aspect-ratio:5/2;object-fit:cover;border-radius:8px;margin-bottom:8px;display:block'),
+    '<div class="card click" data-nav="#/market/'+id+'">',
+      marketThumb(meta, m, 8),   // trusted image (1:1 contain) or local category icon
       '<div class="card-q">'+esc(marketTitle(m))+'</div>',
       probBar(m),
       '<div class="card-meta">',
@@ -925,7 +975,7 @@ async function screenMarket(id){
   var html='';
   html+='<div class="row"><a class="mut" data-nav="#/markets">'+esc(t('common.back_markets'))+'</a></div>';
   html+='<div class="title" style="margin-top:6px">'+esc(meta.title||marketTitle(m))+'</div>';
-  html+=thumb(metaImage(meta),'width:100%;aspect-ratio:5/2;object-fit:cover;border-radius:10px;margin:6px 0;display:block');
+  html+=thumb(metaImage(meta),'width:100%;max-width:260px;aspect-ratio:1/1;object-fit:contain;border-radius:10px;margin:6px 0;display:block;background:var(--card2,rgba(255,255,255,.04))');
   html+='<div class="card-meta mb">'+statusBadge(m)+
         '<span>'+(isMulti?esc(t('md.onix_multi')):esc(t('md.onix_binary')))+'</span>'+
         (m.oracle?'<span><a data-nav="#/market/'+id+'">'+esc(t('md.oracle',{O:m.oracle}))+'</a></span>':'')+
