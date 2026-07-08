@@ -297,6 +297,13 @@ var EN = {
   'ors.title':'Oracles','ors.lead':'Reliability leaderboard — pick a trustworthy oracle for your market.',
   'ors.none':'No registered oracles yet.','ors.resolved':'{N} resolved','ors.disputes_lost':'{N} disputes lost',
   'ors.use':'Use in create','cr.browse_oracles':'Browse',
+  'orp.back':'← Oracles','orp.not_oracle':'This account is not a registered oracle.',
+  'orp.scoring':'Reputation','orp.reliability':'Reliability score','orp.accepted':'Markets accepted',
+  'orp.resolved':'Markets resolved','orp.no_contest':'No-contest','orp.missed':'Missed resolutions',
+  'orp.disputes':'Disputes','orp.won_s':'W','orp.lost_s':'L','orp.resp_missed':'Dispute responses missed',
+  'orp.vol_resolved':'Volume resolved','orp.insurance_slashed':'Insurance slashed','orp.avg_res_time':'Avg resolution time',
+  'orp.penalty':'Penalty stamps','orp.bans':'Bans received','orp.active_since':'Active since','orp.last_active':'Last active',
+  'orp.banned_until':'Banned until {T}','orp.rules':'Resolution rules','orp.recent':'Recent markets','orp.no_markets':'No markets yet.',
 
   /* boot */
   'boot.viz_missing':'viz-js-lib not found.',
@@ -573,6 +580,13 @@ var RU = {
   'ors.title':'Оракулы','ors.lead':'Рейтинг надёжности — выберите доверенного оракула для своего рынка.',
   'ors.none':'Зарегистрированных оракулов пока нет.','ors.resolved':'решено {N}','ors.disputes_lost':'проиграно диспутов: {N}',
   'ors.use':'Выбрать в создании','cr.browse_oracles':'Обзор',
+  'orp.back':'← Оракулы','orp.not_oracle':'Этот аккаунт не зарегистрирован как оракул.',
+  'orp.scoring':'Репутация','orp.reliability':'Оценка надёжности','orp.accepted':'Принято рынков',
+  'orp.resolved':'Разрешено рынков','orp.no_contest':'Без результата (no-contest)','orp.missed':'Пропущено разрешений',
+  'orp.disputes':'Диспуты','orp.won_s':'поб','orp.lost_s':'пор','orp.resp_missed':'Пропущено ответов на диспуты',
+  'orp.vol_resolved':'Разрешённый объём','orp.insurance_slashed':'Списано страховки','orp.avg_res_time':'Ср. время разрешения',
+  'orp.penalty':'Штрафные метки','orp.bans':'Получено банов','orp.active_since':'Активен с','orp.last_active':'Посл. активность',
+  'orp.banned_until':'Забанен до {T}','orp.rules':'Правила разрешения','orp.recent':'Последние рынки','orp.no_markets':'Рынков пока нет.',
 
   /* boot */
   'boot.viz_missing':'viz-js-lib не найден.',

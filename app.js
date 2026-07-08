@@ -421,11 +421,16 @@ function categoryIcon(cat){
   return '<svg width="42" height="42" viewBox="'+vb+'" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+p+'</svg>';
 }
 /* square icon placeholder box (1:1) shown when there is no trusted image */
-function catIconBox(cat, rad){ return '<div style="width:100%;aspect-ratio:1/1;border-radius:'+(rad||8)+'px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;background:var(--card2,rgba(255,255,255,.04));color:var(--mut,#8a93a6)">'+categoryIcon(cat)+'</div>'; }
-/* pick the visual for a market: trusted image (1:1 contain) else local category icon */
+function catIconBox(cat, rad){ return '<div style="width:100%;height:120px;border-radius:'+(rad||8)+'px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;background:var(--card2,rgba(255,255,255,.04));color:var(--mut,#8a93a6)">'+categoryIcon(cat)+'</div>'; }
+/* pick the visual for a market: trusted image (contain, capped at 120px tall) else local category icon */
 function marketThumb(meta, m, rad){ var img=metaImage(meta)||metaImage(m); rad=rad||8;
-  return img ? thumb(img,'width:100%;aspect-ratio:1/1;object-fit:contain;border-radius:'+rad+'px;margin-bottom:8px;display:block;background:var(--card2,rgba(255,255,255,.04))')
+  return img ? thumb(img,'max-width:100%;max-height:120px;width:auto;object-fit:contain;border-radius:'+rad+'px;margin:0 auto 8px;display:block;background:var(--card2,rgba(255,255,255,.04))')
              : catIconBox((meta&&meta.category)||(m&&m.category), rad); }
+/* small fixed-size avatar (image or category icon) for the market-detail header */
+function marketAvatar(meta, m, size){ var img=metaImage(meta)||metaImage(m); size=size||50;
+  var box='width:'+size+'px;height:'+size+'px;border-radius:10px;flex:0 0 auto;background:var(--card2,rgba(255,255,255,.04))';
+  return img ? thumb(img, box+';object-fit:contain;display:block')
+             : '<div style="'+box+';display:flex;align-items:center;justify-content:center;color:var(--mut,#8a93a6)">'+categoryIcon((meta&&meta.category)||(m&&m.category))+'</div>'; }
 function marketId(m){ return m.id!=null?m.id:(m.market_id!=null?m.market_id:m.market); }
 // title/image can live as flat fields on the node meta object (get_market_full.meta,
 // list_markets_by_category), or inside a metadata JSON blob — check both.
@@ -462,11 +467,13 @@ function probBar(m){
     '</div>'
   );
 }
-function relClass(score){ score=Number(score);
+/* node reliability_score is basis points [0..10000]; UI works on a 0..100 percentage. */
+function relPct(score){ return Number(score)/100; }
+function relClass(score){ score=relPct(score);
   if(score>=80)return['rel-ex','rel.excellent'];if(score>=65)return['rel-go','rel.good'];
   if(score>=50)return['rel-av','rel.average'];if(score>=40)return['rel-nw','rel.new'];
   if(score>=25)return['rel-po','rel.poor'];return['rel-un','rel.unreliable']; }
-function relBadge(score){ if(score==null)return '';var c=relClass(score);return '<span class="badge '+c[0]+'" title="reliability">'+Math.round(score)+' '+esc(t(c[1]))+'</span>'; }
+function relBadge(score){ if(score==null)return '';var c=relClass(score);return '<span class="badge '+c[0]+'" title="reliability">'+Math.round(relPct(score))+' '+esc(t(c[1]))+'</span>'; }
 function rawBlock(obj){ return '<details class="raw"><summary>'+esc(t('common.raw'))+'</summary><pre>'+esc(JSON.stringify(obj,null,2))+'</pre></details>'; }
 
 /* ------------------------------------------------------------------ chrome */
@@ -538,7 +545,7 @@ function route(){
     if(scr==='activity')return screenActivity();
     if(scr==='profile') return screenProfile();
     if(scr==='oracle')  return screenOracle();
-    if(scr==='oracles') return screenOracles(parts[1]?decodeURIComponent(parts[1]):'');
+    if(scr==='oracles') return parts[1]?screenOracleProfile(decodeURIComponent(parts[1])):screenOracles();
     if(scr==='node')    return screenNode();
     if(scr==='login')   return screenLogin();
     if(scr==='unlock')  return screenUnlock();
@@ -974,8 +981,9 @@ async function screenMarket(id){
 
   var html='';
   html+='<div class="row"><a class="mut" data-nav="#/markets">'+esc(t('common.back_markets'))+'</a></div>';
-  html+='<div class="title" style="margin-top:6px">'+esc(meta.title||marketTitle(m))+'</div>';
-  html+=thumb(metaImage(meta),'width:100%;max-width:260px;aspect-ratio:1/1;object-fit:contain;border-radius:10px;margin:6px 0;display:block;background:var(--card2,rgba(255,255,255,.04))');
+  html+='<div style="display:flex;align-items:center;gap:10px;margin-top:6px">'+
+        marketAvatar(meta, m, 50)+
+        '<div class="title" style="margin:0">'+esc(meta.title||marketTitle(m))+'</div></div>';
   html+='<div class="card-meta mb">'+statusBadge(m)+
         '<span>'+(isMulti?esc(t('md.onix_multi')):esc(t('md.onix_binary')))+'</span>'+
         (m.oracle?'<span><a data-nav="#/oracles/'+encodeURIComponent(m.oracle)+'">'+esc(t('md.oracle',{O:m.oracle}))+'</a></span>':'')+
@@ -1146,7 +1154,7 @@ async function loadOracleHint(owner, marketVolViz){
     var isNew=(score==null)||resolved<5||o.is_new===true;
     var hint='', cls='info';
     if(isNew){ hint=t('md.oracle_hint_new'); cls='info'; }
-    else if(Number(score)<40){ hint=t('md.oracle_hint_low'); cls='warn'; }
+    else if(relPct(score)<40){ hint=t('md.oracle_hint_low'); cls='warn'; }
     else if(ins>0 && marketVolViz>0 && ins<marketVolViz){ hint=t('md.oracle_hint_underfunded'); cls='warn'; }
     box.innerHTML=(score!=null?'<div class="mb">'+relBadge(score)+'</div>':'')+(hint?'<div class="box '+cls+'">'+esc(hint)+'</div>':'');
   }catch(e){ box.innerHTML=''; }
@@ -2214,12 +2222,12 @@ async function screenOracle(){
 /* ========================================================================= *
  *  SCREEN: Oracles — leaderboard (listOracles), pick one for market creation
  * ========================================================================= */
-/* One oracle card. focus=true → highlighted (linked-from-a-market view). */
-function oracleCard(o, focus){
+/* One oracle card on the leaderboard; the @owner title links to the full profile. */
+function oracleCard(o){
   var owner=o.owner||o.account||o.name||'';
   var resolved=o.markets_resolved!=null?o.markets_resolved:(o.resolved||0);
   var s=o.reliability_score!=null?o.reliability_score:o.score;
-  return '<div class="card'+(focus?' focus-card':'')+'" data-owner="'+esc(owner)+'"><div class="card-q">@'+esc(owner)+' '+(s!=null?relBadge(s):'')+'</div>'+
+  return '<div class="card" data-owner="'+esc(owner)+'"><div class="card-q"><a data-nav="#/oracles/'+encodeURIComponent(owner)+'">@'+esc(owner)+'</a> '+(s!=null?relBadge(s):'')+'</div>'+
     '<div class="card-meta">'+
       '<span>'+esc(t('pf.fee_pct'))+' '+fromBP(o.fee_percent||0)+'%</span>'+
       (o.fixed_fee!=null&&assetNum(o.fixed_fee)>0?'<span>+'+esc(typeof o.fixed_fee==='string'?o.fixed_fee:toAsset(assetNum(o.fixed_fee)))+'</span>':'')+
@@ -2231,9 +2239,8 @@ function oracleCard(o, focus){
     '<button class="btn small mt" data-pick="'+esc(owner)+'">'+esc(t('ors.use'))+'</button></div>';
 }
 
-/* Oracle leaderboard. `focus` (optional owner) = arrived via a market's "oracle:" link →
-   pin that oracle to the top, highlight it, and fetch it separately if it's outside the top-200. */
-async function screenOracles(focus){
+/* Oracle leaderboard. Card title @owner links through to the per-oracle profile. */
+async function screenOracles(){
   setContent('<div class="title">'+esc(t('ors.title'))+'</div>'+
     '<div class="hint mb">'+esc(t('ors.lead'))+'</div>'+
     '<div id="ors-list"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
@@ -2241,22 +2248,75 @@ async function screenOracles(focus){
     var list=await api('listOracles', 0, 200);
     list=list||[];
     var score=function(o){ var s=o.reliability_score!=null?o.reliability_score:o.score; return s==null?-1:Number(s); };
-    var ownerOf=function(o){ return o.owner||o.account||o.name||''; };
     list.sort(function(a,b){ return score(b)-score(a); });
-    if(focus){
-      // pin focused oracle to the top; fetch it if it isn't in the listed set
-      var i=list.findIndex(function(o){ return ownerOf(o)===focus; });
-      if(i>=0){ list.unshift(list.splice(i,1)[0]); }
-      else{ try{ var one=unwrapOracle(await api('getOracle', focus)); if(one){ one.owner=one.owner||focus; list.unshift(one); } }catch(e){} }
-    }
     if(!list.length){ el('ors-list').innerHTML='<div class="empty">'+esc(t('ors.none'))+'</div>'; return; }
-    el('ors-list').innerHTML=list.map(function(o){ return oracleCard(o, focus && ownerOf(o)===focus); }).join('');
+    el('ors-list').innerHTML=list.map(function(o){ return oracleCard(o); }).join('');
     $all('[data-pick]',el('ors-list')).forEach(function(b){ b.onclick=function(){
       try{ sessionStorage.setItem('lc_pick_oracle', b.getAttribute('data-pick')); }catch(e){}
       go('#/create');
     };});
-    if(focus){ var fc=el('ors-list').querySelector('.focus-card'); if(fc&&fc.scrollIntoView) fc.scrollIntoView({block:'nearest'}); }
   }catch(e){ el('ors-list').innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
+}
+
+/* Per-oracle profile: full reputation scoring breakdown + description + recent markets by status.
+   Reached via a market's "oracle:" link (#/oracles/<owner>) or an @owner link on the leaderboard. */
+async function screenOracleProfile(owner){
+  setContent('<div class="row"><a class="mut" data-nav="#/oracles">'+esc(t('orp.back'))+'</a></div>'+
+    '<div id="orp-head" class="title" style="margin-top:6px">@'+esc(owner)+'</div>'+
+    '<div id="orp-body"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
+  try{
+    var o=unwrapOracle(await api('getOracle', owner));
+    if(!o){ el('orp-body').innerHTML='<div class="empty">'+esc(t('orp.not_oracle'))+'</div>'; return; }
+    var score=o.reliability_score!=null?o.reliability_score:o.score;
+    el('orp-head').innerHTML='@'+esc(owner)+' '+(score!=null?relBadge(score):'');
+
+    var kv=function(label,val){ return '<div class="kv"><span class="mut">'+esc(label)+'</span><b>'+esc(String(val))+'</b></div>'; };
+    var dur=function(s){ s=Number(s)||0; if(!s)return '—'; var h=Math.floor(s/3600),mn=Math.floor((s%3600)/60); return h?h+'h '+mn+'m':mn+'m'; };
+    var banned=o.banned_until&&assetTime(o.banned_until)>now();
+
+    var body='<div class="card">'+
+      '<div class="section-title" style="margin-top:0">'+esc(t('orp.scoring'))+'</div>'+
+      kv(t('orp.reliability'), score!=null?Math.round(relPct(score))+' / 100':'—')+
+      kv(t('pf.fee_pct'), fromBP(o.fee_percent||0)+'%')+
+      (o.fixed_fee!=null&&assetNum(o.fixed_fee)>0?kv(t('pf.fixed_fee'), fmtVizParam(o.fixed_fee)):'')+
+      kv(t('pf.insurance'), fmtVizParam(o.insurance))+
+      kv(t('orp.accepted'), o.markets_accepted||0)+
+      kv(t('orp.resolved'), o.markets_resolved||0)+
+      kv(t('orp.no_contest'), o.no_contest_count||0)+
+      kv(t('orp.missed'), o.missed_count||0)+
+      kv(t('orp.disputes'), (o.disputes_received||0)+' · '+(o.disputes_won||0)+t('orp.won_s')+' / '+(o.disputes_lost||0)+t('orp.lost_s'))+
+      kv(t('orp.resp_missed'), o.dispute_responses_missed||0)+
+      kv(t('orp.vol_resolved'), fmtVizParam(o.total_volume_resolved))+
+      kv(t('orp.insurance_slashed'), fmtVizParam(o.total_insurance_slashed))+
+      kv(t('orp.avg_res_time'), dur(o.avg_resolution_time))+
+      kv(t('orp.penalty'), o.penalty_stamps||0)+
+      kv(t('orp.bans'), o.bans_received||0)+
+      kv(t('orp.active_since'), tsToLocal(assetTime(o.active_since)))+
+      kv(t('orp.last_active'), tsToLocal(assetTime(o.last_active_time)))+
+      (banned?'<div class="box err mt">'+esc(t('orp.banned_until',{T:tsToLocal(assetTime(o.banned_until))}))+'</div>':'')+
+      ((o.rules_url||o.rules)?'<div class="hint mt"><a href="'+esc(o.rules_url||o.rules)+'" target="_blank">'+esc(t('orp.rules'))+'</a></div>':'')+
+    '</div>'+
+    '<div class="section-title">'+esc(t('orp.recent'))+'</div>'+
+    '<div id="orp-mk"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>';
+    el('orp-body').innerHTML=body;
+
+    // recent markets, grouped by status (active → pending → resolved/other)
+    var mk=(await api('listMarketsByOracle', owner, 0, 40))||[];
+    mk=dedupeMarkets(mk);
+    if(!mk.length){ el('orp-mk').innerHTML='<div class="empty">'+esc(t('orp.no_markets'))+'</div>'; return; }
+    var order=[1,0,2,3,4], grouped={};
+    mk.forEach(function(x){ var s=marketStatus(x); (grouped[s]=grouped[s]||[]).push(x); });
+    var keys=Object.keys(grouped).map(Number).sort(function(a,b){ var ia=order.indexOf(a),ib=order.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib); });
+    var mkHtml=keys.map(function(s){
+      var rows=grouped[s].map(function(x){ var id=marketId(x);
+        return '<div class="card click card-dense" data-nav="#/market/'+id+'">'+
+          '<div class="card-q">'+esc(marketTitle(x))+'</div>'+
+          '<div class="mut" style="font-size:12px">'+statusBadge(x)+'</div></div>';
+      }).join('');
+      return '<div class="mut" style="margin:8px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em">'+esc(statusLabel(s))+' · '+grouped[s].length+'</div>'+rows;
+    }).join('');
+    el('orp-mk').innerHTML=mkHtml;
+  }catch(e){ el('orp-body').innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
 }
 
 /* ------------------------------------------------------------------- modal */
