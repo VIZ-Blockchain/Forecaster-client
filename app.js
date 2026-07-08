@@ -889,7 +889,7 @@ function marketCard(m){
   var img=metaImage(meta)||metaImage(m);   // hybrid: image if present, else a denser card
   return h(
     '<div class="card click'+(img?'':' card-dense')+'" data-nav="#/market/'+id+'">',
-      thumb(img,'width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px;display:block'),
+      thumb(img,'width:100%;aspect-ratio:5/2;object-fit:cover;border-radius:8px;margin-bottom:8px;display:block'),
       '<div class="card-q">'+esc(marketTitle(m))+'</div>',
       probBar(m),
       '<div class="card-meta">',
@@ -925,7 +925,7 @@ async function screenMarket(id){
   var html='';
   html+='<div class="row"><a class="mut" data-nav="#/markets">'+esc(t('common.back_markets'))+'</a></div>';
   html+='<div class="title" style="margin-top:6px">'+esc(meta.title||marketTitle(m))+'</div>';
-  html+=thumb(metaImage(meta),'width:100%;max-height:220px;object-fit:cover;border-radius:10px;margin:6px 0;display:block');
+  html+=thumb(metaImage(meta),'width:100%;aspect-ratio:5/2;object-fit:cover;border-radius:10px;margin:6px 0;display:block');
   html+='<div class="card-meta mb">'+statusBadge(m)+
         '<span>'+(isMulti?esc(t('md.onix_multi')):esc(t('md.onix_binary')))+'</span>'+
         (m.oracle?'<span><a data-nav="#/market/'+id+'">'+esc(t('md.oracle',{O:m.oracle}))+'</a></span>':'')+
