@@ -1546,12 +1546,17 @@ function withdrawLiquidity(marketId, liquidityId, haveRaw){
   }}]);
 }
 
+/* Leverage is a chain-gated feature (median-voted `pm_leverage_enabled`). Cache the flag so entry
+   points can be hidden while it's off — when validators flip it on, the UI reappears with no redeploy.
+   Fail-open: hide only when the chain explicitly says false. */
+var _pmPropsCache=null;
+async function pmProps(){ if(_pmPropsCache)return _pmPropsCache; try{ _pmPropsCache=(await api('getPmChainProperties'))||{}; return _pmPropsCache; }catch(e){ return {}; } }
+function leverageOff(p){ return !!(p && p.pm_leverage_enabled===false); }
+
 /* ---- Leverage: open + list my positions + close/convert (all high-risk) ---- */
 async function loadLeverage(id, ocs, isMulti){
   var box=el('lev-box'); if(!box)return;
-  var props=null; try{ props=await api('getPmChainProperties'); }catch(e){}
-  var enabled=!(props&&props.pm_leverage_enabled===false);
-  if(!enabled){ box.innerHTML='<div class="mut">'+esc(t('lev.disabled'))+'</div>'; return; }
+  if(leverageOff(await pmProps())){ var card=box.closest('.card'); if(card) card.remove(); return; } // chain-off → hide the whole card
   var html='<div class="box err">'+esc(t('lev.risk_notice'))+'</div>';
   if(isUnlocked()){
     html+='<div class="field"><label class="lab">'+esc(t('md.outcome'))+'</label><select id="lv-oc">'+
@@ -1644,6 +1649,7 @@ function leverageConvert(marketId, positionId, reload){
 async function screenLeverage(){
   if(!requireUnlock())return;
   setContent('<div class="title">'+esc(t('lev.screen_title'))+'</div>'+
+    (leverageOff(await pmProps())?'<div class="box info">'+esc(t('lev.disabled'))+'</div>':'')+  // chain-off banner (still lets you view/close existing positions)
     '<div class="box err">'+esc(t('lev.risk_notice'))+'</div>'+
     '<div id="lev-all"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
   try{
@@ -1935,9 +1941,10 @@ async function screenBalance(){
     html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('bal.lazy_pool'))+'</div>'+
       '<div class="hint mb">'+esc(t('pool.lead'))+'</div>'+
       '<button class="btn block" data-nav="#/pool">'+esc(t('pool.open_btn'))+'</button></div>';
-    html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('lev.screen_title'))+'</div>'+
-      '<div class="hint mb">'+esc(t('lev.lead'))+'</div>'+
-      '<button class="btn block" data-nav="#/leverage">'+esc(t('lev.open_screen_btn'))+'</button></div>';
+    if(!leverageOff(await pmProps()))                             // hide leverage entry while chain-disabled
+      html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('lev.screen_title'))+'</div>'+
+        '<div class="hint mb">'+esc(t('lev.lead'))+'</div>'+
+        '<button class="btn block" data-nav="#/leverage">'+esc(t('lev.open_screen_btn'))+'</button></div>';
     html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('bal.recent'))+'</div><div id="hist-box"><span class="spin"></span></div><div id="hist-more" class="center mt"></div></div>';
     el('bal-box').innerHTML=html;
 
