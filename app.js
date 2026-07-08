@@ -1749,8 +1749,41 @@ function screenCreate(){
     });
   };
   if(el('c-img')) el('c-img').oninput=function(){ embeddedImg=''; imgPreview(this.value.trim()); };  // typing a URL clears the embed
+  // paste an image straight from the clipboard (ctrl+v) — sanitize like a picked file
+  if(el('c-img')) el('c-img').addEventListener('paste', function(e){
+    var items=(e.clipboardData&&e.clipboardData.items)||[];
+    for(var i=0;i<items.length;i++){
+      if(items[i].type && items[i].type.indexOf('image/')===0){
+        var f=items[i].getAsFile();
+        if(f){ e.preventDefault(); sanitizeImageToDataURL(f, function(err,dataUrl){
+          if(err){ toast('warn', t(err.message==='too_big'?'cr.image_too_big':'cr.image_bad')); return; }
+          embeddedImg=dataUrl; if(el('c-img')) el('c-img').value=''; imgPreview(dataUrl); }); }
+        return;                                          // handled an image → don't also paste text
+      }
+    }                                                    // no image in clipboard → let the URL paste through
+  });
 
-  if(el('c-oracle-browse')) el('c-oracle-browse').onclick=function(){ go('#/oracles'); };
+  // --- draft persistence: the oracle browser is a route change (#/oracles) that rebuilds this form on
+  // return, wiping typed fields. Stash the draft before leaving and restore (one-shot) on re-entry. ---
+  var DRAFT_VALS=['c-type','c-q','c-outs','c-desc','c-cat','c-subcat','c-tags','c-img','c-src','c-oracle','c-liq','c-cfee','c-ofee','c-lfee','c-bexp','c-rexp','c-jur'];
+  var DRAFT_CHK=['c-early','c-cancel','c-batch','c-instant'];
+  function saveCreateDraft(){ try{ var d={v:{},c:{},img:embeddedImg};
+    DRAFT_VALS.forEach(function(id){ var e=el(id); if(e) d.v[id]=e.value; });
+    DRAFT_CHK.forEach(function(id){ var e=el(id); if(e) d.c[id]=e.checked; });
+    sessionStorage.setItem('lc_create_draft', JSON.stringify(d)); }catch(e){} }
+  function restoreCreateDraft(){ try{ var raw=sessionStorage.getItem('lc_create_draft'); if(!raw)return;
+    sessionStorage.removeItem('lc_create_draft');                          // one-shot: consume on restore
+    var d=JSON.parse(raw); if(!d)return;
+    if(d.v['c-type']!=null && el('c-type')){ el('c-type').value=d.v['c-type']; el('c-type').onchange(); }
+    if(d.v['c-cat']!=null && el('c-cat')){ el('c-cat').value=d.v['c-cat']; el('c-cat').onchange(); }  // repopulate subcats first
+    DRAFT_VALS.forEach(function(id){ if(id==='c-type'||id==='c-cat')return; var e=el(id); if(e && d.v[id]!=null) e.value=d.v[id]; });
+    DRAFT_CHK.forEach(function(id){ var e=el(id); if(e && d.c && d.c[id]!=null) e.checked=d.c[id]; });
+    if(d.img){ embeddedImg=d.img; imgPreview(d.img); }
+  }catch(e){} }
+  function clearCreateDraft(){ try{ sessionStorage.removeItem('lc_create_draft'); }catch(e){} }
+  restoreCreateDraft();
+
+  if(el('c-oracle-browse')) el('c-oracle-browse').onclick=function(){ saveCreateDraft(); go('#/oracles'); };
   // prefill oracle picked from the leaderboard (#/oracles → "use")
   try{ var picked=sessionStorage.getItem('lc_pick_oracle'); if(picked){ sessionStorage.removeItem('lc_pick_oracle');
     if(el('c-oracle')){ el('c-oracle').value=picked; if(el('c-oracle-load')) el('c-oracle-load').click(); } } }catch(e){}
@@ -1833,7 +1866,7 @@ function screenCreate(){
       el('c-early').checked, el('c-cancel').checked, el('c-batch').checked, el('c-instant').checked,
       0, 0, '', 0, JSON.stringify(meta), []
     ];
-    tx(t('txn.create_market'), function(){return bc.apply(null,['pmCreateMarket'].concat(args));}, function(r){ toast('ok',t('cr.submitted')); go('#/markets'); });
+    tx(t('txn.create_market'), function(){return bc.apply(null,['pmCreateMarket'].concat(args));}, function(r){ clearCreateDraft(); toast('ok',t('cr.submitted')); go('#/markets'); });
   };
 }
 
