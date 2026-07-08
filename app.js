@@ -2300,22 +2300,25 @@ async function screenOracleProfile(owner){
     '<div id="orp-mk"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>';
     el('orp-body').innerHTML=body;
 
-    // recent markets, grouped by status (active → pending → resolved/other)
-    var mk=(await api('listMarketsByOracle', owner, 0, 40))||[];
-    mk=dedupeMarkets(mk);
-    if(!mk.length){ el('orp-mk').innerHTML='<div class="empty">'+esc(t('orp.no_markets'))+'</div>'; return; }
-    var order=[1,0,2,3,4], grouped={};
-    mk.forEach(function(x){ var s=marketStatus(x); (grouped[s]=grouped[s]||[]).push(x); });
-    var keys=Object.keys(grouped).map(Number).sort(function(a,b){ var ia=order.indexOf(a),ib=order.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib); });
-    var mkHtml=keys.map(function(s){
-      var rows=grouped[s].map(function(x){ var id=marketId(x);
-        return '<div class="card click card-dense" data-nav="#/market/'+id+'">'+
-          '<div class="card-q">'+esc(marketTitle(x))+'</div>'+
-          '<div class="mut" style="font-size:12px">'+statusBadge(x)+'</div></div>';
+    // recent markets, grouped by status (active → pending → resolved/other). Isolated try/catch so a
+    // transient RPC failure degrades to a retry hint here instead of wiping the whole profile.
+    try{
+      var mk=(await api('listMarketsByOracle', owner, 0, 40))||[];
+      mk=dedupeMarkets(mk);
+      if(!mk.length){ el('orp-mk').innerHTML='<div class="empty">'+esc(t('orp.no_markets'))+'</div>'; return; }
+      var order=[1,0,2,3,4], grouped={};
+      mk.forEach(function(x){ var s=marketStatus(x); (grouped[s]=grouped[s]||[]).push(x); });
+      var keys=Object.keys(grouped).map(Number).sort(function(a,b){ var ia=order.indexOf(a),ib=order.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib); });
+      var mkHtml=keys.map(function(s){
+        var rows=grouped[s].map(function(x){ var id=marketId(x);
+          return '<div class="card click card-dense" data-nav="#/market/'+id+'">'+
+            '<div class="card-q">'+esc(marketTitle(x))+'</div>'+
+            '<div class="mut" style="font-size:12px">'+statusBadge(x)+'</div></div>';
+        }).join('');
+        return '<div class="mut" style="margin:8px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em">'+esc(statusLabel(s))+' · '+grouped[s].length+'</div>'+rows;
       }).join('');
-      return '<div class="mut" style="margin:8px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em">'+esc(statusLabel(s))+' · '+grouped[s].length+'</div>'+rows;
-    }).join('');
-    el('orp-mk').innerHTML=mkHtml;
+      el('orp-mk').innerHTML=mkHtml;
+    }catch(e2){ el('orp-mk').innerHTML='<div class="box err">'+esc(t('orp.markets_error'))+'</div>'; }
   }catch(e){ el('orp-body').innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
 }
 

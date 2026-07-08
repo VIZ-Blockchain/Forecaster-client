@@ -303,7 +303,7 @@ var EN = {
   'orp.disputes':'Disputes','orp.won_s':'W','orp.lost_s':'L','orp.resp_missed':'Dispute responses missed',
   'orp.vol_resolved':'Volume resolved','orp.insurance_slashed':'Insurance slashed','orp.avg_res_time':'Avg resolution time',
   'orp.penalty':'Penalty stamps','orp.bans':'Bans received','orp.active_since':'Active since','orp.last_active':'Last active',
-  'orp.banned_until':'Banned until {T}','orp.rules':'Resolution rules','orp.recent':'Recent markets','orp.no_markets':'No markets yet.',
+  'orp.banned_until':'Banned until {T}','orp.rules':'Resolution rules','orp.recent':'Recent markets','orp.no_markets':'No markets yet.','orp.markets_error':'Couldn’t load markets — reopen to retry.',
 
   /* boot */
   'boot.viz_missing':'viz-js-lib not found.',
@@ -586,7 +586,7 @@ var RU = {
   'orp.disputes':'Диспуты','orp.won_s':'поб','orp.lost_s':'пор','orp.resp_missed':'Пропущено ответов на диспуты',
   'orp.vol_resolved':'Разрешённый объём','orp.insurance_slashed':'Списано страховки','orp.avg_res_time':'Ср. время разрешения',
   'orp.penalty':'Штрафные метки','orp.bans':'Получено банов','orp.active_since':'Активен с','orp.last_active':'Посл. активность',
-  'orp.banned_until':'Забанен до {T}','orp.rules':'Правила разрешения','orp.recent':'Последние рынки','orp.no_markets':'Рынков пока нет.',
+  'orp.banned_until':'Забанен до {T}','orp.rules':'Правила разрешения','orp.recent':'Последние рынки','orp.no_markets':'Рынков пока нет.','orp.markets_error':'Не удалось загрузить рынки — открой заново.',
 
   /* boot */
   'boot.viz_missing':'viz-js-lib не найден.',
