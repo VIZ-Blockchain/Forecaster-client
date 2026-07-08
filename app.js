@@ -400,8 +400,52 @@ function saveImgPrefs(p){ try{ localStorage.setItem(LS_IMG, JSON.stringify({mode
 function imgHostAllowed(url){ var p=imgPrefs(); if(p.mode==='off') return false; if(p.mode==='all') return true;
   try{ var host=new URL(url).hostname.toLowerCase(); return p.hosts.some(function(x){ x=String(x).trim().toLowerCase(); return x && (host===x || host.endsWith('.'+x)); }); }catch(e){ return false; } }
 /* metadata image is untrusted — allow only http(s) URLs whose host passes the trust policy above */
-function metaImage(meta){ var u=meta&&(meta.image||meta.icon); if(typeof u!=='string' || !/^https?:\/\//i.test(u)) return ''; return imgHostAllowed(u)?u:''; }
+function metaImage(meta){ var u=meta&&(meta.image||meta.icon); if(typeof u!=='string') return '';
+  // inline raster data URI: no network fetch → not a tracking-pixel risk, so it bypasses the host
+  // whitelist. SVG is refused (script/external-ref surface) — only png/jpeg/webp/gif are allowed.
+  if(/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(u)) return u;
+  if(!/^https?:\/\//i.test(u)) return '';
+  return imgHostAllowed(u)?u:''; }
 function thumb(url,style){ return url?'<img src="'+esc(url)+'" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display=&#39;none&#39;" style="'+style+'">':''; }
+
+/* Fixed category → subcategory taxonomy for the create form (owner: fixed tree, Polymarket-style).
+   Keys are the canonical category values written to metadata.category (match the parser/node). */
+var MARKET_CATS = {
+  politics:    ['US Election','Presidential','Congress','Trump','Global Elections','Policy'],
+  sports:      ['NFL','NBA','MLB','NHL','Soccer','Tennis','Formula 1','Boxing/MMA','Golf','Olympics'],
+  crypto:      ['Bitcoin','Ethereum','Prices','DeFi','Regulation','Stablecoins','ETFs'],
+  esports:     ['CS2','Dota 2','League of Legends','Valorant','Overwatch','Mobile Legends'],
+  economy:     ['Inflation','Fed / Rates','Jobs','GDP','Markets'],
+  tech:        ['AI','Big Tech','Space','Gadgets'],
+  culture:     ['Movies','TV','Music','Awards','Celebrities','Games'],
+  geopolitics: ['US','Russia / Ukraine','Middle East','China','Elections'],
+  business:    ['Companies','M&A','IPOs','Earnings'],
+  world:       ['Global','Disasters','Health'],
+  weather:     ['Temperature','Hurricanes','Climate'],
+  science:     ['Space','Health','Climate','Research'],
+  commodities: ['Oil','Gold','Gas','Agriculture']
+};
+function capFirst(s){ s=String(s||''); return s.charAt(0).toUpperCase()+s.slice(1); }
+
+/* Re-encode a user-picked image to a tiny raster data URI. Drawing onto <canvas> captures only pixels,
+   so any embedded SVG/script/EXIF is dropped and the output is guaranteed PNG/WEBP (never svg).
+   SVG input is refused outright; output is hard-capped. cb(err) | cb(null, dataURL). */
+function sanitizeImageToDataURL(file, cb){
+  if(!file || !/^image\//i.test(file.type||'') || /svg/i.test(file.type||'')){ cb(new Error('bad_type')); return; }
+  var url=URL.createObjectURL(file), img=new Image();
+  img.onload=function(){
+    URL.revokeObjectURL(url);
+    var S=64, cv=document.createElement('canvas'); cv.width=S; cv.height=S;
+    var ctx=cv.getContext('2d');
+    var r=Math.min(S/img.width, S/img.height)||1, w=Math.max(1,Math.round(img.width*r)), h=Math.max(1,Math.round(img.height*r));
+    ctx.clearRect(0,0,S,S); ctx.drawImage(img,(S-w)/2,(S-h)/2,w,h);
+    var out; try{ out=cv.toDataURL('image/webp',0.85); if(out.indexOf('data:image/webp')!==0) out=cv.toDataURL('image/png'); }catch(e){ try{ out=cv.toDataURL('image/png'); }catch(e2){ cb(new Error('encode')); return; } }
+    if(out.length>12000){ cb(new Error('too_big')); return; }   // ~9 KB binary ceiling on-chain
+    cb(null, out);
+  };
+  img.onerror=function(){ URL.revokeObjectURL(url); cb(new Error('decode')); };
+  img.src=url;
+}
 
 /* -------- local category icons (offline SVG fallback when a market has no trusted image) -------- */
 function categoryIcon(cat){
@@ -1623,6 +1667,20 @@ function screenCreate(){
       '<label class="lab">'+esc(t('cr.type'))+'</label><select id="c-type"><option value="0">'+esc(t('cr.type_binary'))+'</option><option value="1">'+esc(t('cr.type_multi'))+'</option></select>',
       '<div id="c-bin"><label class="lab">'+esc(t('cr.question'))+'</label><input id="c-q" type="text" placeholder="'+esc(t('cr.question_ph'))+'"></div>',
       '<div id="c-multi" class="hide"><label class="lab">'+esc(t('cr.outcomes'))+'</label><textarea id="c-outs" placeholder="Option A\nOption B\nOption C"></textarea></div>',
+      // --- metadata mini-constructor (mirrors Polymarket meta: description/category/subcategory/tags/image/source) ---
+      '<div class="section-title">'+esc(t('cr.meta'))+'</div>',
+      '<label class="lab">'+esc(t('cr.description'))+'</label><textarea id="c-desc" placeholder="'+esc(t('cr.description_ph'))+'"></textarea>',
+      '<div class="row">',
+        '<div class="grow"><label class="lab">'+esc(t('cr.category'))+' *</label><select id="c-cat"><option value="">'+esc(t('cr.category_pick'))+'</option>'+
+          Object.keys(MARKET_CATS).map(function(k){return '<option value="'+esc(k)+'">'+esc(capFirst(k))+'</option>';}).join('')+'</select></div>',
+        '<div class="grow"><label class="lab">'+esc(t('cr.subcategory'))+'</label><select id="c-subcat"><option value="">—</option></select></div>',
+      '</div>',
+      '<label class="lab">'+esc(t('cr.tags'))+'</label><input id="c-tags" type="text" placeholder="'+esc(t('cr.tags_ph'))+'">',
+      '<label class="lab">'+esc(t('cr.image'))+'</label>',
+      '<div class="row"><input id="c-img" class="grow" type="url" placeholder="https://… '+esc(t('cr.image_or'))+'"><input id="c-img-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none"><button type="button" class="btn ghost" id="c-img-embed" style="white-space:nowrap">'+esc(t('cr.image_embed'))+'</button></div>',
+      '<div class="hint">'+esc(t('cr.image_hint'))+'</div>',
+      '<div id="c-img-prev"></div>',
+      '<label class="lab">'+esc(t('cr.source_url'))+'</label><input id="c-src" type="url" placeholder="https://…">',
       '<label class="lab">'+esc(t('cr.oracle'))+'</label>',
       '<div class="row"><input id="c-oracle" class="grow" type="text" autocomplete="off" spellcheck="false" placeholder="'+esc(t('cr.oracle_ph'))+'"><button class="btn ghost" id="c-oracle-browse" style="white-space:nowrap">'+esc(t('cr.browse_oracles'))+'</button><button class="btn ghost" id="c-oracle-load" style="white-space:nowrap">'+esc(t('cr.load_terms'))+'</button></div>',
       '<div id="c-oracle-info" class="hint"></div>',
@@ -1654,6 +1712,24 @@ function screenCreate(){
     '</div>'
   ));
   el('c-type').onchange=function(){var multi=this.value==='1';el('c-multi').classList.toggle('hide',!multi);el('c-bin').classList.toggle('hide',multi);};
+
+  // --- metadata constructor wiring ---
+  var embeddedImg='';                                   // sanitized base64 data URI, if the user embedded one
+  function imgPreview(src){ el('c-img-prev').innerHTML = src ? '<img src="'+esc(src)+'" style="width:50px;height:50px;object-fit:contain;border-radius:8px;margin-top:6px;background:var(--card2,rgba(255,255,255,.04))">' : ''; }
+  if(el('c-cat')) el('c-cat').onchange=function(){
+    var subs=MARKET_CATS[this.value]||[];
+    el('c-subcat').innerHTML='<option value="">—</option>'+subs.map(function(s){return '<option value="'+esc(s)+'">'+esc(s)+'</option>';}).join('');
+  };
+  if(el('c-img-embed')) el('c-img-embed').onclick=function(){ el('c-img-file').click(); };
+  if(el('c-img-file')) el('c-img-file').onchange=function(){
+    var f=this.files&&this.files[0]; if(!f)return;
+    sanitizeImageToDataURL(f, function(err,dataUrl){
+      if(err){ toast('warn', t(err.message==='too_big'?'cr.image_too_big':'cr.image_bad')); return; }
+      embeddedImg=dataUrl; if(el('c-img')) el('c-img').value=''; imgPreview(dataUrl);   // embedded wins over URL
+    });
+  };
+  if(el('c-img')) el('c-img').oninput=function(){ embeddedImg=''; imgPreview(this.value.trim()); };  // typing a URL clears the embed
+
   if(el('c-oracle-browse')) el('c-oracle-browse').onclick=function(){ go('#/oracles'); };
   // prefill oracle picked from the leaderboard (#/oracles → "use")
   try{ var picked=sessionStorage.getItem('lc_pick_oracle'); if(picked){ sessionStorage.removeItem('lc_pick_oracle');
@@ -1719,7 +1795,14 @@ function screenCreate(){
     if(!oracle){toast('warn',t('cr.oracle_required'));return;}
     var minLiq=Number(el('c-liq').min)||0;                        // live chain minimum (set from props)
     if((Number(el('c-liq').value)||0)<minLiq){ toast('warn',t('cr.min_liquidity')+': '+minLiq.toFixed(3)+' VIZ'); return; }
-    var meta={ title: type===1?(el('c-q').value||t('cr.multi_default_title')):el('c-q').value, outcomes:outcomes };
+    var category=(el('c-cat')&&el('c-cat').value)||'';
+    if(!category){ toast('warn',t('cr.category_required')); return; }        // owner: category is mandatory
+    var meta={ title: type===1?(el('c-q').value||t('cr.multi_default_title')):el('c-q').value, outcomes:outcomes, category:category };
+    var subcat=(el('c-subcat')&&el('c-subcat').value)||''; if(subcat) meta.subcategory=subcat;
+    var desc=(el('c-desc')&&el('c-desc').value.trim())||''; if(desc) meta.description=desc;
+    var tags=(el('c-tags')&&el('c-tags').value||'').split(',').map(function(s){return s.trim();}).filter(Boolean); if(tags.length) meta.tags=tags;
+    var img=embeddedImg || ((el('c-img')&&el('c-img').value.trim())||''); if(img) meta.image=img;   // embedded base64 wins over URL
+    var src=(el('c-src')&&el('c-src').value.trim())||''; if(src) meta.source_url=src;
     var jur=el('c-jur').value.trim(); if(jur)meta.jurisdiction=jur;
     var args=[
       wifFor('active'), SESSION.account, oracle, type, outcomes, el('c-url').value||'',
