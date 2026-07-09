@@ -320,7 +320,7 @@ var EN = {
   'orp.disputes':'Disputes','orp.won_s':'W','orp.lost_s':'L','orp.resp_missed':'Dispute responses missed',
   'orp.vol_resolved':'Volume resolved','orp.insurance_slashed':'Insurance slashed','orp.avg_res_time':'Avg resolution time',
   'orp.penalty':'Penalty stamps','orp.bans':'Bans received','orp.active_since':'Active since','orp.last_active':'Last active',
-  'orp.banned_until':'Banned until {T}','orp.rules':'Resolution rules','orp.recent':'Recent markets','orp.no_markets':'No markets yet.','orp.markets_error':'Couldn’t load markets — reopen to retry.',
+  'orp.banned_until':'Banned until {T}','orp.rules':'Resolution rules','orp.recent':'Markets by status','orp.scanning':'Counting markets… {N}','orp.no_markets':'No markets yet.','orp.markets_error':'Couldn’t load markets — reopen to retry.',
 
   /* boot */
   'boot.viz_missing':'viz-js-lib not found.',
@@ -620,7 +620,7 @@ var RU = {
   'orp.disputes':'Диспуты','orp.won_s':'поб','orp.lost_s':'пор','orp.resp_missed':'Пропущено ответов на диспуты',
   'orp.vol_resolved':'Разрешённый объём','orp.insurance_slashed':'Списано страховки','orp.avg_res_time':'Ср. время разрешения',
   'orp.penalty':'Штрафные метки','orp.bans':'Получено банов','orp.active_since':'Активен с','orp.last_active':'Посл. активность',
-  'orp.banned_until':'Забанен до {T}','orp.rules':'Правила разрешения','orp.recent':'Последние рынки','orp.no_markets':'Рынков пока нет.','orp.markets_error':'Не удалось загрузить рынки — открой заново.',
+  'orp.banned_until':'Забанен до {T}','orp.rules':'Правила разрешения','orp.recent':'Рынки по статусу','orp.scanning':'Считаю рынки… {N}','orp.no_markets':'Рынков пока нет.','orp.markets_error':'Не удалось загрузить рынки — открой заново.',
 
   /* boot */
   'boot.viz_missing':'viz-js-lib не найден.',
@@ -922,7 +922,7 @@ var ZH = {
   'orp.disputes':'争议','orp.won_s':'胜','orp.lost_s':'负','orp.resp_missed':'错过争议回应',
   'orp.vol_resolved':'已裁决成交量','orp.insurance_slashed':'被罚没保险金','orp.avg_res_time':'平均裁决时间',
   'orp.penalty':'处罚记录','orp.bans':'被封次数','orp.active_since':'活跃起始','orp.last_active':'最后活跃',
-  'orp.banned_until':'封禁至 {T}','orp.rules':'裁决规则','orp.recent':'近期市场','orp.no_markets':'暂无市场。',
+  'orp.banned_until':'封禁至 {T}','orp.rules':'裁决规则','orp.recent':'按状态分类的市场','orp.scanning':'正在统计市场… {N}','orp.no_markets':'暂无市场。',
   'orp.markets_error':'无法加载市场——重新打开重试。',
 
   'boot.viz_missing':'未找到 viz-js-lib。',
