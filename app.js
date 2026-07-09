@@ -892,13 +892,20 @@ function idxRow(m){ return {id:marketId(m), title:marketTitle(m), cat:(parseMeta
    This is discovery/metadata only — a market runs for weeks, and its details/prices are always fetched fresh
    on the market screen — so a long TTL is safe and cuts network use. */
 function mktTtl(){ try{ var v=parseInt(localStorage.getItem(LS_MKT_TTL),10); if(v>0) return v; }catch(e){} return DEFAULT_MKT_TTL; }
-function indexGet(){ var o=cacheGet(LS_MKT_IDX, mktTtl()); return o?{items:o.items||[], stale:!!o._stale, ts:o.ts}:null; }
+/* Drop entries whose betting window has closed — even within TTL, an expired market must never be shown as
+   live in the discovery feed/search. exp==0 (unknown) is kept. */
+function indexFresh(items){ var tn=now(); return (items||[]).filter(function(r){ return !r.exp || r.exp>tn; }); }
+function indexGet(){
+  var o=cacheGet(LS_MKT_IDX, mktTtl()); if(!o) return null;
+  var all=o.items||[], items=indexFresh(all);
+  if(items.length!==all.length){ try{ localStorage.setItem(LS_MKT_IDX, JSON.stringify({ts:o.ts, items:items})); }catch(e){} } // clean expired from storage, keep original ts
+  return {items:items, stale:!!o._stale, ts:o.ts};
+}
 /* Merge fresh markets into the index by id, drop resolved/expired, cap size (newest-first). */
 function indexPut(list){
   var m={}; var prev=indexGet(); if(prev) prev.items.forEach(function(r){ m[r.id]=r; });
   (list||[]).forEach(function(mk){ var r=idxRow(mk); if(r.id!=null) m[r.id]=r; });
-  var items=Object.keys(m).map(function(k){return m[k];})
-    .filter(function(r){ return r.status<3 && (!r.exp || r.exp>now()-86400); }) // keep active/closed & recently-live
+  var items=indexFresh(Object.keys(m).map(function(k){return m[k];}).filter(function(r){ return r.status<3; })) // active & betting still open only
     .sort(function(a,b){ return b.id-a.id; }).slice(0, CACHE_IDX_CAP);
   cacheSet(LS_MKT_IDX,{items:items});
   return items;
