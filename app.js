@@ -247,7 +247,12 @@ function startHealthLoop(){
 /* promisified viz calls */
 function api(method){var a=Array.prototype.slice.call(arguments,1);
   return new Promise(function(res,rej){ if(!viz.api[method])return rej(new Error('api.'+method+' not in this viz-js-lib build'));
-    viz.api[method].apply(viz.api, a.concat(function(err,r){ err?rej(err):res(r); })); }); }
+    viz.api[method].apply(viz.api, a.concat(function(err,r){ err?rej(err):res(normApi(method,r)); })); }); }
+// Canonicalize on the node MARKET id at ingestion (owner: "строить внутри по id рынка от ноды"). By-index
+// listings (list_markets_by_category/_by_creator/_by_oracle) carry the market id in `market`; `id` there is
+// the internal index-object id. Collapse id←market so the whole client builds/keys/finds markets by ONE id.
+var BYINDEX_RE=/^listMarketsBy(Category|Creator|Oracle)$/;
+function normApi(method,r){ if(BYINDEX_RE.test(method)&&Array.isArray(r)) r.forEach(function(m){ if(m&&typeof m.market==='number') m.id=m.market; }); return r; }
 function bc(method){var a=Array.prototype.slice.call(arguments,1);
   return new Promise(function(res,rej){ if(!viz.broadcast[method])return rej(new Error('broadcast.'+method+' not in this viz-js-lib build'));
     viz.broadcast[method].apply(viz.broadcast, a.concat(function(err,r){ err?rej(err):res(r); })); }); }
