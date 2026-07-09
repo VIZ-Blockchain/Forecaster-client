@@ -23,8 +23,9 @@ var LS_TERMS  = 'lc_terms';    // software-agreement acceptance {v, at}
 var LS_FAV    = 'lc_fav_cats'; // favorite category ids (JSON array) for the personalized feed
 var LS_CAT_TAX = 'lc_cat_taxonomy'; // cached get_market_categories {ts,cats,tags} (TTL) for instant paint / offline
 var LS_MKT_IDX = 'lc_mkt_index';    // compact market index {ts,items:[{id,title,cat,sub,tags,exp,status,vol,upd}]} for instant feed + fast local search
+var LS_MKT_TTL = 'lc_mkt_ttl';      // user override for market-index freshness TTL (seconds)
 var CACHE_TAX_TTL = 900;            // taxonomy freshness, seconds (15 min)
-var CACHE_IDX_TTL = 300;            // market index freshness, seconds (5 min) — DISCOVERY ONLY, never bet off it
+var DEFAULT_MKT_TTL = 1800;         // market index freshness default, seconds (30 min) — DISCOVERY ONLY (metadata), never bet off it; user-configurable in settings
 var CACHE_IDX_CAP = 500;            // max markets kept in the local index
 var LS_AUTOLOCK = 'lc_autolock_sec'; // PIN auto-lock inactivity timeout (seconds)
 var SS_SESSION  = 'lc_session';      // sessionStorage: unlocked session (survives reload, cleared on browser/tab close)
@@ -671,6 +672,12 @@ function screenNode(){
       '<select id="s-autolock">'+[300,600,1800,3600].map(function(v){return '<option value="'+v+'"'+(autolockSec()===v?' selected':'')+'>'+esc(fmtDuration(v))+'</option>';}).join('')+'</select>',
       '<div class="hint">'+esc(t('set.autolock_hint'))+'</div>',
     '</div>',
+    /* --- market list refresh (discovery cache) --- */
+    '<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('set.cache_title'))+'</div>',
+      '<label class="lab">'+esc(t('set.mkt_ttl_label'))+'</label>',
+      '<select id="s-mktttl">'+[900,1800,3600,7200,21600].map(function(v){return '<option value="'+v+'"'+(mktTtl()===v?' selected':'')+'>'+esc(fmtDuration(v))+'</option>';}).join('')+'</select>',
+      '<div class="hint">'+esc(t('set.mkt_ttl_hint'))+'</div>',
+    '</div>',
     /* --- images & privacy --- */
     '<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('set.img_title'))+'</div>',
       '<div class="hint mb">'+esc(t('set.img_desc'))+'</div>',
@@ -693,6 +700,7 @@ function screenNode(){
   };
   el('t-review').onclick=function(){ showTerms(false); };
   if(el('s-autolock')) el('s-autolock').onchange=function(){ localStorage.setItem(LS_AUTOLOCK, this.value); touchSession(); toast('ok',t('set.autolock_saved')); };
+  if(el('s-mktttl')) el('s-mktttl').onchange=function(){ localStorage.setItem(LS_MKT_TTL, this.value); toast('ok',t('set.mkt_ttl_saved')); };
   if(el('img-mode')) el('img-mode').onchange=function(){ var p=imgPrefs(); p.mode=this.value; saveImgPrefs(p); toast('ok',t('set.img_saved')); };
   if(el('img-host-add')) el('img-host-add').onclick=function(){
     var v=(el('img-host-in').value||'').trim().toLowerCase().replace(/^https?:\/\//,'').replace(/\/.*$/,'');
@@ -880,8 +888,11 @@ async function ensureCategories(fresh){
 function idxRow(m){ return {id:marketId(m), title:marketTitle(m), cat:(parseMeta(m).category||''), sub:(parseMeta(m).subcategory||''),
   tags:(parseMeta(m).tags||m.tags||''), exp:assetTime(m.betting_expiration)||0, status:marketStatus(m), vol:volOf(m), upd:now()}; }
 /* Compact market index in LS, keyed by market id. Ids are stable/permanent on chain, so an id always maps to
-   the same market; mutable fields (status/vol/exp) self-refresh via the 5-min TTL. */
-function indexGet(){ var o=cacheGet(LS_MKT_IDX, CACHE_IDX_TTL); return o?{items:o.items||[], stale:!!o._stale, ts:o.ts}:null; }
+   the same market; mutable fields (status/vol/exp) self-refresh via the index TTL (default 30 min, user-set).
+   This is discovery/metadata only — a market runs for weeks, and its details/prices are always fetched fresh
+   on the market screen — so a long TTL is safe and cuts network use. */
+function mktTtl(){ try{ var v=parseInt(localStorage.getItem(LS_MKT_TTL),10); if(v>0) return v; }catch(e){} return DEFAULT_MKT_TTL; }
+function indexGet(){ var o=cacheGet(LS_MKT_IDX, mktTtl()); return o?{items:o.items||[], stale:!!o._stale, ts:o.ts}:null; }
 /* Merge fresh markets into the index by id, drop resolved/expired, cap size (newest-first). */
 function indexPut(list){
   var m={}; var prev=indexGet(); if(prev) prev.items.forEach(function(r){ m[r.id]=r; });
