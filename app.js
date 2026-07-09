@@ -251,7 +251,7 @@ function api(method){var a=Array.prototype.slice.call(arguments,1);
 // Canonicalize on the node MARKET id at ingestion (owner: "строить внутри по id рынка от ноды"). By-index
 // listings (list_markets_by_category/_by_creator/_by_oracle) carry the market id in `market`; `id` there is
 // the internal index-object id. Collapse id←market so the whole client builds/keys/finds markets by ONE id.
-var BYINDEX_RE=/^listMarketsBy(Category|Creator|Oracle)$/;
+var BYINDEX_RE=/^(listMarketsBy(Category|Creator|Oracle)|listMarketsAwaitingResolution)$/;
 function normApi(method,r){ if(BYINDEX_RE.test(method)&&Array.isArray(r)) r.forEach(function(m){ if(m&&typeof m.market==='number') m.id=m.market; }); return r; }
 function bc(method){var a=Array.prototype.slice.call(arguments,1);
   return new Promise(function(res,rej){ if(!viz.broadcast[method])return rej(new Error('broadcast.'+method+' not in this viz-js-lib build'));
@@ -2495,27 +2495,32 @@ async function screenOracle(){
       function(){ toast('ok',t('unban.done')); });
   };
   try{
-    // The node has no status-filtered oracle query, and markets awaiting resolution can sit deep in
-    // the index (the node lazily keeps them status=1 past betting close), so we page the full set
-    // (limit 1000/page) to reliably surface them. Only the actionable "awaiting" list is rendered in
-    // full; open/resolved are summarised (a 6k-card DOM would be unusable).
-    var PAGE=1000, all=[], from=0, guard=0;
-    while(guard++<30){
-      var chunk=await api('listMarketsByOracle', SESSION.account, from, PAGE);
-      if(!el('or-list')) return;                                   // navigated away mid-scan
-      chunk=chunk||[]; all=all.concat(chunk); from+=PAGE;
-      if(all.length>PAGE) el('or-list').innerHTML='<div class="empty"><span class="spin"></span> '+esc(t('or.scanning',{N:all.length}))+'</div>';
-      if(chunk.length<PAGE) break;
+    // Preferred path: the dedicated node query list_markets_awaiting_resolution (viz-js-lib ≥0.13.5 +
+    // a node exposing the API) returns exactly the markets needing THIS oracle's result — active
+    // markets whose betting window has closed but that aren't resolved yet — with no client-side
+    // full-scan. Fall back to paging the oracle's whole set on older nodes that lack the method
+    // (e.g. testnet before the plugin upgrade), keeping the console working either way.
+    var awaiting=null;
+    try{
+      awaiting=await api('listMarketsAwaitingResolution', SESSION.account, 0, 1000);
+      if(!el('or-list')) return;                                   // navigated away
+      if(!Array.isArray(awaiting)) awaiting=null;
+    }catch(e0){ awaiting=null; }                                   // node lacks the method → scan fallback
+    if(awaiting===null){
+      var PAGE=1000, all=[], from=0, guard=0;
+      while(guard++<30){
+        var chunk=await api('listMarketsByOracle', SESSION.account, from, PAGE);
+        if(!el('or-list')) return;                                 // navigated away mid-scan
+        chunk=chunk||[]; all=all.concat(chunk); from+=PAGE;
+        if(all.length>PAGE) el('or-list').innerHTML='<div class="empty"><span class="spin"></span> '+esc(t('or.scanning',{N:all.length}))+'</div>';
+        if(chunk.length<PAGE) break;
+      }
+      // status 2 = betting closed → awaiting; a status-1 market whose betting window already elapsed
+      // also awaits resolution (node lags the flip to 2). Those are the ones the oracle must act on.
+      var nowT=now();
+      awaiting=all.filter(function(m){ var st=marketStatus(m), be=assetTime(m.betting_expiration); return st===2 || (st===1 && be && be<=nowT); });
     }
-    if(!all.length){el('or-list').innerHTML='<div class="empty">'+esc(t('or.none'))+'</div>';return;}
-    // status 2 = betting closed → awaiting; a status-1 market whose betting window already elapsed
-    // also awaits resolution (node lags the flip to 2). Those are the ones the oracle must act on.
-    var nowT=now(), awaiting=[], open=0, other=0;
-    all.forEach(function(m){ var st=marketStatus(m), be=assetTime(m.betting_expiration);
-      if(st===2 || (st===1 && be && be<=nowT)) awaiting.push(m);
-      else if(st===0 || st===1) open++;
-      else other++;
-    });
+    awaiting=(awaiting||[]).slice();
     awaiting.sort(function(a,b){ return (assetTime(a.result_expiration)||0)-(assetTime(b.result_expiration)||0); }); // soonest deadline first
     var CAP=300, html='';
     if(awaiting.length){
@@ -2526,8 +2531,6 @@ async function screenOracle(){
     } else {
       html+='<div class="box info mb">'+esc(t('or.none_awaiting'))+'</div>';
     }
-    html+='<div class="section-title">'+esc(t('or.sec_open',{N:open}))+'</div>'+
-          '<div class="section-title">'+esc(t('or.sec_done',{N:other}))+'</div>';
     el('or-list').innerHTML=html;
   }catch(e){ el('or-list').innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
 }
