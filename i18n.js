@@ -64,6 +64,7 @@ var EN = {
   /* markets */
   'mk.title':'Markets','mk.f_all':'All','mk.f_active':'Active','mk.f_resolved':'Resolved','mk.f_closed':'Closed',
   'mk.all_cats':'All cats','mk.show_risky':'show risky / under-collateralized','mk.none':'No markets found.',
+  'mk.all_tags':'All tags','mk.none_tag':'No markets with this tag on this page.',
   /* market categories (canonical keys → localized labels; missing key ⇒ raw from node) */
   'cat.politics':'Politics','cat.geopolitics':'Geopolitics','cat.world':'World',
   'cat.crypto':'Crypto','cat.sports':'Sports','cat.esports':'Esports','cat.games':'Games',
@@ -179,6 +180,9 @@ var EN = {
 
   /* oracle screen */
   'or.title':'Oracle — my markets','or.none':'No markets assigned to you.',
+  'or.awaiting':'⏳ Awaiting your result ({N})','or.awaiting_hint':'Betting is closed on these — submit the outcome. Tap a market to resolve it.',
+  'or.none_awaiting':'Nothing awaits your result right now.','or.scanning':'Scanning your markets… {N}','or.more':'+{N} more not shown',
+  'or.sec_open':'Still open ({N})','or.sec_done':'Resolved / other ({N})',
 
   /* settings: jurisdiction + agreement */
   'set.title':'Settings',
@@ -372,6 +376,7 @@ var RU = {
 
   'mk.title':'Рынки','mk.f_all':'Все','mk.f_active':'Активные','mk.f_resolved':'Разрешённые','mk.f_closed':'Закрытые',
   'mk.all_cats':'Все категории','mk.show_risky':'показывать рискованные / недообеспеченные','mk.none':'Рынки не найдены.',
+  'mk.all_tags':'Все тэги','mk.none_tag':'Нет рынков с этим тэгом на этой странице.',
   /* категории рынков (канон-ключ → локализованная метка; нет ключа ⇒ показываем как прислала нода) */
   'cat.politics':'Политика','cat.geopolitics':'Геополитика','cat.world':'Мир',
   'cat.crypto':'Крипто','cat.sports':'Спорт','cat.esports':'Киберспорт','cat.games':'Игры',
@@ -479,6 +484,9 @@ var RU = {
   'pf.reveal_title':'Раскрыть скрытую ставку','pf.commit_id':'ID фиксации','pf.reveal_hint':'Рынок #{ID}, исход сохранён локально.',
 
   'or.title':'Оракул — мои рынки','or.none':'Вам не назначено рынков.',
+  'or.awaiting':'⏳ Ожидают вашего результата ({N})','or.awaiting_hint':'Ставки закрыты — подайте исход. Нажмите на рынок, чтобы разрешить его.',
+  'or.none_awaiting':'Сейчас ничего не ждёт вашего результата.','or.scanning':'Сканирую ваши рынки… {N}','or.more':'+{N} ещё не показаны',
+  'or.sec_open':'Ещё открыты ({N})','or.sec_done':'Разрешённые / прочие ({N})',
 
   'set.title':'Настройки',
   'set.jur_title':'Ваша юрисдикция',
@@ -668,6 +676,7 @@ var ZH = {
 
   'mk.title':'市场','mk.f_all':'全部','mk.f_active':'进行中','mk.f_resolved':'已裁决','mk.f_closed':'已关闭',
   'mk.all_cats':'全部分类','mk.show_risky':'显示高风险 / 抵押不足','mk.none':'未找到市场。',
+  'mk.all_tags':'全部标签','mk.none_tag':'本页没有带此标签的市场。',
   /* 市场分类（规范键 → 本地化标签；缺失时显示节点返回的原值） */
   'cat.politics':'政治','cat.geopolitics':'地缘政治','cat.world':'世界',
   'cat.crypto':'加密货币','cat.sports':'体育','cat.esports':'电竞','cat.games':'游戏',
@@ -775,6 +784,9 @@ var ZH = {
   'pf.reveal_title':'揭示隐藏下注','pf.commit_id':'提交 ID','pf.reveal_hint':'市场 #{ID}，结果已本地保存。',
 
   'or.title':'预言机 — 我的市场','or.none':'没有指派给你的市场。',
+  'or.awaiting':'⏳ 等待你裁决（{N}）','or.awaiting_hint':'这些市场投注已关闭 — 请提交结果。点击市场进行裁决。',
+  'or.none_awaiting':'目前没有等待你裁决的市场。','or.scanning':'正在扫描你的市场… {N}','or.more':'+{N} 未显示',
+  'or.sec_open':'仍开放（{N}）','or.sec_done':'已裁决 / 其他（{N}）',
 
   'set.title':'设置',
   'set.jur_title':'你的司法辖区',

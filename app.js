@@ -853,7 +853,31 @@ function screenUnlock(){
 /* ========================================================================= *
  *  SCREEN: Markets list + filters
  * ========================================================================= */
-var mkFilter={status:-1, showRisky:false, category:'', view:'hot', q:''}; // view: hot | all | feed | popular; q = local search
+var mkFilter={status:-1, showRisky:false, category:'', view:'hot', q:'', tag:''}; // view: hot | all | feed | popular; q = local search; tag = in-category tag filter
+// tags too broad to be useful as an in-category filter (the category itself, umbrella labels, source noise)
+var GENERIC_TAGS={sports:1,games:1,esports:1,gaming:1,all:1,crypto:1,politics:1,news:1,culture:1,business:1,economy:1,tech:1,science:1,world:1,other:1,general:1};
+/* Tags actually present on the loaded category's markets, ranked by frequency, rendered as clickable
+   chips so users can drill into a category (e.g. esports → Valorant / LoL / CS2). Only within a category. */
+function catTagBar(list){
+  if(mkFilter.category==='') return '';
+  var counts={}, order=[], catLow=String(mkFilter.category).toLowerCase();
+  list.forEach(function(m){ var tg=parseMeta(m).tags||m.tags||[]; if(typeof tg==='string') tg=tg.split(/[,;]+/);
+    (tg||[]).forEach(function(raw){ var s=String(raw).trim(); if(s.length<2) return;
+      if(/jurisdiction-ban:/i.test(s)||/^rewards\b/i.test(s)||/deprec/i.test(s)) return;  // internal / source-config noise
+      if(/^[\d.,\s]+$/.test(s)) return;                                 // reward-config number fragments ("4.5","50","100")
+      var low=s.toLowerCase(); if(low===catLow||GENERIC_TAGS[low]) return;
+      if(!counts[low]){ counts[low]={label:s,n:0}; order.push(low); } counts[low].n++;
+    });
+  });
+  order.sort(function(a,b){ return counts[b].n-counts[a].n; });
+  var top=order.slice(0,14);
+  if(!top.length && !mkFilter.tag) return '';
+  var chips='<button class="btn chip'+(!mkFilter.tag?' active':'')+'" data-tagf="">'+esc(t('mk.all_tags'))+'</button>';
+  top.forEach(function(low){ chips+='<button class="btn chip'+(mkFilter.tag===low?' active':'')+'" data-tagf="'+esc(low)+'">'+esc(counts[low].label)+' <span class="mut">'+counts[low].n+'</span></button>'; });
+  return '<div class="filters tagbar">'+chips+'</div>';
+}
+function marketHasTag(m,low){ var tg=parseMeta(m).tags||m.tags||[]; if(typeof tg==='string') tg=tg.split(/[,;]+/);
+  return (tg||[]).some(function(x){ return String(x).trim().toLowerCase()===low; }); }
 var actTab='history';           // current Activity sub-tab
 var ACT={loaded:false};          // per-visit cache of the user's positions/markets/disputes
 var histState={from:-1,done:false}; // account-history pagination cursor (from=-1 → newest)
@@ -950,13 +974,13 @@ async function screenMarkets(){
 
   $('#mk-views').addEventListener('click',function(e){
     if(e.target.closest('#mk-fav-edit')){ openFavModal(); return; }
-    var c=e.target.closest('[data-view]'); if(!c)return; mkFilter.view=c.getAttribute('data-view'); mkFilter.q=''; screenMarkets();
+    var c=e.target.closest('[data-view]'); if(!c)return; mkFilter.view=c.getAttribute('data-view'); mkFilter.q=''; mkFilter.tag=''; screenMarkets();
   });
   if(withCats){
     var qbox=el('mk-q');
     if(qbox) qbox.addEventListener('input', debounce(function(){ mkFilter.q=qbox.value.trim(); loadMarketList(); }, 200));
     if(mkFilter.view==='all'){
-      $('#mk-status').addEventListener('click',function(e){var c=e.target.closest('[data-v]');if(!c)return;mkFilter.status=Number(c.getAttribute('data-v'));screenMarkets();});
+      $('#mk-status').addEventListener('click',function(e){var c=e.target.closest('[data-v]');if(!c)return;mkFilter.status=Number(c.getAttribute('data-v'));mkFilter.tag='';screenMarkets();});
       el('mk-risky').onchange=function(){mkFilter.showRisky=this.checked;loadMarketList();};
     }
     ensureCategories().then(function(cats){
@@ -964,7 +988,7 @@ async function screenMarkets(){
       host.innerHTML=chip('',t('mk.all_cats'),mkFilter.category)+cats.map(function(c){
         return chip(String(catId(c)),(c.icon?c.icon+' ':'')+catName(c),mkFilter.category);
       }).join('');
-      host.addEventListener('click',function(e){var c=e.target.closest('[data-v]');if(!c)return;mkFilter.category=c.getAttribute('data-v');screenMarkets();});
+      host.addEventListener('click',function(e){var c=e.target.closest('[data-v]');if(!c)return;mkFilter.category=c.getAttribute('data-v');mkFilter.tag='';screenMarkets();});
     });
   }
   loadMarketList();
@@ -1047,7 +1071,12 @@ async function loadMarketList(){
     if(jur) list=list.filter(function(m){return !marketBannedIn(m,jur);}); // '' jur = show all
     try{ if(mkFilter.view==='hot'||mkFilter.view==='all'||mkFilter.view==='popular') indexPut(list); }catch(e){} // refresh discovery cache (never used for betting)
     if(!list.length){ host.innerHTML='<div class="empty">'+esc(t('mk.none'))+'</div>'; return; }
-    host.innerHTML=list.map(marketCard).join('');
+    var bar=catTagBar(list);                                          // in-category tag chips (from full category list)
+    var shown=mkFilter.tag ? list.filter(function(m){return marketHasTag(m,mkFilter.tag);}) : list;
+    host.innerHTML=bar+(shown.length?shown.map(marketCard).join(''):'<div class="empty">'+esc(t('mk.none_tag'))+'</div>');
+    Array.prototype.forEach.call(host.querySelectorAll('[data-tagf]'), function(b){       // wire tag chips (idempotent per render)
+      b.onclick=function(){ mkFilter.tag=b.getAttribute('data-tagf')||''; loadMarketList(); };
+    });
   }catch(e){ host.innerHTML='<div class="box err">'+esc(t('mk.load_failed',{E:errText(e)}))+'</div>'; }
 }
 /* "New & relevant" blend: normalize recency (market id) and activity (log volume), weight 0.55/0.45. */
@@ -2444,10 +2473,40 @@ async function screenOracle(){
       function(){ toast('ok',t('unban.done')); });
   };
   try{
-    var list=await api('listMarketsByOracle', SESSION.account, 0, 100);
-    list=list||[];
-    if(!list.length){el('or-list').innerHTML='<div class="empty">'+esc(t('or.none'))+'</div>';return;}
-    el('or-list').innerHTML=list.map(marketCard).join('');
+    // The node has no status-filtered oracle query, and markets awaiting resolution can sit deep in
+    // the index (the node lazily keeps them status=1 past betting close), so we page the full set
+    // (limit 1000/page) to reliably surface them. Only the actionable "awaiting" list is rendered in
+    // full; open/resolved are summarised (a 6k-card DOM would be unusable).
+    var PAGE=1000, all=[], from=0, guard=0;
+    while(guard++<30){
+      var chunk=await api('listMarketsByOracle', SESSION.account, from, PAGE);
+      if(!el('or-list')) return;                                   // navigated away mid-scan
+      chunk=chunk||[]; all=all.concat(chunk); from+=PAGE;
+      if(all.length>PAGE) el('or-list').innerHTML='<div class="empty"><span class="spin"></span> '+esc(t('or.scanning',{N:all.length}))+'</div>';
+      if(chunk.length<PAGE) break;
+    }
+    if(!all.length){el('or-list').innerHTML='<div class="empty">'+esc(t('or.none'))+'</div>';return;}
+    // status 2 = betting closed → awaiting; a status-1 market whose betting window already elapsed
+    // also awaits resolution (node lags the flip to 2). Those are the ones the oracle must act on.
+    var nowT=now(), awaiting=[], open=0, other=0;
+    all.forEach(function(m){ var st=marketStatus(m), be=assetTime(m.betting_expiration);
+      if(st===2 || (st===1 && be && be<=nowT)) awaiting.push(m);
+      else if(st===0 || st===1) open++;
+      else other++;
+    });
+    awaiting.sort(function(a,b){ return (assetTime(a.result_expiration)||0)-(assetTime(b.result_expiration)||0); }); // soonest deadline first
+    var CAP=300, html='';
+    if(awaiting.length){
+      html+='<div class="section-title">'+esc(t('or.awaiting',{N:awaiting.length}))+'</div>'+
+            '<div class="hint mb">'+esc(t('or.awaiting_hint'))+'</div>'+
+            awaiting.slice(0,CAP).map(marketCard).join('');
+      if(awaiting.length>CAP) html+='<div class="hint mb">'+esc(t('or.more',{N:awaiting.length-CAP}))+'</div>';
+    } else {
+      html+='<div class="box info mb">'+esc(t('or.none_awaiting'))+'</div>';
+    }
+    html+='<div class="section-title">'+esc(t('or.sec_open',{N:open}))+'</div>'+
+          '<div class="section-title">'+esc(t('or.sec_done',{N:other}))+'</div>';
+    el('or-list').innerHTML=html;
   }catch(e){ el('or-list').innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
 }
 

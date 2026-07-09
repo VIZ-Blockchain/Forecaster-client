@@ -51,6 +51,8 @@ small{font-size:.85em}
 #mk-list, #or-list{ display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:12px; align-items:start }
 #mk-list > .card, #or-list > .card{ margin-bottom:0 }
 #mk-list > .empty, #mk-list > .box, #or-list > .empty, #or-list > .box{ grid-column:1 / -1 }
+#or-list > .section-title, #or-list > .hint{ grid-column:1 / -1 }   /* section headers span the full grid row */
+#mk-list > .tagbar, #or-list > .box{ grid-column:1 / -1 }           /* in-category tag chips span the full grid row */
 /* Keep form fields readable inside wide cards on large screens */
 @media(min-width:1000px){
   .content input[type=text], .content input[type=number], .content input[type=url],
