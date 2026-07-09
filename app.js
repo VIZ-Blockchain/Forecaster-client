@@ -618,8 +618,9 @@ function route(){
   if(mktRefreshTimer){ clearTimeout(mktRefreshTimer); mktRefreshTimer=null; } // drop any pending market auto-reload
   touchSession();                              // navigation counts as activity → slide the auto-lock deadline
   var hash=location.hash||'#/markets';
-  var parts=hash.replace(/^#\//,'').split('/'); // e.g. ['market','12']
-  setActiveTab(hash);
+  var base=hash.split('?')[0];                   // strip query (markets filters live in the query string)
+  var parts=base.replace(/^#\//,'').split('/'); // e.g. ['market','12']
+  setActiveTab(base);
   var scr=parts[0]||'markets';
   try{
     if(scr==='markets') return screenMarkets();
@@ -878,6 +879,27 @@ function catTagBar(list){
 }
 function marketHasTag(m,low){ var tg=parseMeta(m).tags||m.tags||[]; if(typeof tg==='string') tg=tg.split(/[,;]+/);
   return (tg||[]).some(function(x){ return String(x).trim().toLowerCase()===low; }); }
+/* Markets browse state lives in the URL hash query so category/tag selections are deep-linkable &
+   shareable (owner request). #/markets?v=hot&c=<catId>&t=<tag>&s=<status>&q=<search>. Only non-default
+   keys are emitted; category/tag only make sense in the browsable views (hot/all). */
+function marketsHash(){
+  var browse=(mkFilter.view==='hot'||mkFilter.view==='all'), p=[];
+  if(mkFilter.view && mkFilter.view!=='hot') p.push('v='+encodeURIComponent(mkFilter.view));
+  if(browse && mkFilter.category!=='') p.push('c='+encodeURIComponent(mkFilter.category));
+  if(browse && mkFilter.category!=='' && mkFilter.tag) p.push('t='+encodeURIComponent(mkFilter.tag));
+  if(mkFilter.view==='all' && mkFilter.status!==-1) p.push('s='+encodeURIComponent(mkFilter.status));
+  if(mkFilter.q) p.push('q='+encodeURIComponent(mkFilter.q));
+  return '#/markets'+(p.length?'?'+p.join('&'):'');
+}
+function parseMarketsHash(){                       // hash is the source of truth for the markets screen
+  var h=location.hash||'', qi=h.indexOf('?'), g={};
+  if(qi>=0) h.slice(qi+1).split('&').forEach(function(kv){ var i=kv.indexOf('='); g[i<0?kv:kv.slice(0,i)]=i<0?'':decodeURIComponent(kv.slice(i+1)); });
+  mkFilter.view=g.v||'hot';
+  mkFilter.category=g.c||'';
+  mkFilter.tag=g.t||'';
+  mkFilter.status=(g.s!=null&&g.s!=='')?Number(g.s):-1;
+  mkFilter.q=g.q||'';
+}
 var actTab='history';           // current Activity sub-tab
 var ACT={loaded:false};          // per-visit cache of the user's positions/markets/disputes
 var histState={from:-1,done:false}; // account-history pagination cursor (from=-1 → newest)
@@ -947,7 +969,7 @@ function indexPut(list){
 function viewChip(v,label){ return '<button class="btn chip'+(mkFilter.view===v?' active':'')+'" data-view="'+v+'">'+esc(label)+'</button>'; }
 
 async function screenMarkets(){
-  if(!mkFilter.view) mkFilter.view='hot';
+  parseMarketsHash();                               // restore browse state (view/category/tag/status/q) from the URL
   var views='<div class="filters" id="mk-views">'+
     viewChip('hot',t('mk.view_hot'))+viewChip('all',t('mk.view_all'))+viewChip('feed',t('mk.view_feed'))+viewChip('popular',t('mk.view_popular'))+
     '<button class="btn chip" id="mk-fav-edit">'+esc(t('mk.edit_favorites'))+'</button></div>';
@@ -974,13 +996,13 @@ async function screenMarkets(){
 
   $('#mk-views').addEventListener('click',function(e){
     if(e.target.closest('#mk-fav-edit')){ openFavModal(); return; }
-    var c=e.target.closest('[data-view]'); if(!c)return; mkFilter.view=c.getAttribute('data-view'); mkFilter.q=''; mkFilter.tag=''; screenMarkets();
+    var c=e.target.closest('[data-view]'); if(!c)return; mkFilter.view=c.getAttribute('data-view'); mkFilter.q=''; mkFilter.tag=''; go(marketsHash());
   });
   if(withCats){
     var qbox=el('mk-q');
-    if(qbox) qbox.addEventListener('input', debounce(function(){ mkFilter.q=qbox.value.trim(); loadMarketList(); }, 200));
+    if(qbox) qbox.addEventListener('input', debounce(function(){ mkFilter.q=qbox.value.trim(); try{history.replaceState(null,'',marketsHash());}catch(e){} loadMarketList(); }, 200)); // quiet hash update keeps input focus
     if(mkFilter.view==='all'){
-      $('#mk-status').addEventListener('click',function(e){var c=e.target.closest('[data-v]');if(!c)return;mkFilter.status=Number(c.getAttribute('data-v'));mkFilter.tag='';screenMarkets();});
+      $('#mk-status').addEventListener('click',function(e){var c=e.target.closest('[data-v]');if(!c)return;mkFilter.status=Number(c.getAttribute('data-v'));mkFilter.tag='';go(marketsHash());});
       el('mk-risky').onchange=function(){mkFilter.showRisky=this.checked;loadMarketList();};
     }
     ensureCategories().then(function(cats){
@@ -988,7 +1010,7 @@ async function screenMarkets(){
       host.innerHTML=chip('',t('mk.all_cats'),mkFilter.category)+cats.map(function(c){
         return chip(String(catId(c)),(c.icon?c.icon+' ':'')+catName(c),mkFilter.category);
       }).join('');
-      host.addEventListener('click',function(e){var c=e.target.closest('[data-v]');if(!c)return;mkFilter.category=c.getAttribute('data-v');mkFilter.tag='';screenMarkets();});
+      host.addEventListener('click',function(e){var c=e.target.closest('[data-v]');if(!c)return;mkFilter.category=c.getAttribute('data-v');mkFilter.tag='';go(marketsHash());});
     });
   }
   loadMarketList();
@@ -1075,7 +1097,7 @@ async function loadMarketList(){
     var shown=mkFilter.tag ? list.filter(function(m){return marketHasTag(m,mkFilter.tag);}) : list;
     host.innerHTML=bar+(shown.length?shown.map(marketCard).join(''):'<div class="empty">'+esc(t('mk.none_tag'))+'</div>');
     Array.prototype.forEach.call(host.querySelectorAll('[data-tagf]'), function(b){       // wire tag chips (idempotent per render)
-      b.onclick=function(){ mkFilter.tag=b.getAttribute('data-tagf')||''; loadMarketList(); };
+      b.onclick=function(){ mkFilter.tag=b.getAttribute('data-tagf')||''; go(marketsHash()); };
     });
   }catch(e){ host.innerHTML='<div class="box err">'+esc(t('mk.load_failed',{E:errText(e)}))+'</div>'; }
 }
