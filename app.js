@@ -486,7 +486,12 @@ function marketAvatar(meta, m, size){ var img=metaImage(meta)||metaImage(m); siz
   var box='width:'+size+'px;height:'+size+'px;border-radius:10px;flex:0 0 auto;background:var(--card2,rgba(255,255,255,.04))';
   return img ? thumb(img, box+';object-fit:contain;display:block')
              : '<div style="'+box+';display:flex;align-items:center;justify-content:center;color:var(--mut,#8a93a6)">'+categoryIcon((meta&&meta.category)||(m&&m.category))+'</div>'; }
-function marketId(m){ return m.id!=null?m.id:(m.market_id!=null?m.market_id:m.market); }
+// By-index listings (list_markets_by_category / _by_creator / _by_oracle) return the MARKET id in
+// `market`, while `id` is the internal index-object id — using `id` there navigates to the wrong
+// market (esports card → soccer market). Prefer a numeric `market` when present; other shapes
+// (list_markets / get_market) have no `market` field, so fall through to `id`. Guard against the
+// detail wrapper where `market` is a nested object.
+function marketId(m){ if(m==null) return null; if(typeof m.market==='number') return m.market; return m.id!=null?m.id:(m.market_id!=null?m.market_id:m.market); }
 // title/image can live as flat fields on the node meta object (get_market_full.meta,
 // list_markets_by_category), or inside a metadata JSON blob — check both.
 function marketTitle(m){ var meta=parseMeta(m); return meta.title||m.title||meta.q||meta.question||meta.name||('Market #'+marketId(m)); }
