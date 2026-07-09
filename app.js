@@ -2616,39 +2616,46 @@ async function screenOracleProfile(owner){
     '<div id="orp-mk"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>';
     el('orp-body').innerHTML=body;
 
-    // Markets feed — incremental pagination (100/page + "load more"). The scoring card above already
-    // carries the true lifetime counts (accepted/resolved/…), so this is just a flat newest-first feed
-    // with a status badge on each card. No blocking full-scan of thousands (old v28 behaviour hung on
-    // big oracles: counter climbed to 6000+ and no cards painted until the whole set was fetched).
+    // Markets feed — NEWEST-first. list_markets_by_oracle pages ascending from market id 0, so to show
+    // the latest markets first (and walk deeper into history on "load more") we fetch the oracle's set
+    // once — fast even for thousands: the node streams 1000/page (~1s for 8k markets) — sort it
+    // id-descending, then reveal 100 at a time from memory. The scoring card above already carries the
+    // lifetime counts, so this stays a flat feed. (A server-side newest-first page would drop even the
+    // one-time fetch; worth adding node-side later if oracles grow much past ~10k live markets.)
     (function(){
-      var PAGE=100, from=0, done=false, busy=false, seen={};
-      el('orp-mk').innerHTML='<div id="orp-mk-list"></div><div id="orp-mk-more" class="mt"></div>';
-      async function loadNext(){
-        var listEl=el('orp-mk-list'), moreEl=el('orp-mk-more');
-        if(!listEl||!moreEl||done||busy) return; busy=true;
-        moreEl.innerHTML='<div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div>';
-        try{
-          var chunk=(await api('listMarketsByOracle', owner, from, PAGE))||[];
-          if(!el('orp-mk-list')) return;                              // navigated away mid-load
-          from+=PAGE;
-          chunk.sort(function(a,b){ return marketId(b)-marketId(a); });   // newest-first within the page
-          var html='';
-          chunk.forEach(function(x){ var id=marketId(x); if(id==null||seen[id]) return; seen[id]=1;
-            html+='<div class="card click card-dense" data-nav="#/market/'+id+'">'+
-              '<div class="card-q">'+esc(marketTitle(x))+'</div>'+
-              '<div class="mut" style="font-size:12px">'+statusBadge(x)+'</div></div>';
-          });
-          el('orp-mk-list').insertAdjacentHTML('beforeend', html);
-          if(chunk.length<PAGE){ done=true; el('orp-mk-more').innerHTML='';
-            if(!el('orp-mk-list').children.length) el('orp-mk').innerHTML='<div class="empty">'+esc(t('orp.no_markets'))+'</div>';
-          } else {
-            el('orp-mk-more').innerHTML='<button class="btn" id="orp-more-btn">'+esc(t('orp.load_more'))+'</button>';
-            el('orp-more-btn').onclick=loadNext;
-          }
-        }catch(e2){ if(el('orp-mk-more')) el('orp-mk-more').innerHTML='<div class="box err">'+esc(t('orp.markets_error'))+'</div>'; }
-        finally{ busy=false; }
+      var PAGE=100, all=null, shown=0;
+      function cardHtml(x){ var id=marketId(x);
+        return '<div class="card click card-dense" data-nav="#/market/'+id+'">'+
+          '<div class="card-q">'+esc(marketTitle(x))+'</div>'+
+          '<div class="mut" style="font-size:12px">'+statusBadge(x)+'</div></div>';
       }
-      loadNext();
+      function renderMore(){
+        var slice=all.slice(shown, shown+PAGE); shown+=slice.length;
+        el('orp-mk-list').insertAdjacentHTML('beforeend', slice.map(cardHtml).join(''));
+        if(shown>=all.length){ el('orp-mk-more').innerHTML=''; }
+        else { el('orp-mk-more').innerHTML='<button class="btn" id="orp-more-btn">'+esc(t('orp.load_more'))+'</button>'; el('orp-more-btn').onclick=renderMore; }
+      }
+      async function fetchAll(){
+        var acc=[], from=0, guard=0, seen={};
+        while(guard++<50){
+          var chunk=(await api('listMarketsByOracle', owner, from, 1000))||[];
+          if(!el('orp-mk')) return null;                              // navigated away mid-fetch
+          chunk.forEach(function(x){ var id=marketId(x); if(id!=null && !seen[id]){ seen[id]=1; acc.push(x); } });
+          from+=1000;
+          if(chunk.length<1000) break;
+        }
+        acc.sort(function(a,b){ return marketId(b)-marketId(a); });   // newest (highest id) first → "load more" digs older
+        return acc;
+      }
+      (async function(){
+        try{
+          all=await fetchAll();
+          if(all===null || !el('orp-mk')) return;                     // navigated away
+          if(!all.length){ el('orp-mk').innerHTML='<div class="empty">'+esc(t('orp.no_markets'))+'</div>'; return; }
+          el('orp-mk').innerHTML='<div id="orp-mk-list"></div><div id="orp-mk-more" class="mt"></div>';
+          renderMore();
+        }catch(e2){ if(el('orp-mk')) el('orp-mk').innerHTML='<div class="box err">'+esc(t('orp.markets_error'))+'</div>'; }
+      })();
     })();
   }catch(e){ el('orp-body').innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
 }
