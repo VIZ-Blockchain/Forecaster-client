@@ -228,11 +228,6 @@ function setNodeStatus(state,label){
 /* Show measured round-trip latency in the top bar; head block goes to the tooltip. */
 function applyStatus(latency, props){
   CHAIN_OK=true;
-  // Testnet replay / chain reset → head_block jumps backwards (normally only increases). Same chain_id can be
-  // reused, so this backwards jump is the reliable signal to drop stale market caches (ghost cards).
-  var head=props?Number(props.head_block_number)||0:0;
-  if(head && LAST_HEAD && head < LAST_HEAD-100){ purgeMarketCaches(); }
-  if(head) LAST_HEAD=head;
   setNodeStatus(latency>800?'syncing':'online', t('status.latency',{N:latency})); // >800ms → amber
   var s=el('node-status'); if(s && props) s.title=t('status.block',{N:props.head_block_number})+' · '+props.time+' UTC';
 }
@@ -513,10 +508,9 @@ function betOutcomeLabel(p, m){
   return idx===0?'Yes':(idx===1?'No':('#'+idx));
 }
 /* Fetch market titles for a set of ids (cached), for tables that only have ids. Returns {id:market}.
-   Chain-scoped: market ids are per-chain, so a node/chain switch must not reuse another chain's titles. */
-var MKT_CACHE={}, MKT_CACHE_KEY='', LAST_HEAD=0;
+   Keyed by market id — ids are stable/permanent on chain, so cached titles stay valid. */
+var MKT_CACHE={};
 async function marketsByIds(ids){
-  var ck=chainKey(); if(ck!==MKT_CACHE_KEY){ MKT_CACHE={}; MKT_CACHE_KEY=ck; }   // chain changed → drop stale titles
   var need=ids.filter(function(id){ return MKT_CACHE[id]===undefined; });
   if(need.length){ var got=await Promise.all(need.map(function(id){ return api('getMarket',id).catch(function(){return null;}); }));
     need.forEach(function(id,i){ MKT_CACHE[id]=got[i]||null; }); }
@@ -885,13 +879,9 @@ async function ensureCategories(fresh){
 /* Compact market index in LS: instant paint of the discovery feed + fast local search over known markets. */
 function idxRow(m){ return {id:marketId(m), title:marketTitle(m), cat:(parseMeta(m).category||''), sub:(parseMeta(m).subcategory||''),
   tags:(parseMeta(m).tags||m.tags||''), exp:assetTime(m.betting_expiration)||0, status:marketStatus(m), vol:volOf(m), upd:now()}; }
-/* Market caches are CHAIN-SCOPED: a different chain_id (or a testnet replay reusing ids) must never show
-   another chain's market by id ("ghost cards"). Persistent index is keyed by chain; caches are dropped when
-   the chain resets (head_block jumps backwards — see applyStatus). */
-function chainKey(){ var n=loadNode(); return (n&&n.chain_id) ? n.chain_id : ('ws:'+((n&&n.ws)||'')); }
-function idxKey(){ return LS_MKT_IDX + '::' + chainKey(); }
-function purgeMarketCaches(){ MKT_CACHE={}; MKT_CACHE_KEY=''; try{ localStorage.removeItem(idxKey()); }catch(e){} }
-function indexGet(){ var o=cacheGet(idxKey(), CACHE_IDX_TTL); return o?{items:o.items||[], stale:!!o._stale, ts:o.ts}:null; }
+/* Compact market index in LS, keyed by market id. Ids are stable/permanent on chain, so an id always maps to
+   the same market; mutable fields (status/vol/exp) self-refresh via the 5-min TTL. */
+function indexGet(){ var o=cacheGet(LS_MKT_IDX, CACHE_IDX_TTL); return o?{items:o.items||[], stale:!!o._stale, ts:o.ts}:null; }
 /* Merge fresh markets into the index by id, drop resolved/expired, cap size (newest-first). */
 function indexPut(list){
   var m={}; var prev=indexGet(); if(prev) prev.items.forEach(function(r){ m[r.id]=r; });
@@ -899,7 +889,7 @@ function indexPut(list){
   var items=Object.keys(m).map(function(k){return m[k];})
     .filter(function(r){ return r.status<3 && (!r.exp || r.exp>now()-86400); }) // keep active/closed & recently-live
     .sort(function(a,b){ return b.id-a.id; }).slice(0, CACHE_IDX_CAP);
-  cacheSet(idxKey(),{items:items});
+  cacheSet(LS_MKT_IDX,{items:items});
   return items;
 }
 function viewChip(v,label){ return '<button class="btn chip'+(mkFilter.view===v?' active':'')+'" data-view="'+v+'">'+esc(label)+'</button>'; }
@@ -2637,7 +2627,7 @@ if('serviceWorker' in navigator && location.protocol!=='file:'){
 
 async function boot(){
   if(typeof viz==='undefined'){ return bootFailed(t('boot.viz_missing')); }
-  try{ localStorage.removeItem(LS_MKT_IDX); }catch(e){}          // drop legacy non-chain-scoped index (migrated to per-chain keys)
+  try{ Object.keys(localStorage).forEach(function(k){ if(k.indexOf(LS_MKT_IDX+'::')===0) localStorage.removeItem(k); }); }catch(e){}  // drop orphaned v20 chain-scoped index keys (reverted to plain id-keyed)
   applyNode();
   restoreUnlocked();                                          // this tab's remembered session (survives reload)
   if(!isUnlocked() && BC && hasVault()){                      // ask other open tabs to share their unlock
