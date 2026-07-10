@@ -854,7 +854,7 @@ function screenUnlock(){
 /* ========================================================================= *
  *  SCREEN: Markets list + filters
  * ========================================================================= */
-var mkFilter={status:-1, showRisky:false, category:'', view:'hot', q:'', tag:''}; // view: hot | all | feed | popular; q = local search; tag = in-category tag filter
+var mkFilter={status:1, showRisky:false, category:'', view:'hot', q:'', tag:''}; // status default 1=active (UX: land on markets you can bet on); view: hot | all | feed | popular; q = local search; tag = in-category tag filter
 // tags too broad to be useful as an in-category filter (the category itself, umbrella labels, source noise)
 var GENERIC_TAGS={sports:1,games:1,esports:1,gaming:1,all:1,crypto:1,politics:1,news:1,culture:1,business:1,economy:1,tech:1,science:1,world:1,other:1,general:1};
 /* Tags actually present on the loaded category's markets, ranked by frequency, rendered as clickable
@@ -887,7 +887,7 @@ function marketsHash(){
   if(mkFilter.view && mkFilter.view!=='hot') p.push('v='+encodeURIComponent(mkFilter.view));
   if(browse && mkFilter.category!=='') p.push('c='+encodeURIComponent(mkFilter.category));
   if(browse && mkFilter.category!=='' && mkFilter.tag) p.push('t='+encodeURIComponent(mkFilter.tag));
-  if(mkFilter.view==='all' && mkFilter.status!==-1) p.push('s='+encodeURIComponent(mkFilter.status));
+  if(mkFilter.view==='all' && mkFilter.status!==1) p.push('s='+encodeURIComponent(mkFilter.status)); // 1=active is default → clean URL; s=-1 encodes "All"
   if(mkFilter.q) p.push('q='+encodeURIComponent(mkFilter.q));
   return '#/markets'+(p.length?'?'+p.join('&'):'');
 }
@@ -897,7 +897,7 @@ function parseMarketsHash(){                       // hash is the source of trut
   mkFilter.view=g.v||'hot';
   mkFilter.category=g.c||'';
   mkFilter.tag=g.t||'';
-  mkFilter.status=(g.s!=null&&g.s!=='')?Number(g.s):-1;
+  mkFilter.status=(g.s!=null&&g.s!=='')?Number(g.s):1;
   mkFilter.q=g.q||'';
 }
 var actTab='history';           // current Activity sub-tab
@@ -981,8 +981,8 @@ async function screenMarkets(){
   if(mkFilter.view==='hot'){
     filters+='<div class="hint">'+esc(t('mk.hot_hint'))+'</div><div class="filters" id="mk-cats"></div>';
   } else if(mkFilter.view==='all'){
-    filters+='<div class="filters" id="mk-status">'+chip('-1',t('mk.f_all'),mkFilter.status)+chip('1',t('mk.f_active'),mkFilter.status)+
-      chip('3',t('mk.f_resolved'),mkFilter.status)+chip('2',t('mk.f_closed'),mkFilter.status)+'</div>'+
+    filters+='<div class="filters" id="mk-status">'+chip('1',t('mk.f_active'),mkFilter.status)+
+      chip('3',t('mk.f_resolved'),mkFilter.status)+chip('2',t('mk.f_closed'),mkFilter.status)+chip('-1',t('mk.f_all'),mkFilter.status)+'</div>'+
       '<div class="filters" id="mk-cats"></div>'+
       '<label class="lab" style="margin-top:0"><input type="checkbox" id="mk-risky" '+(mkFilter.showRisky?'checked':'')+'> '+esc(t('mk.show_risky'))+'</label>';
   } else if(mkFilter.view==='feed'){
@@ -1088,6 +1088,7 @@ async function loadMarketList(){
         list=await api('listMarkets', mkFilter.status, 0, 50, !!mkFilter.showRisky);
       }
       list=list||[];
+      list.sort(function(a,b){ return marketId(b)-marketId(a); }); // newest first (higher id = newer) — covers single-status path too
       if(mkFilter.category!=='' && mkFilter.status!==-1) list=list.filter(function(m){return marketStatus(m)===mkFilter.status;});
     }
     if(jur) list=list.filter(function(m){return !marketBannedIn(m,jur);}); // '' jur = show all
