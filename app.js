@@ -855,6 +855,7 @@ function screenUnlock(){
  *  SCREEN: Markets list + filters
  * ========================================================================= */
 var mkFilter={status:1, showRisky:false, category:'', view:'hot', q:'', tag:''}; // status default 1=active (UX: land on markets you can bet on); view: hot | all | feed | popular; q = local search; tag = in-category tag filter
+var MK_PAGE=50, mkShownLimit=MK_PAGE; // paginated views (category / all-status) grow this on "load more"
 // tags too broad to be useful as an in-category filter (the category itself, umbrella labels, source noise)
 var GENERIC_TAGS={sports:1,games:1,esports:1,gaming:1,all:1,crypto:1,politics:1,news:1,culture:1,business:1,economy:1,tech:1,science:1,world:1,other:1,general:1};
 /* Tags actually present on the loaded category's markets, ranked by frequency, rendered as clickable
@@ -970,6 +971,7 @@ function viewChip(v,label){ return '<button class="btn chip'+(mkFilter.view===v?
 
 async function screenMarkets(){
   parseMarketsHash();                               // restore browse state (view/category/tag/status/q) from the URL
+  mkShownLimit=MK_PAGE;                             // reset pagination window on any filter/nav change
   var views='<div class="filters" id="mk-views">'+
     viewChip('hot',t('mk.view_hot'))+viewChip('all',t('mk.view_all'))+viewChip('feed',t('mk.view_feed'))+viewChip('popular',t('mk.view_popular'))+
     '<button class="btn chip" id="mk-fav-edit">'+esc(t('mk.edit_favorites'))+'</button></div>';
@@ -1000,7 +1002,7 @@ async function screenMarkets(){
   });
   if(withCats){
     var qbox=el('mk-q');
-    if(qbox) qbox.addEventListener('input', debounce(function(){ mkFilter.q=qbox.value.trim(); try{history.replaceState(null,'',marketsHash());}catch(e){} loadMarketList(); }, 200)); // quiet hash update keeps input focus
+    if(qbox) qbox.addEventListener('input', debounce(function(){ mkFilter.q=qbox.value.trim(); mkShownLimit=MK_PAGE; try{history.replaceState(null,'',marketsHash());}catch(e){} loadMarketList(); }, 200)); // quiet hash update keeps input focus
     if(mkFilter.view==='all'){
       $('#mk-status').addEventListener('click',function(e){var c=e.target.closest('[data-v]');if(!c)return;mkFilter.status=Number(c.getAttribute('data-v'));mkFilter.tag='';go(marketsHash());});
       el('mk-risky').onchange=function(){mkFilter.showRisky=this.checked;loadMarketList();};
@@ -1056,9 +1058,9 @@ async function loadMarketList(){
     if(mkFilter.view==='hot'){
       // "New & relevant first" — client-side blend (option A): active, non-expired markets ranked by recency×activity.
       if(mkFilter.category!==''){
-        list=(await api('listMarketsByCategory', mkFilter.category, 0, 50, jur||'', '', '', 'newest'))||[];
+        list=(await api('listMarketsByCategory', mkFilter.category, 0, mkShownLimit, jur||'', '', '', 'newest'))||[];
       } else {
-        list=(await api('listMarkets', 1, 0, 100, !!mkFilter.showRisky))||[];
+        list=(await api('listMarkets', 1, 0, 100, !!mkFilter.showRisky, 'newest'))||[]; // newest active window, then blended by rankHot
         list=list.filter(function(m){ var e=assetTime(m.betting_expiration); return marketStatus(m)===1 && (!e||e>now()); }); // active & still bettable
         list=rankHot(list);
       }
@@ -1073,33 +1075,39 @@ async function loadMarketList(){
       list.sort(function(a,b){ return marketId(b)-marketId(a); }); // newest first (higher id = newer)
     } else if(mkFilter.view==='popular'){
       // popularity = total tokens locked by bettors → sort active markets by volume desc
-      list=(await api('listMarkets', 1, 0, 100, !!mkFilter.showRisky))||[];
+      list=(await api('listMarkets', 1, 0, 100, !!mkFilter.showRisky, 'newest'))||[];
       list.sort(function(a,b){ return (volOf(b)-volOf(a)) || (marketId(b)-marketId(a)); });
     } else {
       if(mkFilter.category!==''){
-        list=await api('listMarketsByCategory', mkFilter.category, 0, 50, jur||'', '', '', 'newest');
+        list=await api('listMarketsByCategory', mkFilter.category, 0, mkShownLimit, jur||'', '', '', 'newest');
       } else if(mkFilter.status===-1){
         // node list_markets keys on an EXACT status; -1 is not "all" → aggregate real statuses
         var STS=[1,2,3,0]; // active, closed, resolved, waiting
-        var parts=await Promise.all(STS.map(function(s){ return api('listMarkets', s, 0, 50, !!mkFilter.showRisky).catch(function(){return [];}); }));
+        var parts=await Promise.all(STS.map(function(s){ return api('listMarkets', s, 0, mkShownLimit, !!mkFilter.showRisky, 'newest').catch(function(){return [];}); }));
         list=dedupeMarkets([].concat.apply([], parts));
         list.sort(function(a,b){ return marketId(b)-marketId(a); }); // newest first
       } else {
-        list=await api('listMarkets', mkFilter.status, 0, 50, !!mkFilter.showRisky);
+        list=await api('listMarkets', mkFilter.status, 0, mkShownLimit, !!mkFilter.showRisky, 'newest');
       }
       list=list||[];
       list.sort(function(a,b){ return marketId(b)-marketId(a); }); // newest first (higher id = newer) — covers single-status path too
       if(mkFilter.category!=='' && mkFilter.status!==-1) list=list.filter(function(m){return marketStatus(m)===mkFilter.status;});
     }
+    // Paginated views (category browse, or All-view single status) fetch `mkShownLimit` rows; a full
+    // page means the node likely has more → offer "load more" (grows the window, refetches from 0).
+    var paginated=(mkFilter.category!=='')||(mkFilter.view==='all'&&mkFilter.status!==-1);
+    var rawLen=list.length;                                          // fetched count, before jur/tag filtering
     if(jur) list=list.filter(function(m){return !marketBannedIn(m,jur);}); // '' jur = show all
     try{ if(mkFilter.view==='hot'||mkFilter.view==='all'||mkFilter.view==='popular') indexPut(list); }catch(e){} // refresh discovery cache (never used for betting)
     if(!list.length){ host.innerHTML='<div class="empty">'+esc(t('mk.none'))+'</div>'; return; }
     var bar=catTagBar(list);                                          // in-category tag chips (from full category list)
     var shown=mkFilter.tag ? list.filter(function(m){return marketHasTag(m,mkFilter.tag);}) : list;
-    host.innerHTML=bar+(shown.length?shown.map(marketCard).join(''):'<div class="empty">'+esc(t('mk.none_tag'))+'</div>');
+    var more=(paginated && rawLen>=mkShownLimit && !mkFilter.tag) ? '<div class="mt" style="text-align:center"><button class="btn" id="mk-more-btn">'+esc(t('common.load_more'))+'</button></div>' : '';
+    host.innerHTML=bar+(shown.length?shown.map(marketCard).join(''):'<div class="empty">'+esc(t('mk.none_tag'))+'</div>')+more;
     Array.prototype.forEach.call(host.querySelectorAll('[data-tagf]'), function(b){       // wire tag chips (idempotent per render)
       b.onclick=function(){ mkFilter.tag=b.getAttribute('data-tagf')||''; go(marketsHash()); };
     });
+    var moreBtn=el('mk-more-btn'); if(moreBtn) moreBtn.onclick=function(){ mkShownLimit+=MK_PAGE; loadMarketList(); };
   }catch(e){ host.innerHTML='<div class="box err">'+esc(t('mk.load_failed',{E:errText(e)}))+'</div>'; }
 }
 /* "New & relevant" blend: normalize recency (market id) and activity (log volume), weight 0.55/0.45. */
@@ -2285,7 +2293,7 @@ async function renderAllDisputes(box){
   var mine={};
   if(isUnlocked()){ try{ await ensureMy(); ACT.ids.forEach(function(id){mine[id]=1;}); }catch(e){} }
   var markets=[], statuses=[3,2];
-  for(var si=0; si<statuses.length; si++){ try{ var l=await api('listMarkets', statuses[si], 0, 40, true); (l||[]).forEach(function(m){markets.push(m);}); }catch(e){} }
+  for(var si=0; si<statuses.length; si++){ try{ var l=await api('listMarkets', statuses[si], 0, 40, true, 'newest'); (l||[]).forEach(function(m){markets.push(m);}); }catch(e){} }
   var seen={}, uniq=[]; markets.forEach(function(m){ var id=marketId(m); if(id!=null && !seen[id]){ seen[id]=1; uniq.push(m); } });
   var checked=await Promise.all(uniq.map(function(m){ return api('getDispute', marketId(m)).then(function(d){return {m:m,d:d};}).catch(function(){return null;}); }));
   var open=checked.filter(function(r){ return r && disputeOpen(r.d); });
