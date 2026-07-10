@@ -1149,7 +1149,14 @@ async function screenMarket(id){
   catch(e){ try{ full=await api('getMarket', id); }catch(e2){ setContent('<div class="box err">'+esc(errText(e2))+'</div>');return; } }
   try{ dispute=await api('getDispute', id); }catch(e){}
   // merge the node meta object (full.meta: title/image/category/…) over any metadata blob
-  var m=full.market||full; var meta=Object.assign({}, parseMeta(m), full.meta||{}); var ocs=marketOutcomes(m);
+  var m=full.market||full; var meta=Object.assign({}, parseMeta(m), full.meta||{});
+  // Real outcome labels live in full.outcomes (pm_outcome objects), NOT on the market object — attach
+  // them so the page shows the true labels ("Over 2.5 / Under 2.5", candidate names, …) instead of the
+  // Yes/No fallback. Every consumer here reads them via marketOutcomes(m) → m.outcome_names.
+  if(Array.isArray(full.outcomes) && full.outcomes.length){
+    m.outcome_names=full.outcomes.slice().sort(function(a,b){return (Number(a.outcome_index)||0)-(Number(b.outcome_index)||0);}).map(function(o){return o.label||o.name||o.title||String(o);});
+  }
+  var ocs=marketOutcomes(m);
   var status=marketStatus(m); var isMulti=Number(m.market_type)===1;
   var mine=full.account||full.positions||full.bets; // best-effort account section
   var isOracle=SESSION && m.oracle===SESSION.account;
@@ -1175,7 +1182,7 @@ async function screenMarket(id){
   if(status===0){ var _ad=assetTime(m.accept_deadline);
     if(_ad>0) html+='<div class="box '+(_ad>now()?'warn':'err')+'">'+esc(t('md.accept_by',{T:tsToLocal(_ad), IN:fmtIn(_ad)}))+'</div>'; }
 
-  if(meta.description) html+='<div class="card">'+esc(meta.description)+'</div>';
+  if(meta.description) html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('md.rules'))+'</div>'+esc(meta.description)+'</div>';
 
   // Outcomes + implied prices (best-effort)
   html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('md.outcomes'))+'</div>';
@@ -1201,7 +1208,6 @@ async function screenMarket(id){
     (m.volume!=null?kv(t('md.volume'), fmtViz(m.volume)):'')+
     (meta.jurisdiction?kv(t('md.jurisdiction'), meta.jurisdiction):'')+
     '<div id="mkt-lazy-alloc"></div>'+   // getMarketLazyAllocation
-    (meta.description?('<div class="kv"><b>'+esc(t('md.rules'))+'</b><span>'+esc(meta.description)+'</span></div>'):'')+
     (meta.rules_url||m.url?('<div class="kv"><b>'+esc(t(meta.description?'md.source':'md.rules'))+'</b><a href="'+esc(meta.rules_url||m.url)+'" target="_blank">'+esc(t('md.open_ext'))+'</a></div>'):'')+
     rawBlock(full)+
   '</div>';
