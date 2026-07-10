@@ -74,6 +74,7 @@ function toAsset(v){return (Number(v)||0).toFixed(3)+' VIZ';}
 function toBP(pct){return Math.round((Number(pct)||0)*100);}      // percent -> basis points (ALL PM fees + vote weights; 10000=100%)
 function fromBP(bp){return (Number(bp)||0)/100;}                  // basis points -> percent
 function fmtVizParam(v){ if(v==null)return '—'; return fmtViz(v); }   // Ƶ display (handles asset strings + raw shares)
+function fmtFundingRate(ppm){ var n=Number(ppm)||0; return (n/10000).toLocaleString(undefined,{maximumFractionDigits:4})+'%'; } // ppm/day → %/day (50 ppm = 0.005%)
 function shortKey(k){k=String(k||'');return k.length>14?k.slice(0,7)+'…'+k.slice(-5):k;}
 function tsToLocal(t){t=Number(t);if(!t)return '—';return new Date(t*1000).toLocaleString();}
 function toEpoch(localValue){ if(!localValue) return 0; var d=new Date(localValue); return Math.floor(d.getTime()/1000); }
@@ -1654,8 +1655,10 @@ function leverageOff(p){ return !!(p && p.pm_leverage_enabled===false); }
 /* ---- Leverage: open + list my positions + close/convert (all high-risk) ---- */
 async function loadLeverage(id, ocs, isMulti){
   var box=el('lev-box'); if(!box)return;
-  if(leverageOff(await pmProps())){ var card=box.closest('.card'); if(card) card.remove(); return; } // chain-off → hide the whole card
-  var html='<div class="box err">'+esc(t('lev.risk_notice'))+'</div>';
+  var props=await pmProps();
+  if(leverageOff(props)){ var card=box.closest('.card'); if(card) card.remove(); return; } // chain-off → hide the whole card
+  var html='<div class="box err">'+esc(t('lev.risk_notice'))+'</div>'+
+    '<div class="hint">'+esc(t('lev.funding_note',{R:fmtFundingRate(props.pm_leverage_funding_rate_ppm_per_day)}))+'</div>';
   if(isUnlocked()){
     html+='<div class="field"><label class="lab">'+esc(t('md.outcome'))+'</label><select id="lv-oc">'+
       ocs.map(function(n,i){return '<option value="'+i+'">'+esc(n)+'</option>';}).join('')+'</select></div>'+
@@ -1699,11 +1702,11 @@ async function loadMyLeverage(id, ocs){
     var rows=mine.map(function(p){
       var pid=p.id!=null?p.id:p.position_id;
       var oc=ocs[p.outcome_index]!=null?ocs[p.outcome_index]:('#'+p.outcome_index);
-      return '<tr><td>#'+esc(pid)+'</td><td>'+esc(oc)+'</td><td>'+fmtViz(p.collateral||0)+'</td><td>'+fmtViz(p.loan||0)+'</td>'+
+      return '<tr><td>#'+esc(pid)+'</td><td>'+esc(oc)+'</td><td>'+fmtViz(p.collateral||0)+'</td><td>'+fmtViz(p.loan||0)+'</td><td>'+fmtViz(p.funding_paid||0)+'</td>'+
         '<td><button class="btn small" data-lc="'+esc(pid)+'">'+esc(t('lev.close'))+'</button> '+
         '<button class="btn small ghost" data-lcv="'+esc(pid)+'">'+esc(t('lev.convert'))+'</button></td></tr>';
     }).join('');
-    box.innerHTML='<table class="tbl"><tr><th>'+esc(t('lev.col_id'))+'</th><th>'+esc(t('act.col_outcome'))+'</th><th>'+esc(t('lev.col_collateral'))+'</th><th>'+esc(t('lev.col_loan'))+'</th><th></th></tr>'+rows+'</table>';
+    box.innerHTML='<table class="tbl"><tr><th>'+esc(t('lev.col_id'))+'</th><th>'+esc(t('act.col_outcome'))+'</th><th>'+esc(t('lev.col_collateral'))+'</th><th>'+esc(t('lev.col_loan'))+'</th><th>'+esc(t('lev.col_funding'))+'</th><th></th></tr>'+rows+'</table>';
     $all('[data-lc]',box).forEach(function(b){ b.onclick=function(){ leverageClose(id, b.getAttribute('data-lc')); }; });
     $all('[data-lcv]',box).forEach(function(b){ b.onclick=function(){ leverageConvert(id, b.getAttribute('data-lcv')); }; });
   }catch(e){ box.innerHTML='<div class="mut">'+esc(t('lev.none_mine'))+'</div>'; }
@@ -1764,12 +1767,12 @@ async function screenLeverage(){
       var oc=ocs[p.outcome_index]!=null?ocs[p.outcome_index]:('#'+p.outcome_index);
       var pid=p.id!=null?p.id:p.position_id;
       return '<tr><td><a data-nav="#/market/'+mid+'">#'+mid+'</a></td><td>'+esc(oc)+'</td>'+
-        '<td>'+fmtViz(p.collateral||0)+'</td><td>'+fmtViz(p.loan||0)+'</td>'+
+        '<td>'+fmtViz(p.collateral||0)+'</td><td>'+fmtViz(p.loan||0)+'</td><td>'+fmtViz(p.funding_paid||0)+'</td>'+
         '<td><button class="btn small" data-lc="'+esc(pid)+'" data-m="'+mid+'">'+esc(t('lev.close'))+'</button> '+
         '<button class="btn small ghost" data-lcv="'+esc(pid)+'" data-m="'+mid+'">'+esc(t('lev.convert'))+'</button></td></tr>';
     }).join('');
     el('lev-all').innerHTML='<div class="card"><table class="tbl"><tr><th>'+esc(t('pf.col_market'))+'</th><th>'+esc(t('act.col_outcome'))+'</th>'+
-      '<th>'+esc(t('lev.col_collateral'))+'</th><th>'+esc(t('lev.col_loan'))+'</th><th></th></tr>'+rows+'</table></div>';
+      '<th>'+esc(t('lev.col_collateral'))+'</th><th>'+esc(t('lev.col_loan'))+'</th><th>'+esc(t('lev.col_funding'))+'</th><th></th></tr>'+rows+'</table></div>';
     $all('[data-lc]',el('lev-all')).forEach(function(b){ b.onclick=function(){ leverageClose(Number(b.getAttribute('data-m')), b.getAttribute('data-lc'), screenLeverage); }; });
     $all('[data-lcv]',el('lev-all')).forEach(function(b){ b.onclick=function(){ leverageConvert(Number(b.getAttribute('data-m')), b.getAttribute('data-lcv'), screenLeverage); }; });
   }catch(e){ el('lev-all').innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
