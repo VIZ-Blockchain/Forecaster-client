@@ -1201,7 +1201,8 @@ async function screenMarket(id){
     (m.volume!=null?kv(t('md.volume'), fmtViz(m.volume)):'')+
     (meta.jurisdiction?kv(t('md.jurisdiction'), meta.jurisdiction):'')+
     '<div id="mkt-lazy-alloc"></div>'+   // getMarketLazyAllocation
-    (meta.rules_url||m.url?('<div class="kv"><b>'+esc(t('md.rules'))+'</b><a href="'+esc(meta.rules_url||m.url)+'" target="_blank">'+esc(t('md.open_ext'))+'</a></div>'):'')+
+    (meta.description?('<div class="kv"><b>'+esc(t('md.rules'))+'</b><span>'+esc(meta.description)+'</span></div>'):'')+
+    (meta.rules_url||m.url?('<div class="kv"><b>'+esc(t(meta.description?'md.source':'md.rules'))+'</b><a href="'+esc(meta.rules_url||m.url)+'" target="_blank">'+esc(t('md.open_ext'))+'</a></div>'):'')+
     rawBlock(full)+
   '</div>';
 
