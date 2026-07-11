@@ -80,6 +80,9 @@ small{font-size:.85em}
 .obar-lab{font-weight:700; font-size:12px; white-space:nowrap}
 .obar-track{display:flex; background:var(--card2,rgba(255,255,255,.06))}
 .obar-track > i{display:block; height:100%}
+/* tag-chip count — separated pill with a soft translucent bg for contrast (not glued to the label) */
+.chip-n{display:inline-block; margin-left:7px; padding:1px 7px; border-radius:9px; background:rgba(130,145,165,.20); color:var(--mut,#8a93a6); font-size:11px; font-weight:700; line-height:15px; vertical-align:middle}
+.chip.active .chip-n{background:rgba(255,255,255,.24); color:inherit}
 .perr-bar{position:fixed; left:0; right:0; bottom:0; z-index:200; background:var(--bad); color:#fff; box-shadow:0 -2px 12px rgba(0,0,0,.18)}
 .perr-in{max-width:var(--app-maxw); margin:0 auto; padding:10px 16px; display:flex; align-items:flex-start; gap:10px; font-size:13px; line-height:1.4}
 .perr-in span{flex:1; word-break:break-word}

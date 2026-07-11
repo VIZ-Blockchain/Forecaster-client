@@ -970,6 +970,36 @@ async function appendMoreMarkets(){
    sit buried under dozens of prop markets (Total Kills, First Blood, …). Stable for equal keys. */
 var MONEYLINE_RE=/\bwinner\b|moneyline|\bto win\b|match result|match winner/i;
 function moneylineFirst(list){ return list.slice().sort(function(a,b){ return (MONEYLINE_RE.test(marketTitle(b))?1:0)-(MONEYLINE_RE.test(marketTitle(a))?1:0); }); }
+/* Raw JSON-RPC to the configured node — for methods the vendored viz.min.js doesn't expose yet. */
+function rawNodeCall(apiName, method, params){
+  return fetch(loadNode().ws, {method:'POST', headers:{'content-type':'application/json'},
+    body:JSON.stringify({id:1, jsonrpc:'2.0', method:'call', params:[apiName, method, params||[]]})})
+    .then(function(r){ return r.json(); })
+    .then(function(j){ if(j&&j.error) throw new Error((j.error&&j.error.message)||'rpc error'); return j?j.result:null; });
+}
+/* Authoritative per-category tag counts (get_category_tag_counts, node pm-branch). Cached per category.
+   Returns {tagLower: count} or null if the node predates the method (then chips keep the page-window
+   count). This makes the tag-chip number STABLE — the same whether or not the tag is selected
+   (before this, it was counted from the loaded page → jumped, e.g. "1" then "540"). */
+var CAT_TAG_COUNTS={};
+function ensureCatTagCounts(cat){
+  if(CAT_TAG_COUNTS[cat]!==undefined) return Promise.resolve(CAT_TAG_COUNTS[cat]);
+  return rawNodeCall('prediction_market_api','get_category_tag_counts',[cat]).then(function(res){
+    var arr=(res&&res.hot_tags)||[], map={};
+    arr.forEach(function(x){ if(x&&x.tag!=null) map[String(x.tag).toLowerCase()]=Number(x.count)||0; });
+    CAT_TAG_COUNTS[cat]=map; return map;
+  }).catch(function(){ CAT_TAG_COUNTS[cat]=null; return null; });
+}
+/* Patch rendered tag-chip pills with authoritative counts once they arrive (no-op on old nodes). */
+function patchTagCounts(host){
+  if(!host || mkFilter.category==='') return;
+  ensureCatTagCounts(mkFilter.category).then(function(map){
+    if(!map) return;
+    Array.prototype.forEach.call(host.querySelectorAll('.chip-n[data-tagn]'), function(sp){
+      var n=map[sp.getAttribute('data-tagn')]; if(n!=null) sp.textContent=n;
+    });
+  }).catch(function(){});
+}
 // tags too broad to be useful as an in-category filter (the category itself, umbrella labels, source noise)
 var GENERIC_TAGS={sports:1,games:1,esports:1,gaming:1,all:1,crypto:1,politics:1,news:1,culture:1,business:1,economy:1,tech:1,science:1,world:1,other:1,general:1};
 /* Tags actually present on the loaded category's markets, ranked by frequency, rendered as clickable
@@ -989,7 +1019,9 @@ function catTagBar(list){
   var top=order.slice(0,14);
   if(!top.length && !mkFilter.tag) return '';
   var chips='<button class="btn chip'+(!mkFilter.tag?' active':'')+'" data-tagf="">'+esc(t('mk.all_tags'))+'</button>';
-  top.forEach(function(low){ chips+='<button class="btn chip'+(mkFilter.tag===low?' active':'')+'" data-tagf="'+esc(low)+'">'+esc(counts[low].label)+' <span class="mut">'+counts[low].n+'</span></button>'; });
+  // count shown in a separate rounded pill (data-tagn → patched with the node's authoritative
+  // per-category count so it's stable, not tied to the currently-loaded page).
+  top.forEach(function(low){ chips+='<button class="btn chip'+(mkFilter.tag===low?' active':'')+'" data-tagf="'+esc(low)+'">'+esc(counts[low].label)+'<span class="chip-n" data-tagn="'+esc(low)+'">'+counts[low].n+'</span></button>'; });
   return '<div class="filters tagbar">'+chips+'</div>';
 }
 function marketHasTag(m,low){ var tg=parseMeta(m).tags||m.tags||[]; if(typeof tg==='string') tg=tg.split(/[,;]+/);
@@ -1230,6 +1262,7 @@ async function loadMarketList(){
     var more=hasMore ? '<div class="mt" style="text-align:center"><button class="btn" id="mk-more-btn">'+esc(t('common.load_more'))+'</button></div>' : '';
     host.innerHTML=bar+(firstPage.length?firstPage.map(marketCard).join(''):'<div class="empty">'+esc(t('mk.none_tag'))+'</div>')+more;
     enrichCardBars(host);                                            // async-fill named outcome bars for the rendered cards
+    patchTagCounts(host);                                            // replace page-window tag counts with authoritative per-category counts
     Array.prototype.forEach.call(host.querySelectorAll('[data-tagf]'), function(b){       // wire tag chips (idempotent per render)
       b.onclick=function(){ mkFilter.tag=b.getAttribute('data-tagf')||''; go(marketsHash()); };
     });
