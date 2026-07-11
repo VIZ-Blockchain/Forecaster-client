@@ -1530,8 +1530,11 @@ async function screenMarket(id){
     html+='</div>';
   }
 
-  // Dispute section
-  html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('md.dispute_gov'))+'</div>'+disputeBlock(id,m,ocs,dispute)+'</div>';
+  // Dispute section — render only when a dispute is active OR the user can actually file one
+  // (owner: no dead "Open dispute" on markets where it isn't possible)
+  var dCanOpen=canOpenDispute(m,dispute,status,await pmProps());
+  var dHtml=disputeBlock(id,m,ocs,dispute,dCanOpen);
+  if(dHtml) html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('md.dispute_gov'))+'</div>'+dHtml+'</div>';
 
   setContent(html);
   wireMarket(id,m,ocs,isMulti);
@@ -1723,7 +1726,21 @@ function outcomePrices(full,n,isMulti){
 }
 function kv(k,v){return '<div class="kv"><b>'+esc(k)+'</b><span>'+esc(v)+'</span></div>';}
 
-function disputeBlock(id,m,ocs,dispute){
+/* Whether a pm_dispute_create is possible for this market right now (see pm_evaluator rules): market
+   RESOLVED (status 3), payout still PENDING (payout_status 1), no dispute filed yet, and within the
+   grace window after result_expiration. Gated on MARKET STATE, not the viewer — any account with the
+   dispute fee may dispute (bettor/participant status is NOT required); the create action itself
+   prompts for login when signing. Returning false hides the whole dispute card. */
+function canOpenDispute(m,dispute,status,props){
+  if(dispute&&(dispute.id!=null||dispute.disputer||dispute.status!=null)) return false; // already filed
+  if(status!==3) return false;                                                   // only resolved markets
+  if(m.payout_status!=null && Number(m.payout_status)!==1) return false;          // payout must be pending
+  var grace=(props&&props.pm_dispute_grace_sec!=null)?Number(props.pm_dispute_grace_sec):null;
+  var rexp=assetTime(m.result_expiration);
+  if(grace!=null && rexp && now()>rexp+grace) return false;                       // grace window passed
+  return true;
+}
+function disputeBlock(id,m,ocs,dispute,canOpen){
   var out='';
   if(dispute&&(dispute.id!=null||dispute.disputer||dispute.status!=null)){
     out+='<div class="box warn">'+esc(t('dp.open'))+(dispute.disputer?esc(t('dp.by',{D:dispute.disputer})):'')+
@@ -1739,9 +1756,9 @@ function disputeBlock(id,m,ocs,dispute){
       (SESSION&&m.oracle===SESSION.account?'<button class="btn ghost small" id="dv-respond">'+esc(t('dp.oracle_respond'))+'</button>':'')+
     '</div>';
   } else {
+    if(!canOpen) return '';                       // no dispute and can't file one → caller hides the whole card
     out+='<div class="mut mb">'+esc(t('dp.no_dispute'))+'</div>';
-    if(marketStatus(m)===3) out+='<button class="btn ghost small" id="dv-create">'+esc(t('dp.create_title'))+'</button>';
-    else out+='<div class="hint">'+esc(t('dp.after_resolution'))+'</div>';
+    out+='<button class="btn ghost small" id="dv-create">'+esc(t('dp.create_title'))+'</button>';
   }
   return out;
 }
