@@ -1175,12 +1175,23 @@ async function screenMarkets(){
     }
     var sortHost=el('mk-sort'); // present only while a category is selected
     if(sortHost) sortHost.addEventListener('click',function(e){var c=e.target.closest('[data-sort]');if(!c)return;mkFilter.sort=c.getAttribute('data-sort');go(marketsHash());});
-    ensureCategories().then(function(cats){
-      var host=$('#mk-cats'); if(!host||!cats.length)return;
+    var renderCats=function(cats){
+      var host=$('#mk-cats'); if(!host||!cats||!cats.length)return;
       host.innerHTML=chip('',t('mk.all_cats'),mkFilter.category)+cats.map(function(c){
         return chip(String(catId(c)),(c.icon?c.icon+' ':'')+catName(c),mkFilter.category);
       }).join('');
-      host.addEventListener('click',function(e){var c=e.target.closest('[data-v]');if(!c)return;mkFilter.category=c.getAttribute('data-v');mkFilter.tag='';mkFilter.sort='newest';go(marketsHash());}); // fresh section → default (newest) order
+      host.onclick=function(e){var c=e.target.closest('[data-v]');if(!c)return;mkFilter.category=c.getAttribute('data-v');mkFilter.tag='';mkFilter.sort='newest';go(marketsHash());}; // fresh section → default (newest) order (onclick = idempotent on re-render)
+    };
+    ensureCategories().then(function(cats){
+      renderCats(cats);
+      // stale-while-revalidate: the taxonomy shifts as markets get indexed/pruned (a category can be
+      // temporarily absent right after a node reseed, then reappear once its markets re-index). The
+      // 15-min cache alone would hide the change until it expires, so always refresh from the node in
+      // the background and re-render if the category set changed — self-heals without a hard refresh.
+      var before=(cats||[]).map(function(c){return catId(c);}).join(',');
+      ensureCategories(true).then(function(fresh){
+        if(fresh && fresh.map(function(c){return catId(c);}).join(',')!==before) renderCats(fresh);
+      }).catch(function(){});
     });
   }
   loadMarketList();
