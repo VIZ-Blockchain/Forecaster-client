@@ -552,6 +552,56 @@ function probBar(m){
     '</div>'
   );
 }
+/* Normalize a weight_sums payload → [{label, v}] where v = money on that outcome (bets_sum,
+   fallback weight_sum). Handles the object shape {market_type,bets_sum,outcomes:[…]} the node
+   returns, and a bare array. Labels are the real on-chain outcome names (node serves them for
+   binary too since pm-api fix bf8abc5e). */
+function wsRows(ws){
+  var arr=(ws&&Array.isArray(ws.outcomes))?ws.outcomes:(Array.isArray(ws)?ws:null);
+  if(!arr||!arr.length) return [];
+  return arr.map(function(o){
+    if(o&&typeof o==='object') return {label:(o.label||o.name||o.title||''), v:num(o.bets_sum!=null?o.bets_sum:(o.weight_sum!=null?o.weight_sum:0))};
+    return {label:'', v:num(o)};
+  });
+}
+/* Rows → shares (% of 100). Zero total (no bets yet) → even split, so the bar still shows the
+   named outcomes and their neutral prior instead of an empty strip. */
+function wsShares(ws){
+  var rows=wsRows(ws); if(!rows.length) return [];
+  var tot=rows.reduce(function(a,r){return a+r.v;},0);
+  return rows.map(function(r,i){ return {label:r.label||('#'+i), pct: tot>0 ? (r.v/tot*100) : (100/rows.length)}; });
+}
+/* Named, multi-segment outcome bar (binary & multi). "PlayTime 55% · Nigma 45%" + a proportional
+   two/N-tone track. Mirrors Polymarket's odds strip (no buy buttons — this client is non-custodial). */
+var OC_BAR_COLORS=['var(--yes)','var(--no)','#6aa9ff','#e879c9','#f0b429','#4ec9b0','#c586c0','#d16969','#5aa1e3','#9b8cff'];
+function outcomeBar(shares){
+  if(!shares||!shares.length) return '';
+  var lab=shares.map(function(s,i){ return '<span class="obar-lab" style="color:'+OC_BAR_COLORS[i%OC_BAR_COLORS.length]+'">'+esc(s.label)+' '+Math.round(s.pct)+'%</span>'; }).join('');
+  var seg=shares.map(function(s,i){ return '<i style="width:'+Math.max(0,s.pct)+'%;background:'+OC_BAR_COLORS[i%OC_BAR_COLORS.length]+'"></i>'; }).join('');
+  return '<div class="pbar"><div class="pbar-row obar-row">'+lab+'</div><div class="pbar-track obar-track">'+seg+'</div></div>';
+}
+/* Fill the async bar placeholders on freshly-rendered cards. Category/event listings return a light
+   meta_object with no reserves/outcomes, so each visible card fetches get_market_weight_sums once
+   (cached, throttled pool) to draw its named outcome bar. */
+var WS_CACHE={};
+async function enrichCardBars(host){
+  if(!host) return;
+  var ids=Array.prototype.slice.call(host.querySelectorAll('.pbar-slot[data-mkt]')).map(function(s){return Number(s.getAttribute('data-mkt'));});
+  if(!ids.length) return;
+  var q=ids.slice();
+  async function worker(){
+    while(q.length){
+      var id=q.shift();
+      var ws=WS_CACHE[id];
+      if(ws===undefined){ try{ ws=await api('getMarketWeightSums', id); }catch(e){ ws=null; } WS_CACHE[id]=ws; }
+      var slot=host.querySelector('.pbar-slot[data-mkt="'+id+'"]'); if(!slot) continue;
+      var shares=wsShares(ws);
+      if(shares.length) slot.outerHTML=outcomeBar(shares); else slot.remove();
+    }
+  }
+  var pool=[]; for(var i=0;i<6;i++) pool.push(worker());
+  try{ await Promise.all(pool); }catch(e){}
+}
 /* node reliability_score is basis points [0..10000]; UI works on a 0..100 percentage. */
 function relPct(score){ return Number(score)/100; }
 function relClass(score){ score=relPct(score);
@@ -1106,6 +1156,7 @@ async function loadMarketList(){
     var shown=mkFilter.tag ? list.filter(function(m){return marketHasTag(m,mkFilter.tag);}) : list;
     var more=(paginated && rawLen>=mkShownLimit && !mkFilter.tag) ? '<div class="mt" style="text-align:center"><button class="btn" id="mk-more-btn">'+esc(t('common.load_more'))+'</button></div>' : '';
     host.innerHTML=bar+(shown.length?shown.map(marketCard).join(''):'<div class="empty">'+esc(t('mk.none_tag'))+'</div>')+more;
+    enrichCardBars(host);                                            // async-fill named outcome bars for the rendered cards
     Array.prototype.forEach.call(host.querySelectorAll('[data-tagf]'), function(b){       // wire tag chips (idempotent per render)
       b.onclick=function(){ mkFilter.tag=b.getAttribute('data-tagf')||''; go(marketsHash()); };
     });
@@ -1140,7 +1191,9 @@ function marketCard(m){
       // row's top level (meta_object field); market_card/get_market nest it under metadata.
       ((m.event_title||meta.event_title)?'<div class="mut" style="font-size:12px">'+esc(m.event_title||meta.event_title)+'</div>':''),
       '<div class="card-q">'+esc(marketTitle(m))+'</div>',
-      probBar(m),
+      // reserves-based strip when the row already carries them; otherwise an async slot filled by
+      // enrichCardBars() via get_market_weight_sums (light listings have no reserves/outcomes).
+      (probBar(m)||'<div class="pbar-slot" data-mkt="'+id+'"></div>'),
       '<div class="card-meta">',
         statusBadge(m),
         '<span>'+(Number(m.market_type)===1?esc(t('mk.multi',{N:ocs.length})):esc(t('mk.binary')))+'</span>',
@@ -1177,6 +1230,7 @@ async function screenEvent(key){
   var ML=/winner|moneyline|to win\b/i;
   list.sort(function(a,b){ return (ML.test(marketTitle(b))?1:0)-(ML.test(marketTitle(a))?1:0); });
   setContent(head+list.map(marketCard).join(''));
+  enrichCardBars(el('content'));                                     // named outcome bars per sibling market
 }
 
 /* ========================================================================= *
@@ -1489,13 +1543,21 @@ function assetTime(v){ // betting_expiration may be ISO string or epoch
   var ms=Date.parse(v); return isNaN(ms)?Number(v)||0:Math.floor(ms/1000);
 }
 function outcomePrices(full,n,isMulti){
-  // best-effort: look for prices/probabilities/weight sums in the enriched view
-  var src=full.prices||full.probabilities||(full.market&&full.market.prices);
-  var out=[];
-  if(Array.isArray(src)&&src.length===n){ var tot=src.reduce(function(a,b){return a+assetNum(b);},0)||1; for(var i=0;i<n;i++)out[i]=assetNum(src[i])/tot; return out; }
-  var ws=full.weight_sums||full.weights;
-  if(Array.isArray(ws)&&ws.length===n){ var t2=ws.reduce(function(a,b){return a+Number(b);},0)||1; for(var j=0;j<n;j++)out[j]=Number(ws[j])/t2; return out; }
-  return out; // empty -> unknown
+  var m=full.market||full;
+  // 1) binary: implied probability from CPMM collateral reserves (market price; 50/50 when fresh)
+  if(!isMulti){
+    var a=num(m.reserve_a), b=num(m.reserve_b), s=a+b;
+    if(s>0) return [a/s, b/s];
+  }
+  // 2) weight_sums.outcomes → share by money bet per outcome (bets_sum, fallback weight_sum)
+  var rows=wsRows(full.weight_sums||full.weights);
+  if(rows.length===n){ var tot=rows.reduce(function(a2,r){return a2+r.v;},0); if(tot>0) return rows.map(function(r){return r.v/tot;}); }
+  // 3) full.outcomes (pm_outcome objects) as a last resort
+  if(Array.isArray(full.outcomes)&&full.outcomes.length===n){
+    var v2=full.outcomes.map(function(o){return num(o.bets_sum!=null?o.bets_sum:o.weight_sum);});
+    var t3=v2.reduce(function(a3,b3){return a3+b3;},0); if(t3>0) return v2.map(function(v){return v/t3;});
+  }
+  return []; // unknown -> caller shows "—"
 }
 function kv(k,v){return '<div class="kv"><b>'+esc(k)+'</b><span>'+esc(v)+'</span></div>';}
 
@@ -2311,6 +2373,7 @@ function renderActActive(box){
   var ms=ACT.ids.map(function(id){return ACT.markets[id];}).filter(function(m){return m && marketStatus(m)===1;});
   if(!ms.length){ box.innerHTML='<div class="empty">'+esc(t('act.none_active'))+'</div>'; return; }
   box.innerHTML=ms.map(marketCard).join('');
+  enrichCardBars(box);
 }
 function renderActDisputable(box){
   var ms=ACT.ids.map(function(id){return ACT.markets[id];}).filter(function(m){
