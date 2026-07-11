@@ -1136,8 +1136,9 @@ function marketCard(m){
     '<div class="card click" data-nav="#/market/'+id+'">',
       marketThumb(meta, m, 8),   // trusted image (1:1 contain) or local category icon
       // event_title (readable parent-event label, e.g. "Dota 2: A vs B") — surfaces the matchup so a
-      // secondary market ("Total Kills … Game 2") isn't a mystery. Node serves it via metadata.event_title.
-      (meta.event_title?'<div class="mut" style="font-size:12px">'+esc(meta.event_title)+'</div>':''),
+      // secondary market ("Total Kills … Game 2") isn't a mystery. By-category listings expose it at the
+      // row's top level (meta_object field); market_card/get_market nest it under metadata.
+      ((m.event_title||meta.event_title)?'<div class="mut" style="font-size:12px">'+esc(m.event_title||meta.event_title)+'</div>':''),
       '<div class="card-q">'+esc(marketTitle(m))+'</div>',
       probBar(m),
       '<div class="card-meta">',
@@ -1166,7 +1167,7 @@ async function screenEvent(key){
       '<div class="box err">'+esc(errText(e))+'</div>'); return; }
   list=(list||[]).filter(Boolean);
   // Prefer the readable event label (e.g. "Dota 2: A vs B") from any child; fall back to the generic title.
-  var evLabel=''; for(var i=0;i<list.length;i++){ var em=parseMeta(list[i]); if(em&&em.event_title){ evLabel=em.event_title; break; } }
+  var evLabel=''; for(var i=0;i<list.length;i++){ var em=parseMeta(list[i]); var et=(em&&em.event_title)||list[i].event_title; if(et){ evLabel=et; break; } }
   var head='<div class="row"><a class="mut" data-nav="#/markets">'+esc(t('common.back_markets'))+'</a></div>'+
     '<div class="title" style="margin:6px 0">'+esc(evLabel||t('ev.title'))+'</div>'+
     '<div class="card-meta mb"><span class="mono">'+esc(key)+'</span>'+
