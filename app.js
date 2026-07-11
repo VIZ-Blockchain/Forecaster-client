@@ -1062,6 +1062,7 @@ function parseMarketsHash(){                       // hash is the source of trut
   mkFilter.q=g.q||'';
 }
 var actTab='history';           // current Activity sub-tab
+var actSeq=0;                    // monotonic render token — a late async render only writes if still current
 var ACT={loaded:false};          // per-visit cache of the user's positions/markets/disputes
 var histState={from:-1,done:false}; // account-history pagination cursor (from=-1 → newest)
 var catCache=null;               // category list (from node get_market_categories.categories), cached per session
@@ -2520,16 +2521,18 @@ async function screenActivity(){
 }
 async function renderActTab(){
   var box=el('act-list'); if(!box)return;
+  var seq=++actSeq;                            // this render's token; a later tab switch bumps actSeq
   box.innerHTML='<div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div>';
   try{
-    if(actTab==='alldisputes') return renderAllDisputes(box);
+    if(actTab==='alldisputes') return renderAllDisputes(box,seq);
     if(!isUnlocked()){ box.innerHTML='<div class="box info">'+unlockLink('act.unlock')+'</div>'; return; }
     await ensureMy();
+    if(seq!==actSeq) return;                    // tab changed while loading → don't clobber the new tab
     if(actTab==='history')    return renderActHistory(box);
     if(actTab==='active')     return renderActActive(box);
     if(actTab==='disputable') return renderActDisputable(box);
     if(actTab==='mydisputes') return renderActMyDisputes(box);
-  }catch(e){ box.innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
+  }catch(e){ if(seq===actSeq) box.innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
 }
 function renderActHistory(box){
   if(!ACT.positions.length){ box.innerHTML='<div class="empty">'+esc(t('act.none_history'))+'</div>'; return; }
@@ -2565,7 +2568,8 @@ function renderActMyDisputes(box){
   if(!items.length){ box.innerHTML='<div class="empty">'+esc(t('act.none_mydisputes'))+'</div>'; return; }
   box.innerHTML='<div class="hint mb">'+esc(t('act.mydisputes_hint'))+'</div>'+items.map(function(x){return disputeCard(x.m,x.d,true);}).join('');
 }
-async function renderAllDisputes(box){
+async function renderAllDisputes(box,seq){
+  if(seq==null) seq=actSeq;
   box.innerHTML='<div class="hint mb">'+esc(t('act.alldisputes_hint'))+'</div><div class="empty"><span class="spin"></span> '+esc(t('act.scanning'))+'</div>';
   var mine={};
   if(isUnlocked()){ try{ await ensureMy(); ACT.ids.forEach(function(id){mine[id]=1;}); }catch(e){} }
@@ -2573,6 +2577,7 @@ async function renderAllDisputes(box){
   for(var si=0; si<statuses.length; si++){ try{ var l=await api('listMarkets', statuses[si], 0, 40, true, 'newest'); (l||[]).forEach(function(m){markets.push(m);}); }catch(e){} }
   var seen={}, uniq=[]; markets.forEach(function(m){ var id=marketId(m); if(id!=null && !seen[id]){ seen[id]=1; uniq.push(m); } });
   var checked=await Promise.all(uniq.map(function(m){ return api('getDispute', marketId(m)).then(function(d){return {m:m,d:d};}).catch(function(){return null;}); }));
+  if(seq!==actSeq) return;                     // user switched tabs during the scan → don't overwrite
   var open=checked.filter(function(r){ return r && disputeOpen(r.d); });
   var head='<div class="hint mb">'+esc(t('act.alldisputes_hint'))+'</div>';
   if(!open.length){ box.innerHTML=head+'<div class="empty">'+esc(t('act.none_alldisputes'))+'</div><div class="hint mt">'+esc(t('act.scan_note'))+'</div>'; return; }
