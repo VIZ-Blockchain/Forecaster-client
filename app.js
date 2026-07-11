@@ -1135,6 +1135,9 @@ function marketCard(m){
   return h(
     '<div class="card click" data-nav="#/market/'+id+'">',
       marketThumb(meta, m, 8),   // trusted image (1:1 contain) or local category icon
+      // event_title (readable parent-event label, e.g. "Dota 2: A vs B") — surfaces the matchup so a
+      // secondary market ("Total Kills … Game 2") isn't a mystery. Node serves it via metadata.event_title.
+      (meta.event_title?'<div class="mut" style="font-size:12px">'+esc(meta.event_title)+'</div>':''),
       '<div class="card-q">'+esc(marketTitle(m))+'</div>',
       probBar(m),
       '<div class="card-meta">',
@@ -1162,8 +1165,10 @@ async function screenEvent(key){
   catch(e){ setContent('<div class="row"><a class="mut" data-nav="#/markets">'+esc(t('common.back_markets'))+'</a></div>'+
       '<div class="box err">'+esc(errText(e))+'</div>'); return; }
   list=(list||[]).filter(Boolean);
+  // Prefer the readable event label (e.g. "Dota 2: A vs B") from any child; fall back to the generic title.
+  var evLabel=''; for(var i=0;i<list.length;i++){ var em=parseMeta(list[i]); if(em&&em.event_title){ evLabel=em.event_title; break; } }
   var head='<div class="row"><a class="mut" data-nav="#/markets">'+esc(t('common.back_markets'))+'</a></div>'+
-    '<div class="title" style="margin:6px 0">'+esc(t('ev.title'))+'</div>'+
+    '<div class="title" style="margin:6px 0">'+esc(evLabel||t('ev.title'))+'</div>'+
     '<div class="card-meta mb"><span class="mono">'+esc(key)+'</span>'+
     (list.length?'<span>'+esc(t('ev.count',{N:list.length}))+'</span>':'')+'</div>';
   if(!list.length){ setContent(head+'<div class="box">'+esc(t('ev.empty'))+'</div>'); return; }
@@ -1207,7 +1212,7 @@ async function screenMarket(id){
         '<span>'+(isMulti?esc(t('md.onix_multi')):esc(t('md.onix_binary')))+'</span>'+
         (m.oracle?'<span><a data-nav="#/oracles/'+encodeURIComponent(m.oracle)+'">'+esc(t('md.oracle',{O:m.oracle}))+'</a></span>':'')+
         (m.creator?'<span>'+esc(t('md.by',{C:m.creator}))+'</span>':'')+
-        (meta.event?'<span><a data-nav="#/event/'+encodeURIComponent(meta.event)+'">'+esc(t('md.event'))+'</a></span>':'')+'</div>';
+        (meta.event?'<span><a data-nav="#/event/'+encodeURIComponent(meta.event)+'">'+esc(meta.event_title?meta.event_title+' ↗':t('md.event'))+'</a></span>':'')+'</div>';
 
   html+='<div id="oracle-info" class="mb"></div>';
 
