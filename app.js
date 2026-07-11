@@ -625,6 +625,7 @@ function route(){
   var scr=parts[0]||'markets';
   try{
     if(scr==='markets') return screenMarkets();
+    if(scr==='event')   return screenEvent(decodeURIComponent(parts.slice(1).join('/')));
     if(scr==='market')  return screenMarket(parts[1]);
     if(scr==='create')  return screenCreate();
     if(scr==='balance') return screenBalance();
@@ -1149,6 +1150,30 @@ function marketCard(m){
 }
 
 /* ========================================================================= *
+ *  SCREEN: Event — sibling markets sharing one real-world event (a match/game)
+ *  Uses the node's list_markets_by_event (indexed metadata.event key); each child
+ *  is a normal market card. Discovery/navigation only — never bet off this list.
+ * ========================================================================= */
+async function screenEvent(key){
+  if(!key){ return screenMarkets(); }
+  setContent('<div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div>');
+  var list;
+  try{ list=await api('listMarketsByEvent', key, 0, 200); }
+  catch(e){ setContent('<div class="row"><a class="mut" data-nav="#/markets">'+esc(t('common.back_markets'))+'</a></div>'+
+      '<div class="box err">'+esc(errText(e))+'</div>'); return; }
+  list=(list||[]).filter(Boolean);
+  var head='<div class="row"><a class="mut" data-nav="#/markets">'+esc(t('common.back_markets'))+'</a></div>'+
+    '<div class="title" style="margin:6px 0">'+esc(t('ev.title'))+'</div>'+
+    '<div class="card-meta mb"><span class="mono">'+esc(key)+'</span>'+
+    (list.length?'<span>'+esc(t('ev.count',{N:list.length}))+'</span>':'')+'</div>';
+  if(!list.length){ setContent(head+'<div class="box">'+esc(t('ev.empty'))+'</div>'); return; }
+  // Moneyline/winner markets float to the top — most representative of the matchup.
+  var ML=/winner|moneyline|to win\b/i;
+  list.sort(function(a,b){ return (ML.test(marketTitle(b))?1:0)-(ML.test(marketTitle(a))?1:0); });
+  setContent(head+list.map(marketCard).join(''));
+}
+
+/* ========================================================================= *
  *  SCREEN: Market detail (info + bet + cancel + liquidity + oracle + dispute)
  * ========================================================================= */
 async function screenMarket(id){
@@ -1181,7 +1206,8 @@ async function screenMarket(id){
   html+='<div class="card-meta mb">'+statusBadge(m)+
         '<span>'+(isMulti?esc(t('md.onix_multi')):esc(t('md.onix_binary')))+'</span>'+
         (m.oracle?'<span><a data-nav="#/oracles/'+encodeURIComponent(m.oracle)+'">'+esc(t('md.oracle',{O:m.oracle}))+'</a></span>':'')+
-        (m.creator?'<span>'+esc(t('md.by',{C:m.creator}))+'</span>':'')+'</div>';
+        (m.creator?'<span>'+esc(t('md.by',{C:m.creator}))+'</span>':'')+
+        (meta.event?'<span><a data-nav="#/event/'+encodeURIComponent(meta.event)+'">'+esc(t('md.event'))+'</a></span>':'')+'</div>';
 
   html+='<div id="oracle-info" class="mb"></div>';
 

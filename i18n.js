@@ -85,6 +85,7 @@ var EN = {
   /* market detail */
   'md.loading':'loading market #{ID}…','md.onix_binary':'Onix Binary','md.onix_multi':'Onix Multi',
   'md.by':'by {C}','md.oracle':'oracle: {O}','md.outcomes':'Outcomes','md.status':'Status','md.result':'Result',
+  'md.event':'event ↗','ev.title':'Event','ev.count':'{N} markets','ev.empty':'No markets in this event yet.',
   'md.chart_title':'Outcome ratio over time','md.chart_empty':'No price history yet.','md.chart_volume':'Volume','md.chart_events':'leverage events',
   'md.betting_until':'Betting until','md.result_deadline':'Result deadline','md.volume':'Volume',
   'md.jurisdiction':'Jurisdiction','md.rules':'Rules','md.source':'Source','md.open_ext':'open ↗','md.place_bet':'Place a bet',
@@ -396,6 +397,7 @@ var RU = {
 
   'md.loading':'загрузка рынка #{ID}…','md.onix_binary':'Onix Binary','md.onix_multi':'Onix Multi',
   'md.by':'автор {C}','md.oracle':'оракул: {O}','md.outcomes':'Исходы','md.status':'Статус','md.result':'Результат',
+  'md.event':'событие ↗','ev.title':'Событие','ev.count':'рынков: {N}','ev.empty':'В этом событии пока нет рынков.',
   'md.chart_title':'Соотношение исходов во времени','md.chart_empty':'Пока нет истории.','md.chart_volume':'Объём','md.chart_events':'события плеча',
   'md.betting_until':'Ставки до','md.result_deadline':'Дедлайн результата','md.volume':'Объём',
   'md.jurisdiction':'Юрисдикция','md.rules':'Правила','md.source':'Источник','md.open_ext':'открыть ↗','md.place_bet':'Сделать ставку',
@@ -697,6 +699,7 @@ var ZH = {
 
   'md.loading':'加载市场 #{ID}…','md.onix_binary':'Onix 二元','md.onix_multi':'Onix 多选',
   'md.by':'创建者 {C}','md.oracle':'预言机：{O}','md.outcomes':'结果','md.status':'状态','md.result':'裁决结果',
+  'md.event':'赛事 ↗','ev.title':'赛事','ev.count':'{N} 个市场','ev.empty':'该赛事暂无市场。',
   'md.chart_title':'各结果占比走势','md.chart_empty':'暂无历史。','md.chart_volume':'成交量','md.chart_events':'杠杆事件',
   'md.betting_until':'投注截止','md.result_deadline':'裁决截止','md.volume':'成交量',
   'md.jurisdiction':'司法辖区','md.rules':'规则','md.source':'来源','md.open_ext':'打开 ↗','md.place_bet':'下注',
