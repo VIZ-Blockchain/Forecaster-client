@@ -254,8 +254,10 @@ var EN = {
   'pool.deposit_title':'Deposit','pool.deposit_amount':'Amount to deposit (VIZ)','pool.deposit_btn':'Deposit',
   'pool.available':'Available: {V} (tap to fill)',
   'pool.withdraw_title':'Withdraw','pool.withdraw_shares':'Shares to withdraw (0 = all)','pool.withdraw_btn':'Withdraw',
-  'pool.emergency_btn':'Emergency withdraw (penalty)','pool.emergency_confirm':'Emergency-withdraw your whole deposit now? A penalty applies to your accrued rewards; your principal is returned in full.',
-  'pool.locked_hint':'Planned withdrawal becomes available after the lock period (partial allowed, 0 = all). Before unlock you can only exit via emergency withdrawal, which penalizes accrued rewards. Adding more VIZ does not reset the unlock time.',
+  'pool.emergency_btn':'Emergency withdraw (penalty)','pool.emergency_confirm':'Emergency-withdraw now? A penalty applies to your accrued rewards only (never principal). If the pool has no free balance, the payout is queued and paid as capital returns.',
+  'pool.pending_wd':'Awaiting withdrawal','pool.emergency_warn':'Emergency exit before unlock. Penalty applies to accrued rewards only, never to your principal. Enter shares to exit (0 = all).','pool.all_shares':'all',
+  'pool.queue_note':'If the pool lacks free balance right now, your withdrawal is queued and paid in parts as capital returns from markets — the pool never pays out more than it holds.','pool.queued_notice':'You have a queued withdrawal of {V} — it is paid automatically (FIFO) as capital returns to the pool.',
+  'pool.locked_hint':'Planned withdrawal becomes available after the lock period (partial allowed, 0 = all). Before unlock you can only exit via emergency withdrawal, which penalizes accrued rewards (never principal). Adding more VIZ does not reset the unlock time.',
 
   /* notices adapted from the prototype (re-framed for a thin on-chain client) */
   'bet.parimutuel_note':'≈ Estimate. Winners split the losers’ pool in proportion to their share — your final payout depends on all bets placed by the time the market resolves.',
@@ -559,8 +561,10 @@ var RU = {
   'pool.deposit_title':'Внести','pool.deposit_amount':'Сумма депозита (VIZ)','pool.deposit_btn':'Внести',
   'pool.available':'Доступно: {V} (нажмите, чтобы подставить)',
   'pool.withdraw_title':'Вывести','pool.withdraw_shares':'Долей к выводу (0 = всё)','pool.withdraw_btn':'Вывести',
-  'pool.emergency_btn':'Экстренный вывод (штраф)','pool.emergency_confirm':'Экстренно вывести весь депозит сейчас? Штраф применяется к начисленным наградам; принципал возвращается полностью.',
-  'pool.locked_hint':'Плановый вывод доступен после срока блокировки (можно частично, 0 = всё). До разблокировки выход возможен только экстренным выводом со штрафом на награды. Довнесение VIZ не сбрасывает срок разблокировки.',
+  'pool.emergency_btn':'Экстренный вывод (штраф)','pool.emergency_confirm':'Вывести экстренно сейчас? Штраф применяется только к начисленным наградам (никогда к телу депозита). Если в пуле нет свободного баланса, выплата встаёт в очередь и платится по мере возврата капитала.',
+  'pool.pending_wd':'Ожидают вывода','pool.emergency_warn':'Экстренный выход до разблокировки. Штраф — только на начисленные награды, никогда на тело депозита. Укажите доли для вывода (0 = всё).','pool.all_shares':'всё',
+  'pool.queue_note':'Если сейчас в пуле нет свободного баланса, вывод встаёт в очередь и выплачивается частями по мере возврата капитала из рынков — пул никогда не выдаёт больше, чем держит.','pool.queued_notice':'У вас заявка на вывод {V} — она выплачивается автоматически (FIFO) по мере возврата капитала в пул.',
+  'pool.locked_hint':'Плановый вывод доступен после срока блокировки (можно частично, 0 = всё). До разблокировки выход возможен только экстренным выводом со штрафом на награды (никогда на тело). Довнесение VIZ не сбрасывает срок разблокировки.',
 
   'bet.parimutuel_note':'≈ Оценка. Победители делят пул проигравших пропорционально своей доле — итоговая выплата зависит от всех ставок, сделанных к моменту разрешения рынка.',
   'bet.slippage_note':'Количество токенов приблизительное; результат в блокчейне может немного отличаться (проскальзывание). Укажите «Мин. токенов» для защиты.',
@@ -863,8 +867,10 @@ var ZH = {
   'pool.deposit_title':'存入','pool.deposit_amount':'存入金额 (VIZ)','pool.deposit_btn':'存入',
   'pool.available':'可用: {V}（点击填入）',
   'pool.withdraw_title':'提取','pool.withdraw_shares':'提取份额（0 = 全部）','pool.withdraw_btn':'提取',
-  'pool.emergency_btn':'紧急提取（罚金）','pool.emergency_confirm':'现在紧急提取全部存款？将对你的已累积奖励收取罚金；本金将全额返还。',
-  'pool.locked_hint':'计划提取在锁定期后可用（可部分，0 = 全部）。解锁前只能通过紧急提取退出，并对累积奖励收取罚金。追加 VIZ 不会重置解锁时间。',
+  'pool.emergency_btn':'紧急提取（罚金）','pool.emergency_confirm':'现在紧急提取？罚金仅针对已累积奖励（绝不触及本金）。若资金池当前无空闲余额，提取将进入队列，随资金回流分批支付。',
+  'pool.pending_wd':'等待提取','pool.emergency_warn':'解锁前紧急退出。罚金仅针对累积奖励，绝不触及本金。请输入要退出的份额（0 = 全部）。','pool.all_shares':'全部',
+  'pool.queue_note':'若资金池当前无空闲余额，提取将进入队列，随市场资金回流分批支付——资金池绝不会支付超过其持有的额度。','pool.queued_notice':'你有一笔排队中的提取 {V}——将随资金回流自动（先进先出）支付。',
+  'pool.locked_hint':'计划提取在锁定期后可用（可部分，0 = 全部）。解锁前只能通过紧急提取退出，并对累积奖励收取罚金（绝不触及本金）。追加 VIZ 不会重置解锁时间。',
 
   'bet.parimutuel_note':'≈ 预估。赢家按份额比例瓜分输家的资金池 — 你的最终派彩取决于市场裁决时的所有下注。',
   'bet.slippage_note':'代币数量为近似值；链上结果可能略有差异（滑点）。可设置“最少代币”来保护自己。',

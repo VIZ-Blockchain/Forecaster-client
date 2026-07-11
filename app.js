@@ -263,6 +263,13 @@ function normApi(method,r){ if(BYINDEX_RE.test(method)&&Array.isArray(r)) r.forE
 function bc(method){var a=Array.prototype.slice.call(arguments,1);
   return new Promise(function(res,rej){ if(!viz.broadcast[method])return rej(new Error('broadcast.'+method+' not in this viz-js-lib build'));
     viz.broadcast[method].apply(viz.broadcast, a.concat(function(err,r){ err?rej(err):res(r); })); }); }
+// Direct JSON-RPC to the current node for read methods not yet in the vendored viz.min.js
+// (e.g. get_lazy_withdraw_requests, added ahead of a viz-js-lib release).
+function rawApi(apiName, method, params){
+  return fetch(loadNode().ws, {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({jsonrpc:'2.0', method:'call', params:[apiName, method, params||[]], id:1})})
+    .then(function(r){ return r.json(); })
+    .then(function(j){ if(j&&j.error) throw new Error((j.error&&j.error.message)||'rpc error'); return j?j.result:null; }); }
 
 async function testConnection(n){
   applyNode(n);
@@ -2395,11 +2402,12 @@ async function loadHistory(){
 async function screenPool(){
   setContent('<div class="title">'+esc(t('pool.title'))+'</div><div class="subtitle">'+esc(t('pool.lead'))+'</div>'+
     '<div id="pool-box"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
-  var pool=null,user=null,props=null,walletFree=0;
+  var pool=null,user=null,props=null,walletFree=0,myReq=[];
   try{ pool=await api('getLazyPool'); }catch(e){}
   if(isUnlocked()){
     try{ user=await api('getLazyDeposit', SESSION.account); }catch(e){}
     try{ var acc=(await api('getAccounts',[SESSION.account]))[0]; walletFree=parseFloat(acc&&acc.balance)||0; }catch(e){}
+    try{ myReq=(await rawApi('prediction_market_api','get_lazy_withdraw_requests',[SESSION.account]))||[]; }catch(e){}
   }
   try{ props=await api('getPmChainProperties'); }catch(e){}
 
@@ -2428,7 +2436,11 @@ async function screenPool(){
     kv(t('pool.earned'), fmtViz(earned))+
     kv(t('pool.total_shares'), fmtShares(totalShares))+
     kv(t('pool.lock_period'), Math.round(lockSec/86400)+' d')+
+    (num(pool&&pool.pending_withdrawals)>0?kv(t('pool.pending_wd'), fmtViz(num(pool.pending_withdrawals))):'')+
     (pool?rawBlock(pool):'')+'</div>';
+  // my queued withdrawals (owed, paid FIFO as capital returns)
+  var myQueued=0; if(Array.isArray(myReq)) myReq.forEach(function(r){ myQueued+=num(r&&r.amount); });
+  if(myQueued>0) html+='<div class="card"><div class="box warn">'+t('pool.queued_notice',{V:fmtViz(myQueued)})+'</div></div>';
 
   // your position + withdrawal estimate
   html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('pool.your_title'))+'</div>';
@@ -2471,14 +2483,19 @@ async function screenPool(){
       '<div class="hint" id="p-dep-avail" style="cursor:pointer">'+esc(t('pool.available',{V:fmtViz(walletFree)}))+'</div>'+
       '<button class="btn ok block mt" id="p-dep">'+esc(t('pool.deposit_btn'))+'</button></div>';
     html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('pool.withdraw_title'))+'</div>'+
-      '<div class="box info">'+esc(t('pool.locked_hint'))+'</div>';
+      '<div class="box info">'+esc(t('pool.locked_hint'))+'</div>'+
+      '<div class="hint mb">'+esc(t('pool.queue_note'))+'</div>';
     if(hasPos && !locked){ // unlocked → planned withdrawal, partial allowed (0 = all)
       html+='<label class="lab">'+esc(t('pool.withdraw_shares'))+'</label>'+
         '<input id="p-wd-sh" type="number" step="0.001" min="0" value="0">'+
         '<div class="hint">'+esc(t('pool.you_have',{S:fmtShares(myShares)}))+'</div>'+
         '<button class="btn block mt" id="p-wd">'+esc(t('pool.withdraw_btn'))+'</button>';
-    } else if(hasPos && locked){ // locked → only emergency (full exit, penalty on rewards)
-      html+='<button class="btn bad block" id="p-em">'+esc(t('pool.emergency_btn'))+'</button>';
+    } else if(hasPos && locked){ // locked → emergency, PARTIAL allowed (shares, 0 = all)
+      html+='<div class="box warn">'+esc(t('pool.emergency_warn'))+'</div>'+
+        '<label class="lab">'+esc(t('pool.withdraw_shares'))+'</label>'+
+        '<input id="p-em-sh" type="number" step="0.001" min="0" value="0" placeholder="0 = '+esc(t('pool.all_shares'))+'">'+
+        '<div class="hint">'+esc(t('pool.you_have',{S:fmtShares(myShares)}))+'</div>'+
+        '<button class="btn bad block mt" id="p-em">'+esc(t('pool.emergency_btn'))+'</button>';
     }
     html+='</div>';
   }
@@ -2491,8 +2508,9 @@ async function screenPool(){
     tx(t('txn.lazy_deposit'),function(){return bc('pmLazyDeposit',wifFor('active'),SESSION.account,toAsset(a),[]);},function(){refreshPoolTab();setTimeout(screenPool,1300);}); };
   if(el('p-wd')) el('p-wd').onclick=function(){ var sh=Math.max(0,Math.round((Number(el('p-wd-sh').value)||0)*1000)); // display shares → raw ×1000; 0 = all
     tx(t('txn.lazy_withdraw'),function(){return bc('pmLazyWithdraw',wifFor('active'),SESSION.account,sh,false,[]);},function(){refreshPoolTab();setTimeout(screenPool,1300);}); };
-  if(el('p-em')) el('p-em').onclick=function(){ if(!confirm(t('pool.emergency_confirm')))return;
-    tx(t('txn.emergency_withdraw'),function(){return bc('pmLazyWithdraw',wifFor('active'),SESSION.account,0,true,[]);},function(){refreshPoolTab();setTimeout(screenPool,1300);}); };
+  if(el('p-em')) el('p-em').onclick=function(){ var sh=Math.max(0,Math.round((Number(el('p-em-sh').value)||0)*1000)); // display shares → raw ×1000; 0 = all
+    if(!confirm(t('pool.emergency_confirm')))return;
+    tx(t('txn.emergency_withdraw'),function(){return bc('pmLazyWithdraw',wifFor('active'),SESSION.account,sh,true,[]);},function(){refreshPoolTab();setTimeout(screenPool,1300);}); };
 }
 
 /* ========================================================================= *
