@@ -909,6 +909,62 @@ function screenUnlock(){
 var mkFilter={status:1, showRisky:false, category:'', view:'hot', q:'', tag:''}; // status default 1=active (UX: land on markets you can bet on); view: hot | all | feed | popular; q = local search; tag = in-category tag filter
 var MK_PAGE=50, mkShownLimit=MK_PAGE; // paginated views (category / all-status) grow this on "load more"
 var TAG_DEEP=1000;                    // deep category window when a tag is active (client-side tag filter)
+/* Load-more state: the full sorted/filtered candidate list is cached so "load more" APPENDS the next
+   page in place (no re-fetch, no wiping the list / flicker). server!=null → the fetched window may be
+   partial (server-paginated), so once the cache runs out we pull the next server page and append. */
+var mkMore=null;
+/* Fetch the next server page for the CURRENT filter (only the server-paginated shapes: a category
+   with no tag, or a single-status All view). Returns [] for cache-complete shapes. */
+async function fetchMarketsNextPage(from){
+  var jur=getJur();
+  if(mkFilter.category!==''){
+    if(mkFilter.tag) return []; // tag view is fully cached client-side
+    var r=(await api('listMarketsByCategory', mkFilter.category, from, MK_PAGE, jur||'', '', '', 'newest'))||[];
+    if(mkFilter.view==='all' && mkFilter.status!==-1) r=r.filter(function(m){return marketStatus(m)===mkFilter.status;});
+    return r;
+  }
+  if(mkFilter.view==='all' && mkFilter.status!=null && mkFilter.status!==-1){
+    return (await api('listMarkets', mkFilter.status, from, MK_PAGE, !!mkFilter.showRisky, 'newest'))||[];
+  }
+  return [];
+}
+/* Append the next page of cards without disturbing what's already on screen. Dedupes against the DOM
+   by data-market (owner's suggestion) so overlapping server pages never double-render a card. */
+async function appendMoreMarkets(){
+  var host=el('mk-list'); if(!host||!mkMore) return;
+  var btn=el('mk-more-btn'); var wrap=btn?btn.closest('.mt'):null;
+  if(btn){ btn.disabled=true; btn.textContent=t('common.loading'); }
+  var jur=getJur(), batch=[];
+  // 1) serve from the cached full list
+  if(mkMore.cursor<mkMore.all.length){
+    batch=mkMore.all.slice(mkMore.cursor, mkMore.cursor+MK_PAGE);
+    mkMore.cursor+=batch.length;
+  }
+  // 2) cache exhausted but the server window was partial → pull the next page and grow the cache
+  else if(mkMore.server){
+    try{
+      var more=await fetchMarketsNextPage(mkMore.serverFrom);
+      mkMore.serverFrom+=(more?more.length:0);
+      if(!more||more.length<MK_PAGE) mkMore.server=false;      // short/empty page → no more upstream
+      if(jur) more=(more||[]).filter(function(m){return !marketBannedIn(m,jur);});
+      var have={}; mkMore.all.forEach(function(m){var id=marketId(m); if(id!=null)have[id]=1;});
+      more=(more||[]).filter(function(m){var id=marketId(m); return id!=null && !have[id];});
+      mkMore.all=mkMore.all.concat(more);
+      batch=mkMore.all.slice(mkMore.cursor, mkMore.cursor+MK_PAGE);
+      mkMore.cursor+=batch.length;
+    }catch(e){ mkMore.server=false; }
+  }
+  // dedup against what's already rendered, then insert before the button
+  batch=batch.filter(function(m){ var id=marketId(m); return id!=null && !host.querySelector('.card[data-market="'+id+'"]'); });
+  if(batch.length){
+    var htmlStr=batch.map(marketCard).join('');
+    if(wrap) wrap.insertAdjacentHTML('beforebegin', htmlStr); else host.insertAdjacentHTML('beforeend', htmlStr);
+    enrichCardBars(host);   // only the freshly-added cards still have .pbar-slot placeholders
+  }
+  var remaining=(mkMore.cursor<mkMore.all.length)||mkMore.server;
+  if(!remaining){ if(wrap) wrap.remove(); }
+  else if(btn){ btn.disabled=false; btn.textContent=t('common.load_more'); }
+}
 /* Moneyline / "who wins" markets first — the most representative market of a matchup, so they don't
    sit buried under dozens of prop markets (Total Kills, First Blood, …). Stable for equal keys. */
 var MONEYLINE_RE=/\bwinner\b|moneyline|\bto win\b|match result|match winner/i;
@@ -1162,17 +1218,20 @@ async function loadMarketList(){
     var bar=catTagBar(list);                                          // in-category tag chips (from full category list)
     var shownAll=mkFilter.tag ? list.filter(function(m){return marketHasTag(m,mkFilter.tag);}) : list;
     if(mkFilter.category!==''||mkFilter.tag) shownAll=moneylineFirst(shownAll); // "who wins" above props
-    // Tag view filters a deep window CLIENT-SIDE → paginate that filtered set locally; other paginated
-    // views page on the server (a full fetch implies more rows upstream).
-    var shown=paginated ? shownAll.slice(0, mkShownLimit) : shownAll;
-    var hasMore=mkFilter.tag ? (shownAll.length>mkShownLimit) : (paginated && rawLen>=mkShownLimit);
+    // Cache the full candidate list; render the first page. "Load more" appends the rest in place
+    // (appendMoreMarkets) — no re-fetch, no wiping the list. server=true → the fetched window may be
+    // partial (server-paginated, no tag), so the cache can be grown page-by-page from the node.
+    var serverMore=paginated && !mkFilter.tag && rawLen>=mkShownLimit;
+    mkMore={ all:shownAll, cursor:0, server:serverMore, serverFrom:rawLen };
+    var firstPage=shownAll.slice(0, MK_PAGE); mkMore.cursor=firstPage.length;
+    var hasMore=(mkMore.cursor<shownAll.length)||serverMore;
     var more=hasMore ? '<div class="mt" style="text-align:center"><button class="btn" id="mk-more-btn">'+esc(t('common.load_more'))+'</button></div>' : '';
-    host.innerHTML=bar+(shown.length?shown.map(marketCard).join(''):'<div class="empty">'+esc(t('mk.none_tag'))+'</div>')+more;
+    host.innerHTML=bar+(firstPage.length?firstPage.map(marketCard).join(''):'<div class="empty">'+esc(t('mk.none_tag'))+'</div>')+more;
     enrichCardBars(host);                                            // async-fill named outcome bars for the rendered cards
     Array.prototype.forEach.call(host.querySelectorAll('[data-tagf]'), function(b){       // wire tag chips (idempotent per render)
       b.onclick=function(){ mkFilter.tag=b.getAttribute('data-tagf')||''; go(marketsHash()); };
     });
-    var moreBtn=el('mk-more-btn'); if(moreBtn) moreBtn.onclick=function(){ mkShownLimit+=MK_PAGE; loadMarketList(); };
+    var moreBtn=el('mk-more-btn'); if(moreBtn) moreBtn.onclick=appendMoreMarkets;
   }catch(e){ host.innerHTML='<div class="box err">'+esc(t('mk.load_failed',{E:errText(e)}))+'</div>'; }
 }
 /* "New & relevant" blend: normalize recency (market id) and activity (log volume), weight 0.55/0.45. */
@@ -1196,7 +1255,7 @@ function marketCard(m){
   var vol=m.volume!=null?m.volume:(m.total_volume!=null?m.total_volume:null);
   var risky=(m.risk_score!=null && m.risk_score<50)||m.under_collateralized;
   return h(
-    '<div class="card click" data-nav="#/market/'+id+'">',
+    '<div class="card click" data-market="'+id+'" data-nav="#/market/'+id+'">',   // data-market → dedup on load-more
       marketThumb(meta, m, 8),   // trusted image (1:1 contain) or local category icon
       // event_title (readable parent-event label, e.g. "Dota 2: A vs B") — surfaces the matchup so a
       // secondary market ("Total Kills … Game 2") isn't a mystery. By-category listings expose it at the
