@@ -507,6 +507,18 @@ function marketId(m){ if(m==null) return null; if(typeof m.market==='number') re
 // title/image can live as flat fields on the node meta object (get_market_full.meta,
 // list_markets_by_category), or inside a metadata JSON blob — check both.
 function marketTitle(m){ var meta=parseMeta(m); return meta.title||m.title||meta.q||meta.question||meta.name||('Market #'+marketId(m)); }
+function crumbLabel(s){ return String(s||'').replace(/(^|[\s\-_/])([a-z])/g,function(_,a,b){return a+b.toUpperCase();}); }
+/* Breadcrumb "Category › tag › tag" for the market detail (owner 2026-07-11 #2=A). Category links to
+   its listing; tags link into the in-category tag filter. Jurisdiction-ban pseudo-tags are skipped. */
+function marketCrumbs(meta){
+  if(!meta) return '';
+  var cat=meta.category||'', tags=Array.isArray(meta.tags)?meta.tags:[];
+  var parts=[];
+  if(cat) parts.push('<a data-nav="#/markets?c='+encodeURIComponent(cat)+'">'+esc(crumbLabel(cat))+'</a>');
+  if(cat) tags.slice(0,3).forEach(function(tg){ tg=String(tg||''); if(!tg||/^jurisdiction-ban:/i.test(tg))return;
+    parts.push('<a data-nav="#/markets?c='+encodeURIComponent(cat)+'&t='+encodeURIComponent(tg)+'">'+esc(crumbLabel(tg))+'</a>'); });
+  return parts.length?('<div class="crumbs">'+parts.join('<span class="crumb-sep">›</span>')+'</div>'):'';
+}
 function marketStatus(m){ var s=m.status; return s==null?1:Number(s); }
 function statusLabel(s){ return t('st.'+s); }
 function statusBadge(m){ var s=marketStatus(m); return '<span class="badge st-'+s+'">'+esc(statusLabel(s))+'</span>'; }
@@ -1433,6 +1445,7 @@ async function screenMarket(id){
 
   var html='';
   html+='<div class="row"><a class="mut" data-nav="'+esc(lastBrowseHash)+'">'+esc(t('common.back_markets'))+'</a></div>';
+  html+=marketCrumbs(meta);
   html+='<div style="display:flex;align-items:center;gap:10px;margin-top:6px">'+
         marketAvatar(meta, m, 50)+
         '<div class="title" style="margin:0">'+esc(meta.title||marketTitle(m))+'</div></div>';

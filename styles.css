@@ -87,6 +87,10 @@ small{font-size:.85em}
 .perr-in{max-width:var(--app-maxw); margin:0 auto; padding:10px 16px; display:flex; align-items:flex-start; gap:10px; font-size:13px; line-height:1.4}
 .perr-in span{flex:1; word-break:break-word}
 .perr-x{background:transparent; border:0; color:#fff; font-size:20px; line-height:1; cursor:pointer; padding:0 4px}
+.crumbs{display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; margin:6px 0 2px; font-size:12px}
+.crumbs a{color:var(--muted); text-decoration:none}
+.crumbs a:hover{color:var(--ink); text-decoration:underline}
+.crumb-sep{color:var(--muted); opacity:.6}
 .card-meta{display:flex; align-items:center; gap:10px; flex-wrap:wrap; color:var(--muted); font-size:12.5px}
 .card-meta .card-vol{margin-left:auto; color:var(--muted); white-space:nowrap}
 .kv{display:flex; justify-content:space-between; gap:12px; padding:5px 0; border-bottom:1px solid var(--line,rgba(255,255,255,.06)); font-size:13px}
