@@ -921,6 +921,7 @@ var mkFilter={status:1, showRisky:false, category:'', view:'hot', q:'', tag:'', 
 var lastBrowseHash='#/markets';   // remembers the last markets browse (filters/tag) so "back to markets" returns there
 var MK_PAGE=50, mkShownLimit=MK_PAGE; // paginated views (category / all-status) grow this on "load more"
 var TAG_DEEP=1000;                    // deep category window when a tag is active (client-side tag filter)
+var POPULAR_PER_CAT=12;               // "Popular" fetches this many volume-top markets per category, then merges
 /* Load-more state: the full sorted/filtered candidate list is cached so "load more" APPENDS the next
    page in place (no re-fetch, no wiping the list / flicker). server!=null → the fetched window may be
    partial (server-paginated), so once the cache runs out we pull the next server page and append. */
@@ -1243,9 +1244,25 @@ async function loadMarketList(){
       list=dedupeMarkets([].concat.apply([], parts));
       list.sort(function(a,b){ return marketId(b)-marketId(a); }); // newest first (higher id = newer)
     } else if(mkFilter.view==='popular'){
-      // popularity = total tokens locked by bettors → sort active markets by volume desc
-      list=(await api('listMarkets', 1, 0, 100, !!mkFilter.showRisky, 'newest'))||[];
-      list.sort(function(a,b){ return (volOf(b)-volOf(a)) || (marketId(b)-marketId(a)); });
+      // popularity = tokens locked by bettors → highest-volume markets first. The node has NO global
+      // volume sort (list_markets does newest/oldest only); the old approach sorted just the newest-100
+      // window, which on a freshly-seeded chain is ALL zero-volume (fresh markets, no bets) → empty.
+      // Fix: aggregate each category's volume-sorted top (server-side `volume` sort) and merge. If rows
+      // carry `.volume` (newer node) we sort globally by it; otherwise interleave by per-category rank so
+      // the biggest market of every section surfaces at the top. Real volumes fill async via enrichCardBars.
+      var pcats=(await ensureCategories())||[];
+      var per=await Promise.all(pcats.map(function(c){
+        return api('listMarketsByCategory', String(catId(c)), 0, POPULAR_PER_CAT, jur||'', '', '', 'volume').then(function(r){return r||[];}).catch(function(){return [];});
+      }));
+      var haveVol=per.some(function(rows){ return rows.some(function(m){ return m && m.volume!=null; }); });
+      if(haveVol){
+        list=dedupeMarkets([].concat.apply([], per));
+        list.sort(function(a,b){ return (volOf(b)-volOf(a)) || (marketId(b)-marketId(a)); });
+      } else {
+        var merged=[], mx=Math.max.apply(null,[0].concat(per.map(function(p){return p.length;})));
+        for(var ri=0;ri<mx;ri++) per.forEach(function(rows){ if(rows[ri]) merged.push(rows[ri]); }); // round-robin by rank
+        list=dedupeMarkets(merged);
+      }
     } else {
       if(mkFilter.category!==''){
         list=await api('listMarketsByCategory', mkFilter.category, 0, (mkFilter.tag?TAG_DEEP:mkShownLimit), jur||'', '', mkFilter.tag||'', mkFilter.sort||'newest');
