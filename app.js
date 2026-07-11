@@ -907,6 +907,7 @@ function screenUnlock(){
  *  SCREEN: Markets list + filters
  * ========================================================================= */
 var mkFilter={status:1, showRisky:false, category:'', view:'hot', q:'', tag:''}; // status default 1=active (UX: land on markets you can bet on); view: hot | all | feed | popular; q = local search; tag = in-category tag filter
+var lastBrowseHash='#/markets';   // remembers the last markets browse (filters/tag) so "back to markets" returns there
 var MK_PAGE=50, mkShownLimit=MK_PAGE; // paginated views (category / all-status) grow this on "load more"
 var TAG_DEEP=1000;                    // deep category window when a tag is active (client-side tag filter)
 /* Load-more state: the full sorted/filtered candidate list is cached so "load more" APPENDS the next
@@ -1084,6 +1085,7 @@ function viewChip(v,label){ return '<button class="btn chip'+(mkFilter.view===v?
 
 async function screenMarkets(){
   parseMarketsHash();                               // restore browse state (view/category/tag/status/q) from the URL
+  lastBrowseHash=location.hash||'#/markets';        // so "← back to markets" from a market/event returns to THIS filtered view
   mkShownLimit=MK_PAGE;                             // reset pagination window on any filter/nav change
   var views='<div class="filters" id="mk-views">'+
     viewChip('hot',t('mk.view_hot'))+viewChip('all',t('mk.view_all'))+viewChip('feed',t('mk.view_feed'))+viewChip('popular',t('mk.view_popular'))+
@@ -1171,9 +1173,9 @@ async function loadMarketList(){
     if(mkFilter.view==='hot'){
       // "New & relevant first" — client-side blend (option A): active, non-expired markets ranked by recency×activity.
       if(mkFilter.category!==''){
-        // A selected tag filters CLIENT-SIDE (the node tag param is case-sensitive; UI tags are
-        // lowercased), and tagged markets can sit deep in the newest order, so pull a deep window.
-        list=(await api('listMarketsByCategory', mkFilter.category, 0, (mkFilter.tag?TAG_DEEP:mkShownLimit), jur||'', '', '', 'newest'))||[];
+        // Tag filter runs SERVER-SIDE (node tag param is case-insensitive since pm-api b8f426db) —
+        // returns the whole tagged set (winner/props included), not just those in a newest-N window.
+        list=(await api('listMarketsByCategory', mkFilter.category, 0, (mkFilter.tag?TAG_DEEP:mkShownLimit), jur||'', '', mkFilter.tag||'', 'newest'))||[];
       } else {
         list=(await api('listMarkets', 1, 0, 100, !!mkFilter.showRisky, 'newest'))||[]; // newest active window, then blended by rankHot
         list=list.filter(function(m){ var e=assetTime(m.betting_expiration); return marketStatus(m)===1 && (!e||e>now()); }); // active & still bettable
@@ -1194,7 +1196,7 @@ async function loadMarketList(){
       list.sort(function(a,b){ return (volOf(b)-volOf(a)) || (marketId(b)-marketId(a)); });
     } else {
       if(mkFilter.category!==''){
-        list=await api('listMarketsByCategory', mkFilter.category, 0, (mkFilter.tag?TAG_DEEP:mkShownLimit), jur||'', '', '', 'newest');
+        list=await api('listMarketsByCategory', mkFilter.category, 0, (mkFilter.tag?TAG_DEEP:mkShownLimit), jur||'', '', mkFilter.tag||'', 'newest');
       } else if(mkFilter.status===-1){
         // node list_markets keys on an EXACT status; -1 is not "all" → aggregate real statuses
         var STS=[1,2,3,0]; // active, closed, resolved, waiting
@@ -1287,12 +1289,12 @@ async function screenEvent(key){
   setContent('<div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div>');
   var list;
   try{ list=await api('listMarketsByEvent', key, 0, 200); }
-  catch(e){ setContent('<div class="row"><a class="mut" data-nav="#/markets">'+esc(t('common.back_markets'))+'</a></div>'+
+  catch(e){ setContent('<div class="row"><a class="mut" data-nav="'+esc(lastBrowseHash)+'">'+esc(t('common.back_markets'))+'</a></div>'+
       '<div class="box err">'+esc(errText(e))+'</div>'); return; }
   list=(list||[]).filter(Boolean);
   // Prefer the readable event label (e.g. "Dota 2: A vs B") from any child; fall back to the generic title.
   var evLabel=''; for(var i=0;i<list.length;i++){ var em=parseMeta(list[i]); var et=(em&&em.event_title)||list[i].event_title; if(et){ evLabel=et; break; } }
-  var head='<div class="row"><a class="mut" data-nav="#/markets">'+esc(t('common.back_markets'))+'</a></div>'+
+  var head='<div class="row"><a class="mut" data-nav="'+esc(lastBrowseHash)+'">'+esc(t('common.back_markets'))+'</a></div>'+
     '<div class="title" style="margin:6px 0">'+esc(evLabel||t('ev.title'))+'</div>'+
     '<div class="card-meta mb"><span class="mono">'+esc(key)+'</span>'+
     (list.length?'<span>'+esc(t('ev.count',{N:list.length}))+'</span>':'')+'</div>';
@@ -1330,7 +1332,7 @@ async function screenMarket(id){
   var instantDisabled=(meta.allow_instant_bet===false)||(m.allow_instant_bet===false);
 
   var html='';
-  html+='<div class="row"><a class="mut" data-nav="#/markets">'+esc(t('common.back_markets'))+'</a></div>';
+  html+='<div class="row"><a class="mut" data-nav="'+esc(lastBrowseHash)+'">'+esc(t('common.back_markets'))+'</a></div>';
   html+='<div style="display:flex;align-items:center;gap:10px;margin-top:6px">'+
         marketAvatar(meta, m, 50)+
         '<div class="title" style="margin:0">'+esc(meta.title||marketTitle(m))+'</div></div>';
@@ -2850,7 +2852,7 @@ async function screenOracleProfile(owner){
 async function screenAccount(name){
   name=String(name||'').trim().toLowerCase();
   if(!name){ go('#/markets'); return; }
-  setContent('<div class="row"><a class="mut" data-nav="#/markets">'+esc(t('common.back_markets'))+'</a></div>'+
+  setContent('<div class="row"><a class="mut" data-nav="'+esc(lastBrowseHash)+'">'+esc(t('common.back_markets'))+'</a></div>'+
     '<div class="title" style="margin-top:6px">@'+esc(name)+'</div>'+
     '<div class="hint mb">'+esc(t('acc.public_note'))+'</div>'+
     '<div id="acc-bal"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>'+
