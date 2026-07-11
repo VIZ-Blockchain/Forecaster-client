@@ -76,8 +76,8 @@ small{font-size:.85em}
 .pbar-track{height:6px; background:var(--no); border-radius:4px; overflow:hidden}
 .pbar-track > i{display:block; height:100%; background:var(--yes)}
 /* named multi-segment outcome bar (binary & multi) — filled async by enrichCardBars() */
-.obar-row{flex-wrap:wrap; gap:2px 10px; justify-content:flex-start}
-.obar-lab{font-weight:700; font-size:12px; white-space:nowrap}
+.obar-row{flex-wrap:wrap; gap:2px 10px; justify-content:flex-start; overflow:hidden}
+.obar-lab{font-weight:700; font-size:12px; white-space:normal; overflow-wrap:anywhere; word-break:break-word; max-width:100%; min-width:0}
 .obar-track{display:flex; background:var(--card2,rgba(255,255,255,.06))}
 .obar-track > i{display:block; height:100%}
 /* tag-chip count — separated pill with a soft translucent bg for contrast (not glued to the label) */

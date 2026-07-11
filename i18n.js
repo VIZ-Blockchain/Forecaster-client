@@ -11,7 +11,7 @@ var LANGS = [['en','English'],['ru','Русский'],['zh','中文']];
 
 var EN = {
   /* chrome / tabs / status */
-  'tab.markets':'Markets','tab.create':'Create','tab.balance':'Balance','tab.profile':'Profile',
+  'tab.markets':'Markets','tab.create':'Create','tab.balance':'Balance','tab.pool':'Pool','tab.profile':'Profile',
   'brand.light':'light','status.online':'online','status.offline':'offline','status.block':'block {N}','status.latency':'{N} ms',
 
   /* common */
@@ -252,6 +252,7 @@ var EN = {
   'pool.calc_note':'Value = principal + accrued rewards. Estimates update as the pool earns.',
   'pool.unlock_to_act':'Unlock your wallet to deposit or withdraw.',
   'pool.deposit_title':'Deposit','pool.deposit_amount':'Amount to deposit (VIZ)','pool.deposit_btn':'Deposit',
+  'pool.available':'Available: {V} (tap to fill)',
   'pool.withdraw_title':'Withdraw','pool.withdraw_shares':'Shares to withdraw (0 = all)','pool.withdraw_btn':'Withdraw',
   'pool.emergency_btn':'Emergency withdraw (penalty)','pool.emergency_confirm':'Emergency-withdraw your whole deposit now? A penalty applies to your accrued rewards; your principal is returned in full.',
   'pool.locked_hint':'Planned withdrawal becomes available after the lock period (partial allowed, 0 = all). Before unlock you can only exit via emergency withdrawal, which penalizes accrued rewards. Adding more VIZ does not reset the unlock time.',
@@ -331,7 +332,7 @@ var EN = {
 };
 
 var RU = {
-  'tab.markets':'Рынки','tab.create':'Создать','tab.balance':'Баланс','tab.profile':'Профиль',
+  'tab.markets':'Рынки','tab.create':'Создать','tab.balance':'Баланс','tab.pool':'Пул','tab.profile':'Профиль',
   'brand.light':'лайт','status.online':'онлайн','status.offline':'офлайн','status.block':'блок {N}','status.latency':'{N} ms',
 
   'common.loading':'загрузка…','common.cancel':'Отмена','common.save':'Сохранить','common.submit':'Отправить',
@@ -556,6 +557,7 @@ var RU = {
   'pool.calc_note':'Стоимость = принципал + начисленные награды. Оценки меняются по мере заработка пула.',
   'pool.unlock_to_act':'Разблокируйте кошелёк, чтобы вносить или выводить.',
   'pool.deposit_title':'Внести','pool.deposit_amount':'Сумма депозита (VIZ)','pool.deposit_btn':'Внести',
+  'pool.available':'Доступно: {V} (нажмите, чтобы подставить)',
   'pool.withdraw_title':'Вывести','pool.withdraw_shares':'Долей к выводу (0 = всё)','pool.withdraw_btn':'Вывести',
   'pool.emergency_btn':'Экстренный вывод (штраф)','pool.emergency_confirm':'Экстренно вывести весь депозит сейчас? Штраф применяется к начисленным наградам; принципал возвращается полностью.',
   'pool.locked_hint':'Плановый вывод доступен после срока блокировки (можно частично, 0 = всё). До разблокировки выход возможен только экстренным выводом со штрафом на награды. Довнесение VIZ не сбрасывает срок разблокировки.',
@@ -634,7 +636,7 @@ var RU = {
 };
 
 var ZH = {
-  'tab.markets':'市场','tab.create':'创建','tab.balance':'余额','tab.profile':'我的',
+  'tab.markets':'市场','tab.create':'创建','tab.balance':'余额','tab.pool':'资金池','tab.profile':'我的',
   'brand.light':'轻','status.online':'在线','status.offline':'离线','status.block':'区块 {N}','status.latency':'{N} ms',
 
   'common.loading':'加载中…','common.cancel':'取消','common.save':'保存','common.submit':'提交',
@@ -859,6 +861,7 @@ var ZH = {
   'pool.calc_note':'价值 = 本金 + 已累积奖励。预估会随资金池收益而更新。',
   'pool.unlock_to_act':'解锁钱包后可存入或提取。',
   'pool.deposit_title':'存入','pool.deposit_amount':'存入金额 (VIZ)','pool.deposit_btn':'存入',
+  'pool.available':'可用: {V}（点击填入）',
   'pool.withdraw_title':'提取','pool.withdraw_shares':'提取份额（0 = 全部）','pool.withdraw_btn':'提取',
   'pool.emergency_btn':'紧急提取（罚金）','pool.emergency_confirm':'现在紧急提取全部存款？将对你的已累积奖励收取罚金；本金将全额返还。',
   'pool.locked_hint':'计划提取在锁定期后可用（可部分，0 = 全部）。解锁前只能通过紧急提取退出，并对累积奖励收取罚金。追加 VIZ 不会重置解锁时间。',

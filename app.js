@@ -582,7 +582,7 @@ function wsShares(ws){
 var OC_BAR_COLORS=['var(--yes)','var(--no)','#6aa9ff','#e879c9','#f0b429','#4ec9b0','#c586c0','#d16969','#5aa1e3','#9b8cff'];
 function outcomeBar(shares){
   if(!shares||!shares.length) return '';
-  var lab=shares.map(function(s,i){ return '<span class="obar-lab" style="color:'+OC_BAR_COLORS[i%OC_BAR_COLORS.length]+'">'+esc(s.label)+' '+Math.round(s.pct)+'%</span>'; }).join('');
+  var lab=shares.map(function(s,i){ return '<span class="obar-lab" style="color:'+OC_BAR_COLORS[i%OC_BAR_COLORS.length]+'">'+esc(s.label)+'&nbsp;'+Math.round(s.pct)+'%</span>'; }).join('');
   var seg=shares.map(function(s,i){ return '<i style="width:'+Math.max(0,s.pct)+'%;background:'+OC_BAR_COLORS[i%OC_BAR_COLORS.length]+'"></i>'; }).join('');
   return '<div class="pbar"><div class="pbar-row obar-row">'+lab+'</div><div class="pbar-track obar-track">'+seg+'</div></div>';
 }
@@ -629,7 +629,16 @@ function refreshStaticLabels(){
   tabLabel('#/markets',t('tab.markets'));
   tabLabel('#/create',t('tab.create'));
   tabLabel('#/balance',t('tab.balance'));
+  tabLabel('#/pool',t('tab.pool'));
   tabLabel('#/activity',t('tab.activity'));
+}
+/* The Pool tab shows in the bottom bar only when the unlocked account has a lazy-pool
+   position (attachment). Fired from updateChrome (unlock/lock/lang) and after deposit/withdraw. */
+async function refreshPoolTab(){
+  var tab=$('.tab-pool'); if(!tab) return;
+  if(!isUnlocked()){ tab.classList.add('hide'); return; }
+  try{ var u=await api('getLazyDeposit', SESSION.account); tab.classList.toggle('hide', !(u && Number(u.shares)>0)); }
+  catch(e){ tab.classList.add('hide'); }
 }
 function updateChrome(){
   var unlocked=isUnlocked();
@@ -638,6 +647,7 @@ function updateChrome(){
   $all('.tab-create').forEach(function(x){x.classList.toggle('hide',!unlocked);});
   refreshStaticLabels();
   var prof=el('tab-profile'); if(prof) prof.querySelector('span:last-child').textContent = unlocked?('@'+SESSION.account):t('tab.profile');
+  refreshPoolTab();
 }
 function setActiveTab(hash){
   $all('.tab').forEach(function(t){
@@ -2372,9 +2382,12 @@ async function loadHistory(){
 async function screenPool(){
   setContent('<div class="title">'+esc(t('pool.title'))+'</div><div class="subtitle">'+esc(t('pool.lead'))+'</div>'+
     '<div id="pool-box"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
-  var pool=null,user=null,props=null;
+  var pool=null,user=null,props=null,walletFree=0;
   try{ pool=await api('getLazyPool'); }catch(e){}
-  if(isUnlocked()){ try{ user=await api('getLazyDeposit', SESSION.account); }catch(e){} }
+  if(isUnlocked()){
+    try{ user=await api('getLazyDeposit', SESSION.account); }catch(e){}
+    try{ var acc=(await api('getAccounts',[SESSION.account]))[0]; walletFree=parseFloat(acc&&acc.balance)||0; }catch(e){}
+  }
   try{ props=await api('getPmChainProperties'); }catch(e){}
 
   var num=function(v){ return v==null?0:(Number(v)||0); };
@@ -2442,6 +2455,7 @@ async function screenPool(){
   if(isUnlocked()){
     html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('pool.deposit_title'))+'</div>'+
       '<label class="lab">'+esc(t('pool.deposit_amount'))+'</label><input id="p-dep-amt" type="number" step="0.001" min="0.001" placeholder="100.000">'+
+      '<div class="hint" id="p-dep-avail" style="cursor:pointer">'+esc(t('pool.available',{V:fmtViz(walletFree)}))+'</div>'+
       '<button class="btn ok block mt" id="p-dep">'+esc(t('pool.deposit_btn'))+'</button></div>';
     html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('pool.withdraw_title'))+'</div>'+
       '<div class="box info">'+esc(t('pool.locked_hint'))+'</div>';
@@ -2458,12 +2472,14 @@ async function screenPool(){
 
   el('pool-box').innerHTML=html;
 
+  if(el('p-dep-avail')) el('p-dep-avail').onclick=function(){ if(walletFree>0) el('p-dep-amt').value=walletFree.toFixed(3); };
   if(el('p-dep')) el('p-dep').onclick=function(){ var a=el('p-dep-amt').value; if(!(assetNum(a)>0)){toast('warn',t('common.enter_amount'));return;}
-    tx(t('txn.lazy_deposit'),function(){return bc('pmLazyDeposit',wifFor('active'),SESSION.account,toAsset(a),[]);},function(){setTimeout(screenPool,1300);}); };
+    if(assetNum(a)>walletFree){toast('warn',t('pool.available',{V:fmtViz(walletFree)}));return;}
+    tx(t('txn.lazy_deposit'),function(){return bc('pmLazyDeposit',wifFor('active'),SESSION.account,toAsset(a),[]);},function(){refreshPoolTab();setTimeout(screenPool,1300);}); };
   if(el('p-wd')) el('p-wd').onclick=function(){ var sh=Math.max(0,Math.round((Number(el('p-wd-sh').value)||0)*1000)); // display shares → raw ×1000; 0 = all
-    tx(t('txn.lazy_withdraw'),function(){return bc('pmLazyWithdraw',wifFor('active'),SESSION.account,sh,false,[]);},function(){setTimeout(screenPool,1300);}); };
+    tx(t('txn.lazy_withdraw'),function(){return bc('pmLazyWithdraw',wifFor('active'),SESSION.account,sh,false,[]);},function(){refreshPoolTab();setTimeout(screenPool,1300);}); };
   if(el('p-em')) el('p-em').onclick=function(){ if(!confirm(t('pool.emergency_confirm')))return;
-    tx(t('txn.emergency_withdraw'),function(){return bc('pmLazyWithdraw',wifFor('active'),SESSION.account,0,true,[]);},function(){setTimeout(screenPool,1300);}); };
+    tx(t('txn.emergency_withdraw'),function(){return bc('pmLazyWithdraw',wifFor('active'),SESSION.account,0,true,[]);},function(){refreshPoolTab();setTimeout(screenPool,1300);}); };
 }
 
 /* ========================================================================= *
