@@ -69,6 +69,12 @@ function fmtShares(x){var n=Number(x)||0;return (n/1000).toLocaleString(undefine
    "5.000 VIZ" (already in VIZ). 5000 -> "5 Ƶ", "5.000 VIZ" -> "5 Ƶ", 5500 -> "5.5 Ƶ". */
 function fmtViz(x){ var n; if(typeof x==='string'){ var m=x.match(/-?[\d.]+/); n=m?parseFloat(m[0]):0; } else { n=(Number(x)||0)/1000; }
   return n.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:3})+' Ƶ'; }
+/* Compact VIZ amount for dense card badges: >=1M -> "1.2M Ƶ", >=1k -> "12.5k Ƶ" (one decimal),
+   below 1k -> integer VIZ. Same raw-shares (÷1000) / asset-string input as fmtViz. */
+function fmtVizK(x){ var n; if(typeof x==='string'){ var m=x.match(/-?[\d.]+/); n=m?parseFloat(m[0]):0; } else { n=(Number(x)||0)/1000; }
+  var s; if(n>=1e6) s=(n/1e6).toFixed(1)+'M'; else if(n>=1000) s=(n/1000).toFixed(1)+'k';
+  else s=n.toLocaleString(undefined,{maximumFractionDigits:0});
+  return s+' Ƶ'; }
 function assetNum(s){if(s==null)return 0;if(typeof s==='number')return s;var m=String(s).match(/-?[\d.]+/);return m?parseFloat(m[0]):0;}
 function toAsset(v){return (Number(v)||0).toFixed(3)+' VIZ';}
 function toBP(pct){return Math.round((Number(pct)||0)*100);}      // percent -> basis points (ALL PM fees + vote weights; 10000=100%)
@@ -586,7 +592,11 @@ function outcomeBar(shares){
 var WS_CACHE={};
 async function enrichCardBars(host){
   if(!host) return;
-  var ids=Array.prototype.slice.call(host.querySelectorAll('.pbar-slot[data-mkt]')).map(function(s){return Number(s.getAttribute('data-mkt'));});
+  // union of cards still needing a probability bar and/or a volume badge (light listings lack both)
+  var idset={};
+  host.querySelectorAll('.pbar-slot[data-mkt]').forEach(function(s){idset[Number(s.getAttribute('data-mkt'))]=1;});
+  host.querySelectorAll('.card-vol[data-volmkt]').forEach(function(s){idset[Number(s.getAttribute('data-volmkt'))]=1;});
+  var ids=Object.keys(idset).map(Number);
   if(!ids.length) return;
   var q=ids.slice();
   async function worker(){
@@ -594,9 +604,10 @@ async function enrichCardBars(host){
       var id=q.shift();
       var ws=WS_CACHE[id];
       if(ws===undefined){ try{ ws=await api('getMarketWeightSums', id); }catch(e){ ws=null; } WS_CACHE[id]=ws; }
-      var slot=host.querySelector('.pbar-slot[data-mkt="'+id+'"]'); if(!slot) continue;
-      var shares=wsShares(ws);
-      if(shares.length) slot.outerHTML=outcomeBar(shares); else slot.remove();
+      var slot=host.querySelector('.pbar-slot[data-mkt="'+id+'"]');
+      if(slot){ var shares=wsShares(ws); if(shares.length) slot.outerHTML=outcomeBar(shares); else slot.remove(); }
+      var vslot=host.querySelector('.card-vol[data-volmkt="'+id+'"]');
+      if(vslot){ if(ws && ws.bets_sum!=null) vslot.textContent=t('mk.vol',{V:fmtVizK(ws.bets_sum)}); vslot.removeAttribute('data-volmkt'); }
     }
   }
   var pool=[]; for(var i=0;i<6;i++) pool.push(worker());
@@ -906,7 +917,7 @@ function screenUnlock(){
 /* ========================================================================= *
  *  SCREEN: Markets list + filters
  * ========================================================================= */
-var mkFilter={status:1, showRisky:false, category:'', view:'hot', q:'', tag:''}; // status default 1=active (UX: land on markets you can bet on); view: hot | all | feed | popular; q = local search; tag = in-category tag filter
+var mkFilter={status:1, showRisky:false, category:'', view:'hot', q:'', tag:'', sort:'newest'}; // status default 1=active (UX: land on markets you can bet on); view: hot | all | feed | popular; q = local search; tag = in-category tag filter; sort: newest | volume | expiration (category/tag browse, native node sort)
 var lastBrowseHash='#/markets';   // remembers the last markets browse (filters/tag) so "back to markets" returns there
 var MK_PAGE=50, mkShownLimit=MK_PAGE; // paginated views (category / all-status) grow this on "load more"
 var TAG_DEEP=1000;                    // deep category window when a tag is active (client-side tag filter)
@@ -920,7 +931,7 @@ async function fetchMarketsNextPage(from){
   var jur=getJur();
   if(mkFilter.category!==''){
     if(mkFilter.tag) return []; // tag view is fully cached client-side
-    var r=(await api('listMarketsByCategory', mkFilter.category, from, MK_PAGE, jur||'', '', '', 'newest'))||[];
+    var r=(await api('listMarketsByCategory', mkFilter.category, from, MK_PAGE, jur||'', '', '', mkFilter.sort||'newest'))||[];
     if(mkFilter.view==='all' && mkFilter.status!==-1) r=r.filter(function(m){return marketStatus(m)===mkFilter.status;});
     return r;
   }
@@ -1034,6 +1045,7 @@ function marketsHash(){
   if(mkFilter.view && mkFilter.view!=='hot') p.push('v='+encodeURIComponent(mkFilter.view));
   if(browse && mkFilter.category!=='') p.push('c='+encodeURIComponent(mkFilter.category));
   if(browse && mkFilter.category!=='' && mkFilter.tag) p.push('t='+encodeURIComponent(mkFilter.tag));
+  if(browse && mkFilter.category!=='' && mkFilter.sort && mkFilter.sort!=='newest') p.push('o='+encodeURIComponent(mkFilter.sort)); // sort only applies to category/tag browse; newest=default → clean URL
   if(mkFilter.view==='all' && mkFilter.status!==1) p.push('s='+encodeURIComponent(mkFilter.status)); // 1=active is default → clean URL; s=-1 encodes "All"
   if(mkFilter.q) p.push('q='+encodeURIComponent(mkFilter.q));
   return '#/markets'+(p.length?'?'+p.join('&'):'');
@@ -1044,6 +1056,7 @@ function parseMarketsHash(){                       // hash is the source of trut
   mkFilter.view=g.v||'hot';
   mkFilter.category=g.c||'';
   mkFilter.tag=g.t||'';
+  mkFilter.sort=(g.o==='volume'||g.o==='expiration')?g.o:'newest';
   mkFilter.status=(g.s!=null&&g.s!=='')?Number(g.s):1;
   mkFilter.q=g.q||'';
 }
@@ -1114,6 +1127,10 @@ function indexPut(list){
   return items;
 }
 function viewChip(v,label){ return '<button class="btn chip'+(mkFilter.view===v?' active':'')+'" data-view="'+v+'">'+esc(label)+'</button>'; }
+function sortChip(s,label){ return '<button class="btn chip'+((mkFilter.sort||'newest')===s?' active':'')+'" data-sort="'+s+'">'+esc(label)+'</button>'; }
+/* Sort chips for category/tag browse — the node sorts natively (newest | volume desc | ending soon). */
+function sortBar(){ if(mkFilter.category==='') return ''; return '<div class="filters" id="mk-sort">'+
+  sortChip('newest',t('mk.sort_newest'))+sortChip('volume',t('mk.sort_volume'))+sortChip('expiration',t('mk.sort_ending'))+'</div>'; }
 
 async function screenMarkets(){
   parseMarketsHash();                               // restore browse state (view/category/tag/status/q) from the URL
@@ -1139,6 +1156,7 @@ async function screenMarkets(){
   } else if(mkFilter.view==='popular'){
     filters+='<div class="hint">'+esc(t('mk.popular_hint'))+'</div>';
   }
+  if(withCats) filters+=sortBar();   // native newest/volume/ending-soon sort — only while browsing a section/tag
   filters+='<div class="hint"><span data-nav="#/node" style="cursor:pointer">'+esc(t('mk.jur_hint',{J:jurDisplay()}))+'</span></div>';
   setContent('<div class="title">'+esc(t('mk.title'))+'</div>'+views+filters+
     '<div id="mk-list" class="mt"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
@@ -1154,12 +1172,14 @@ async function screenMarkets(){
       $('#mk-status').addEventListener('click',function(e){var c=e.target.closest('[data-v]');if(!c)return;mkFilter.status=Number(c.getAttribute('data-v'));mkFilter.tag='';go(marketsHash());});
       el('mk-risky').onchange=function(){mkFilter.showRisky=this.checked;loadMarketList();};
     }
+    var sortHost=el('mk-sort'); // present only while a category is selected
+    if(sortHost) sortHost.addEventListener('click',function(e){var c=e.target.closest('[data-sort]');if(!c)return;mkFilter.sort=c.getAttribute('data-sort');go(marketsHash());});
     ensureCategories().then(function(cats){
       var host=$('#mk-cats'); if(!host||!cats.length)return;
       host.innerHTML=chip('',t('mk.all_cats'),mkFilter.category)+cats.map(function(c){
         return chip(String(catId(c)),(c.icon?c.icon+' ':'')+catName(c),mkFilter.category);
       }).join('');
-      host.addEventListener('click',function(e){var c=e.target.closest('[data-v]');if(!c)return;mkFilter.category=c.getAttribute('data-v');mkFilter.tag='';go(marketsHash());});
+      host.addEventListener('click',function(e){var c=e.target.closest('[data-v]');if(!c)return;mkFilter.category=c.getAttribute('data-v');mkFilter.tag='';mkFilter.sort='newest';go(marketsHash());}); // fresh section → default (newest) order
     });
   }
   loadMarketList();
@@ -1207,7 +1227,7 @@ async function loadMarketList(){
       if(mkFilter.category!==''){
         // Tag filter runs SERVER-SIDE (node tag param is case-insensitive since pm-api b8f426db) —
         // returns the whole tagged set (winner/props included), not just those in a newest-N window.
-        list=(await api('listMarketsByCategory', mkFilter.category, 0, (mkFilter.tag?TAG_DEEP:mkShownLimit), jur||'', '', mkFilter.tag||'', 'newest'))||[];
+        list=(await api('listMarketsByCategory', mkFilter.category, 0, (mkFilter.tag?TAG_DEEP:mkShownLimit), jur||'', '', mkFilter.tag||'', mkFilter.sort||'newest'))||[];
       } else {
         list=(await api('listMarkets', 1, 0, 100, !!mkFilter.showRisky, 'newest'))||[]; // newest active window, then blended by rankHot
         list=list.filter(function(m){ var e=assetTime(m.betting_expiration); return marketStatus(m)===1 && (!e||e>now()); }); // active & still bettable
@@ -1228,7 +1248,7 @@ async function loadMarketList(){
       list.sort(function(a,b){ return (volOf(b)-volOf(a)) || (marketId(b)-marketId(a)); });
     } else {
       if(mkFilter.category!==''){
-        list=await api('listMarketsByCategory', mkFilter.category, 0, (mkFilter.tag?TAG_DEEP:mkShownLimit), jur||'', '', mkFilter.tag||'', 'newest');
+        list=await api('listMarketsByCategory', mkFilter.category, 0, (mkFilter.tag?TAG_DEEP:mkShownLimit), jur||'', '', mkFilter.tag||'', mkFilter.sort||'newest');
       } else if(mkFilter.status===-1){
         // node list_markets keys on an EXACT status; -1 is not "all" → aggregate real statuses
         var STS=[1,2,3,0]; // active, closed, resolved, waiting
@@ -1239,7 +1259,10 @@ async function loadMarketList(){
         list=await api('listMarkets', mkFilter.status, 0, mkShownLimit, !!mkFilter.showRisky, 'newest');
       }
       list=list||[];
-      list.sort(function(a,b){ return marketId(b)-marketId(a); }); // newest first (higher id = newer) — covers single-status path too
+      // Keep the node's order when the user picked an explicit category sort (volume/expiration);
+      // otherwise normalize to newest-first (higher id = newer) — covers single-status path too.
+      var explicitSort=(mkFilter.category!=='' && mkFilter.sort && mkFilter.sort!=='newest');
+      if(!explicitSort) list.sort(function(a,b){ return marketId(b)-marketId(a); });
       if(mkFilter.category!=='' && mkFilter.status!==-1) list=list.filter(function(m){return marketStatus(m)===mkFilter.status;});
     }
     // Paginated views (category browse, or All-view single status) fetch `mkShownLimit` rows; a full
@@ -1251,7 +1274,9 @@ async function loadMarketList(){
     if(!list.length){ host.innerHTML='<div class="empty">'+esc(t('mk.none'))+'</div>'; return; }
     var bar=catTagBar(list);                                          // in-category tag chips (from full category list)
     var shownAll=mkFilter.tag ? list.filter(function(m){return marketHasTag(m,mkFilter.tag);}) : list;
-    if(mkFilter.category!==''||mkFilter.tag) shownAll=moneylineFirst(shownAll); // "who wins" above props
+    // Float "who wins" markets above props — but only for the default newest order; an explicit
+    // volume/expiration sort is the user's chosen order and must be preserved verbatim.
+    if((mkFilter.category!==''||mkFilter.tag) && (mkFilter.sort||'newest')==='newest') shownAll=moneylineFirst(shownAll);
     // Cache the full candidate list; render the first page. "Load more" appends the rest in place
     // (appendMoreMarkets) — no re-fetch, no wiping the list. server=true → the fetched window may be
     // partial (server-paginated, no tag), so the cache can be grown page-by-page from the node.
@@ -1287,7 +1312,7 @@ function dedupeMarkets(arr){ var seen={},out=[]; arr.forEach(function(m){var id=
 function volOf(m){ return Number(m.volume!=null?m.volume:(m.total_volume!=null?m.total_volume:(m.bets_sum!=null?m.bets_sum:(m.total_bets||0))))||0; }
 function marketCard(m){
   var id=marketId(m), ocs=marketOutcomes(m), meta=parseMeta(m);
-  var vol=m.volume!=null?m.volume:(m.total_volume!=null?m.total_volume:null);
+  var vol=m.volume!=null?m.volume:(m.total_volume!=null?m.total_volume:(m.bets_sum!=null?m.bets_sum:null)); // bets_sum present on full market_card rows; meta_object (category) rows lack it → async slot
   var risky=(m.risk_score!=null && m.risk_score<50)||m.under_collateralized;
   return h(
     '<div class="card click" data-market="'+id+'" data-nav="#/market/'+id+'">',   // data-market → dedup on load-more
@@ -1304,9 +1329,12 @@ function marketCard(m){
         statusBadge(m),
         '<span>'+(Number(m.market_type)===1?esc(t('mk.multi',{N:ocs.length})):esc(t('mk.binary')))+'</span>',
         (m.oracle?'<span>'+esc(t('mk.oracle',{O:m.oracle}))+'</span>':''),
-        (vol!=null?'<span>'+esc(t('mk.vol',{V:fmtViz(vol)}))+'</span>':''),
         (risky?'<span class="badge risk">'+esc(t('mk.risky'))+'</span>':''),
         (meta.jurisdiction?'<span>🌐 '+esc(meta.jurisdiction)+'</span>':''),
+        // volume, muted, pushed to the far right (margin-left:auto). Inline when the row carries it;
+        // otherwise an async slot filled by enrichCardBars from get_market_weight_sums.bets_sum.
+        (vol!=null?'<span class="card-vol">'+esc(t('mk.vol',{V:fmtVizK(vol)}))+'</span>'
+                  :'<span class="card-vol" data-volmkt="'+id+'"></span>'),
       '</div>',
     '</div>'
   );

@@ -88,6 +88,7 @@ small{font-size:.85em}
 .perr-in span{flex:1; word-break:break-word}
 .perr-x{background:transparent; border:0; color:#fff; font-size:20px; line-height:1; cursor:pointer; padding:0 4px}
 .card-meta{display:flex; align-items:center; gap:10px; flex-wrap:wrap; color:var(--muted); font-size:12.5px}
+.card-meta .card-vol{margin-left:auto; color:var(--muted); white-space:nowrap}
 .kv{display:flex; justify-content:space-between; gap:12px; padding:5px 0; border-bottom:1px solid var(--line,rgba(255,255,255,.06)); font-size:13px}
 .kv:last-child{border-bottom:0}
 .kv .mut{flex:0 0 auto} .kv b{text-align:right; word-break:break-word}
