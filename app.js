@@ -908,6 +908,11 @@ function screenUnlock(){
  * ========================================================================= */
 var mkFilter={status:1, showRisky:false, category:'', view:'hot', q:'', tag:''}; // status default 1=active (UX: land on markets you can bet on); view: hot | all | feed | popular; q = local search; tag = in-category tag filter
 var MK_PAGE=50, mkShownLimit=MK_PAGE; // paginated views (category / all-status) grow this on "load more"
+var TAG_DEEP=1000;                    // deep category window when a tag is active (client-side tag filter)
+/* Moneyline / "who wins" markets first — the most representative market of a matchup, so they don't
+   sit buried under dozens of prop markets (Total Kills, First Blood, …). Stable for equal keys. */
+var MONEYLINE_RE=/\bwinner\b|moneyline|\bto win\b|match result|match winner/i;
+function moneylineFirst(list){ return list.slice().sort(function(a,b){ return (MONEYLINE_RE.test(marketTitle(b))?1:0)-(MONEYLINE_RE.test(marketTitle(a))?1:0); }); }
 // tags too broad to be useful as an in-category filter (the category itself, umbrella labels, source noise)
 var GENERIC_TAGS={sports:1,games:1,esports:1,gaming:1,all:1,crypto:1,politics:1,news:1,culture:1,business:1,economy:1,tech:1,science:1,world:1,other:1,general:1};
 /* Tags actually present on the loaded category's markets, ranked by frequency, rendered as clickable
@@ -1110,7 +1115,9 @@ async function loadMarketList(){
     if(mkFilter.view==='hot'){
       // "New & relevant first" — client-side blend (option A): active, non-expired markets ranked by recency×activity.
       if(mkFilter.category!==''){
-        list=(await api('listMarketsByCategory', mkFilter.category, 0, mkShownLimit, jur||'', '', '', 'newest'))||[];
+        // A selected tag filters CLIENT-SIDE (the node tag param is case-sensitive; UI tags are
+        // lowercased), and tagged markets can sit deep in the newest order, so pull a deep window.
+        list=(await api('listMarketsByCategory', mkFilter.category, 0, (mkFilter.tag?TAG_DEEP:mkShownLimit), jur||'', '', '', 'newest'))||[];
       } else {
         list=(await api('listMarkets', 1, 0, 100, !!mkFilter.showRisky, 'newest'))||[]; // newest active window, then blended by rankHot
         list=list.filter(function(m){ var e=assetTime(m.betting_expiration); return marketStatus(m)===1 && (!e||e>now()); }); // active & still bettable
@@ -1131,7 +1138,7 @@ async function loadMarketList(){
       list.sort(function(a,b){ return (volOf(b)-volOf(a)) || (marketId(b)-marketId(a)); });
     } else {
       if(mkFilter.category!==''){
-        list=await api('listMarketsByCategory', mkFilter.category, 0, mkShownLimit, jur||'', '', '', 'newest');
+        list=await api('listMarketsByCategory', mkFilter.category, 0, (mkFilter.tag?TAG_DEEP:mkShownLimit), jur||'', '', '', 'newest');
       } else if(mkFilter.status===-1){
         // node list_markets keys on an EXACT status; -1 is not "all" → aggregate real statuses
         var STS=[1,2,3,0]; // active, closed, resolved, waiting
@@ -1153,8 +1160,13 @@ async function loadMarketList(){
     try{ if(mkFilter.view==='hot'||mkFilter.view==='all'||mkFilter.view==='popular') indexPut(list); }catch(e){} // refresh discovery cache (never used for betting)
     if(!list.length){ host.innerHTML='<div class="empty">'+esc(t('mk.none'))+'</div>'; return; }
     var bar=catTagBar(list);                                          // in-category tag chips (from full category list)
-    var shown=mkFilter.tag ? list.filter(function(m){return marketHasTag(m,mkFilter.tag);}) : list;
-    var more=(paginated && rawLen>=mkShownLimit && !mkFilter.tag) ? '<div class="mt" style="text-align:center"><button class="btn" id="mk-more-btn">'+esc(t('common.load_more'))+'</button></div>' : '';
+    var shownAll=mkFilter.tag ? list.filter(function(m){return marketHasTag(m,mkFilter.tag);}) : list;
+    if(mkFilter.category!==''||mkFilter.tag) shownAll=moneylineFirst(shownAll); // "who wins" above props
+    // Tag view filters a deep window CLIENT-SIDE → paginate that filtered set locally; other paginated
+    // views page on the server (a full fetch implies more rows upstream).
+    var shown=paginated ? shownAll.slice(0, mkShownLimit) : shownAll;
+    var hasMore=mkFilter.tag ? (shownAll.length>mkShownLimit) : (paginated && rawLen>=mkShownLimit);
+    var more=hasMore ? '<div class="mt" style="text-align:center"><button class="btn" id="mk-more-btn">'+esc(t('common.load_more'))+'</button></div>' : '';
     host.innerHTML=bar+(shown.length?shown.map(marketCard).join(''):'<div class="empty">'+esc(t('mk.none_tag'))+'</div>')+more;
     enrichCardBars(host);                                            // async-fill named outcome bars for the rendered cards
     Array.prototype.forEach.call(host.querySelectorAll('[data-tagf]'), function(b){       // wire tag chips (idempotent per render)
