@@ -519,12 +519,20 @@ function crumbLabel(s){ return String(s||'').replace(/(^|[\s\-_/])([a-z])/g,func
    its listing; tags link into the in-category tag filter. Jurisdiction-ban pseudo-tags are skipped. */
 function marketCrumbs(meta){
   if(!meta) return '';
-  var cat=meta.category||'', tags=Array.isArray(meta.tags)?meta.tags:[];
+  var cat=meta.category||'';
+  // tags may arrive as an array (market.metadata) OR a CSV string (get_market_full.meta) — accept both.
+  var tags=Array.isArray(meta.tags)?meta.tags:(typeof meta.tags==='string'?meta.tags.split(/[,;]+/):[]);
+  var catLow=String(cat).toLowerCase();
   var parts=[];
   // Bubble chips (owner 2026-07-12 #6): category = blue chip, tags = lighter blue chips.
   if(cat) parts.push('<a class="crumb-chip crumb-cat" data-nav="#/markets?c='+encodeURIComponent(cat)+'">'+esc(crumbLabel(cat))+'</a>');
-  if(cat) tags.slice(0,3).forEach(function(tg){ tg=String(tg||''); if(!tg||/^jurisdiction-ban:/i.test(tg))return;
-    parts.push('<a class="crumb-chip crumb-tag" data-nav="#/markets?c='+encodeURIComponent(cat)+'&t='+encodeURIComponent(tg)+'">'+esc(crumbLabel(tg))+'</a>'); });
+  if(cat){
+    var shown=0;
+    tags.forEach(function(tg){ tg=String(tg||'').trim(); if(shown>=3||!tg||/^jurisdiction-ban:/i.test(tg))return;
+      if(tg.toLowerCase()===catLow)return;                       // skip the tag that duplicates the category
+      shown++;
+      parts.push('<a class="crumb-chip crumb-tag" data-nav="#/markets?c='+encodeURIComponent(cat)+'&t='+encodeURIComponent(tg)+'">'+esc(crumbLabel(tg))+'</a>'); });
+  }
   return parts.length?('<div class="crumbs">'+parts.join('')+'</div>'):'';
 }
 function marketStatus(m){ var s=m.status; return s==null?1:Number(s); }
