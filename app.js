@@ -521,12 +521,20 @@ function marketCrumbs(meta){
   if(!meta) return '';
   var cat=meta.category||'', tags=Array.isArray(meta.tags)?meta.tags:[];
   var parts=[];
-  if(cat) parts.push('<a data-nav="#/markets?c='+encodeURIComponent(cat)+'">'+esc(crumbLabel(cat))+'</a>');
+  // Bubble chips (owner 2026-07-12 #6): category = blue chip, tags = lighter blue chips.
+  if(cat) parts.push('<a class="crumb-chip crumb-cat" data-nav="#/markets?c='+encodeURIComponent(cat)+'">'+esc(crumbLabel(cat))+'</a>');
   if(cat) tags.slice(0,3).forEach(function(tg){ tg=String(tg||''); if(!tg||/^jurisdiction-ban:/i.test(tg))return;
-    parts.push('<a data-nav="#/markets?c='+encodeURIComponent(cat)+'&t='+encodeURIComponent(tg)+'">'+esc(crumbLabel(tg))+'</a>'); });
-  return parts.length?('<div class="crumbs">'+parts.join('<span class="crumb-sep">›</span>')+'</div>'):'';
+    parts.push('<a class="crumb-chip crumb-tag" data-nav="#/markets?c='+encodeURIComponent(cat)+'&t='+encodeURIComponent(tg)+'">'+esc(crumbLabel(tg))+'</a>'); });
+  return parts.length?('<div class="crumbs">'+parts.join('')+'</div>'):'';
 }
 function marketStatus(m){ var s=m.status; return s==null?1:Number(s); }
+/* The oracle-chosen winning outcome index on a resolved market. The node reports it as
+   resolved_outcome (winning_outcome is often absent) — read that first, fall back either way.
+   Returns -1 when the market has no decided result yet. */
+function winningIndex(m){
+  var w=(m.resolved_outcome!=null?m.resolved_outcome:m.winning_outcome);
+  w=Number(w); return (w!=null && !isNaN(w) && w>=0)?w:-1;
+}
 function statusLabel(s){ return t('st.'+s); }
 function statusBadge(m){ var s=marketStatus(m); return '<span class="badge st-'+s+'">'+esc(statusLabel(s))+'</span>'; }
 function marketOutcomes(m){
@@ -1450,16 +1458,20 @@ async function screenMarket(id){
   var risky=(m.risk_score!=null && Number(m.risk_score)<50)||!!m.under_collateralized;
   var instantDisabled=(meta.allow_instant_bet===false)||(m.allow_instant_bet===false);
 
+  var winIdx=winningIndex(m);            // oracle-decided outcome (-1 if none yet)
+  var isResolved=(status===3 && winIdx>=0);
   var html='';
-  html+='<div class="row"><a class="mut" data-nav="'+esc(lastBrowseHash)+'">'+esc(t('common.back_markets'))+'</a></div>';
+  // #5: no top "back to markets" link — the bottom nav already has Markets.
   html+=marketCrumbs(meta);
   html+='<div style="display:flex;align-items:center;gap:10px;margin-top:6px">'+
         marketAvatar(meta, m, 50)+
         '<div class="title" style="margin:0">'+esc(meta.title||marketTitle(m))+'</div></div>';
+  // #7: reliability badge is injected inline right after the oracle link (id=or-rel-inline).
+  // #8: hide the creator when it equals the oracle; otherwise render it with the same "label: name" shape.
   html+='<div class="card-meta mb">'+statusBadge(m)+
         '<span>'+(isMulti?esc(t('md.onix_multi')):esc(t('md.onix_binary')))+'</span>'+
-        (m.oracle?'<span><a data-nav="#/oracles/'+encodeURIComponent(m.oracle)+'">'+esc(t('md.oracle',{O:m.oracle}))+'</a></span>':'')+
-        (m.creator?'<span>'+esc(t('md.by',{C:m.creator}))+'</span>':'')+
+        (m.oracle?'<span><a data-nav="#/oracles/'+encodeURIComponent(m.oracle)+'">'+esc(t('md.oracle',{O:m.oracle}))+'</a> <span id="or-rel-inline"></span></span>':'')+
+        (m.creator && m.creator!==m.oracle?'<span>'+esc(t('md.by',{C:m.creator}))+'</span>':'')+
         (meta.event?'<span><a data-nav="#/event/'+encodeURIComponent(meta.event)+'">'+esc(meta.event_title?meta.event_title+' ↗':t('md.event'))+'</a></span>':'')+'</div>';
 
   html+='<div id="oracle-info" class="mb"></div>';
@@ -1479,19 +1491,28 @@ async function screenMarket(id){
   ocs.forEach(function(name,i){
     var pct=prices[i]!=null?prices[i]:null;
     var cls=(!isMulti && i===0)?'yes':(!isMulti?'no':'');
-    html+='<div class="oc"><div class="oc-row"><span class="oc-name">'+esc(name)+'</span><span>'+(pct!=null?(pct*100).toFixed(1)+'%':'—')+'</span></div>'+
+    // #1: on a resolved market flag the oracle-chosen outcome — green check + em-dash before the name.
+    var isWin=(isResolved && i===winIdx);
+    var nameHtml=(isWin?'✅ — ':'')+esc(name);
+    html+='<div class="oc'+(isWin?' oc-win':'')+'"><div class="oc-row"><span class="oc-name">'+nameHtml+'</span><span>'+(pct!=null?(pct*100).toFixed(1)+'%':'—')+'</span></div>'+
           '<div class="oc-bar"><div class="oc-fill '+cls+'" style="width:'+(pct!=null?Math.max(2,pct*100):0)+'%"></div></div></div>';
   });
   html+='</div>';
 
-  // Outcome-ratio chart (from get_market_kline)
-  html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('md.chart_title'))+'</div>'+
+  // Outcome-ratio chart (from get_market_kline). #2: loadKline removes this whole card (id=kline-card)
+  // when there is no price history — an empty "no history yet" box on a resolved market is just noise.
+  html+='<div class="card" id="kline-card"><div class="section-title" style="margin-top:0">'+esc(t('md.chart_title'))+'</div>'+
     '<div id="kline-box"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div></div>';
 
-  // Key params
+  // Key params. #3: clearer status — spell out the result the oracle set, or "awaiting oracle result"
+  // when betting has closed but no result is in yet.
+  var bettingClosed=(m.betting_expiration && assetTime(m.betting_expiration)<=now());
+  var statusTxt=statusLabel(status)+((status===1 && bettingClosed)?(' — '+t('md.awaiting_result')):'');
+  var resultTxt=isResolved?(ocs[winIdx]!=null?ocs[winIdx]:('outcome '+winIdx))
+                          :(status>=1?t('md.awaiting_result'):'');
   html+='<div class="card">'+
-    kv(t('md.status'),statusLabel(status))+
-    (m.winning_outcome!=null&&status===3?kv(t('md.result'), ocs[m.winning_outcome]!=null?ocs[m.winning_outcome]:('outcome '+m.winning_outcome)):'')+
+    kv(t('md.status'),statusTxt)+
+    (resultTxt?kv(t('md.result'), resultTxt):'')+
     (m.betting_expiration?kv(t('md.betting_until'), tsToLocal(assetTime(m.betting_expiration))):'')+
     (m.result_expiration?kv(t('md.result_deadline'), tsToLocal(assetTime(m.result_expiration))):'')+
     (m.volume!=null?kv(t('md.volume'), fmtViz(m.volume)):'')+
@@ -1500,6 +1521,10 @@ async function screenMarket(id){
     (meta.rules_url||m.url?('<div class="kv"><b>'+esc(t(meta.description?'md.source':'md.rules'))+'</b><a href="'+esc(meta.rules_url||m.url)+'" target="_blank">'+esc(t('md.open_ext'))+'</a></div>'):'')+
     rawBlock(full)+
   '</div>';
+
+  // #4: My positions FIRST (above recent bets) — the user's own stake matters more than the feed.
+  html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('md.my_positions'))+'</div><div id="mine-box">'+
+        (isUnlocked()?'<span class="spin"></span> '+esc(t('common.loading')):'<div class="mut">'+unlockLink('md.unlock_view')+'</div>')+'</div></div>';
 
   // Recent bets (getMarketBets) — transparency into the order flow
   html+='<div class="card"><details class="raw"><summary>'+esc(t('md.recent_bets'))+'</summary><div id="mkt-bets"><span class="spin"></span> '+esc(t('common.loading'))+'</div></details></div>';
@@ -1543,9 +1568,7 @@ async function screenMarket(id){
       '<div id="lev-box"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>';
   }
 
-  // My positions on this market
-  html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('md.my_positions'))+'</div><div id="mine-box">'+
-        (isUnlocked()?'<span class="spin"></span> '+esc(t('common.loading')):'<div class="mut">'+unlockLink('md.unlock_view')+'</div>')+'</div></div>';
+  // (My positions card rendered earlier, above recent bets — see #4)
 
   // Oracle actions
   if(isOracle){
@@ -1639,8 +1662,10 @@ async function loadOracleHint(owner, marketVolViz){
     if(isNew){ hint=t('md.oracle_hint_new'); cls='info'; }
     else if(relPct(score)<40){ hint=t('md.oracle_hint_low'); cls='warn'; }
     else if(ins>0 && marketVolViz>0 && ins<marketVolViz){ hint=t('md.oracle_hint_underfunded'); cls='warn'; }
-    box.innerHTML=(score!=null?'<div class="mb">'+relBadge(score)+'</div>':'')+(hint?'<div class="box '+cls+'">'+esc(hint)+'</div>':'');
-  }catch(e){ box.innerHTML=''; }
+    // #7: reliability badge goes INLINE next to the oracle link; only the (rare) hint stays here.
+    var inl=el('or-rel-inline'); if(inl) inl.innerHTML=(score!=null?relBadge(score):'');
+    box.innerHTML=(hint?'<div class="box '+cls+'">'+esc(hint)+'</div>':'');
+  }catch(e){ box.innerHTML=''; var inl2=el('or-rel-inline'); if(inl2) inl2.innerHTML=''; }
 }
 /* --- Outcome-ratio chart from get_market_kline (event-sampled parimutuel weights) ---
    Optional Chart.js renderer (single UMD file, loaded in index.html); built-in SVG fallback. */
@@ -1670,12 +1695,14 @@ function klineSeries(raw, ocs){
 }
 async function loadKline(marketId, ocs, isMulti){
   var box=el('kline-box'); if(!box)return;
+  // #2: no history → hide the whole chart card rather than show an empty "no history yet" box.
+  var drop=function(){ var c=el('kline-card'); if(c&&c.parentNode)c.parentNode.removeChild(c); };
   try{
     var series=klineSeries(await fetchKline(marketId), ocs);
-    if(!series.pts.length){ box.innerHTML='<div class="mut">'+esc(t('md.chart_empty'))+'</div>'; return; }
+    if(!series.pts.length){ drop(); return; }
     if(window.Chart) renderKlineChart(box, series, ocs, isMulti);      // optional lib
     else box.innerHTML=renderKlineSvg(series, ocs, isMulti);           // built-in fallback
-  }catch(e){ box.innerHTML='<div class="mut">'+esc(t('md.chart_empty'))+'</div>'; } // non-consensus plugin index; absence is fine
+  }catch(e){ drop(); } // non-consensus plugin index; absence is fine
 }
 /* shared volume (bets_sum) mini step line */
 function volumeSvg(series){
@@ -1870,19 +1897,30 @@ async function loadMyPositions(id, mkt){
     var mine=all.filter(function(p){return Number(p.market_id!=null?p.market_id:p.market)===Number(id);});
     if(!mine.length){ box.innerHTML='<div class="mut">'+esc(t('md.no_positions'))+'</div>'; return; }
     var ocs=mkt?marketOutcomes(mkt):[];
+    // #4: on a resolved market show win/loss + payout and hide the transfer/cancel actions.
+    var winIdx=mkt?winningIndex(mkt):-1;
+    var resolved=(mkt && marketStatus(mkt)===3 && winIdx>=0);
     var rows=mine.map(function(p){
       var bid=p.id!=null?p.id:p.bet_id;
       var shares=Number(p.tokens||p.shares||0);
       // binary bets carry side (0/1) with outcome_index=-1; multi carry outcome_index (>=0)
       var idx=(p.outcome_index!=null && p.outcome_index>=0)?p.outcome_index:(p.side!=null?p.side:-1);
       var oc=(idx>=0 && ocs[idx]!=null)?ocs[idx]:(idx>=0?('#'+idx):'—');
+      var last;
+      if(resolved){
+        var won=(idx===winIdx);
+        var pay=assetNum(p.expected_payout);
+        last='<td>'+(won?'<span class="ok">'+esc(t('md.pos_win'))+(pay>0?' '+fmtViz(p.expected_payout):'')+'</span>'
+                        :'<span class="mut">'+esc(t('md.pos_loss'))+' —</span>')+'</td>';
+      }else{
+        last='<td><button class="btn small" data-xfer="'+bid+'" data-sh="'+shares+'">'+esc(t('md.col_transfer'))+'</button> '+
+             '<button class="btn small bad" data-cancel="'+bid+'">'+esc(t('md.col_cancel'))+'</button></td>';
+      }
       return '<tr><td>'+esc(oc)+'</td>'+
         '<td>'+fmtViz(p.amount||p.stake)+'</td>'+
-        '<td>'+fmtShares(shares)+'</td>'+
-        '<td><button class="btn small" data-xfer="'+bid+'" data-sh="'+shares+'">'+esc(t('md.col_transfer'))+'</button> '+
-        '<button class="btn small bad" data-cancel="'+bid+'">'+esc(t('md.col_cancel'))+'</button></td></tr>';
+        '<td>'+fmtShares(shares)+'</td>'+last+'</tr>';
     }).join('');
-    box.innerHTML='<table class="tbl"><tr><th>'+esc(t('md.col_outcome'))+'</th><th>'+esc(t('md.col_amount'))+'</th><th>'+esc(t('md.col_tokens'))+'</th><th></th></tr>'+rows+'</table>';
+    box.innerHTML='<table class="tbl"><tr><th>'+esc(t('md.col_outcome'))+'</th><th>'+esc(t('md.col_amount'))+'</th><th>'+esc(t('md.col_tokens'))+'</th><th>'+esc(resolved?t('md.col_result'):'')+'</th></tr>'+rows+'</table>';
     $all('[data-cancel]',box).forEach(function(b){ b.onclick=function(){
       if(!confirm(t('bet.cancel_note')))return;
       var bid=Number(b.getAttribute('data-cancel'));

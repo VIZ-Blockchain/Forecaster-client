@@ -85,7 +85,8 @@ var EN = {
 
   /* market detail */
   'md.loading':'loading market #{ID}…','md.onix_binary':'Onix Binary','md.onix_multi':'Onix Multi',
-  'md.by':'by {C}','md.oracle':'oracle: {O}','md.outcomes':'Outcomes','md.status':'Status','md.result':'Result',
+  'md.by':'by: {C}','md.oracle':'oracle: {O}','md.outcomes':'Outcomes','md.status':'Status','md.result':'Result',
+  'md.awaiting_result':'awaiting oracle result','md.pos_win':'win','md.pos_loss':'loss','md.col_result':'result',
   'md.event':'event ↗','ev.title':'Event','ev.count':'{N} markets','ev.empty':'No markets in this event yet.',
   'md.chart_title':'Outcome ratio over time','md.chart_empty':'No price history yet.','md.chart_volume':'Volume','md.chart_events':'leverage events',
   'md.betting_until':'Betting until','md.result_deadline':'Result deadline','md.volume':'Volume',
@@ -401,7 +402,8 @@ var RU = {
   'rel.excellent':'отличный','rel.good':'хороший','rel.average':'средний','rel.new':'новый','rel.poor':'слабый','rel.unreliable':'ненадёжный',
 
   'md.loading':'загрузка рынка #{ID}…','md.onix_binary':'Onix Binary','md.onix_multi':'Onix Multi',
-  'md.by':'автор {C}','md.oracle':'оракул: {O}','md.outcomes':'Исходы','md.status':'Статус','md.result':'Результат',
+  'md.by':'автор: {C}','md.oracle':'оракул: {O}','md.outcomes':'Исходы','md.status':'Статус','md.result':'Результат',
+  'md.awaiting_result':'ожидает результата оракула','md.pos_win':'выигрыш','md.pos_loss':'проигрыш','md.col_result':'результат',
   'md.event':'событие ↗','ev.title':'Событие','ev.count':'рынков: {N}','ev.empty':'В этом событии пока нет рынков.',
   'md.chart_title':'Соотношение исходов во времени','md.chart_empty':'Пока нет истории.','md.chart_volume':'Объём','md.chart_events':'события плеча',
   'md.betting_until':'Ставки до','md.result_deadline':'Дедлайн результата','md.volume':'Объём',
@@ -707,7 +709,8 @@ var ZH = {
   'rel.excellent':'优秀','rel.good':'良好','rel.average':'一般','rel.new':'新','rel.poor':'较差','rel.unreliable':'不可靠',
 
   'md.loading':'加载市场 #{ID}…','md.onix_binary':'Onix 二元','md.onix_multi':'Onix 多选',
-  'md.by':'创建者 {C}','md.oracle':'预言机：{O}','md.outcomes':'结果','md.status':'状态','md.result':'裁决结果',
+  'md.by':'创建者：{C}','md.oracle':'预言机：{O}','md.outcomes':'结果','md.status':'状态','md.result':'裁决结果',
+  'md.awaiting_result':'等待预言机结果','md.pos_win':'赢','md.pos_loss':'输','md.col_result':'结果',
   'md.event':'赛事 ↗','ev.title':'赛事','ev.count':'{N} 个市场','ev.empty':'该赛事暂无市场。',
   'md.chart_title':'各结果占比走势','md.chart_empty':'暂无历史。','md.chart_volume':'成交量','md.chart_events':'杠杆事件',
   'md.betting_until':'投注截止','md.result_deadline':'裁决截止','md.volume':'成交量',
