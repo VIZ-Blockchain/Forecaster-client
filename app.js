@@ -1798,7 +1798,12 @@ function canOpenDispute(m,dispute,status,props){
   if(grace!=null && rexp && now()>rexp+grace) return false;                       // grace window passed
   return true;
 }
+/* A market is finalized once payout has been made (payout_status 2 = paid) or it was
+   deleted/void (status -1). Owner 2026-07-12 (#A): hide the whole dispute/governance card
+   after finalization — nothing is actionable then (any dispute is already closed). */
+function marketFinalized(m){ return Number(m.payout_status)===2 || Number(m.status)===-1; }
 function disputeBlock(id,m,ocs,dispute,canOpen){
+  if(marketFinalized(m)) return '';   // finalized → no governance card at all
   var out='';
   if(dispute&&(dispute.id!=null||dispute.disputer||dispute.status!=null)){
     out+='<div class="box warn">'+esc(t('dp.open'))+(dispute.disputer?esc(t('dp.by',{D:dispute.disputer})):'')+

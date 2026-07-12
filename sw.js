@@ -3,7 +3,7 @@
    Cross-origin requests (VIZ node RPC, Chart.js CDN) always go to the network. */
 // BUMP this on every release — the SW only re-installs (and purges the stale shell) when this
 // string changes, so an unchanged name leaves clients on the old cache-first app.js.
-var CACHE = 'forecaster-light-v53';
+var CACHE = 'forecaster-light-v54';
 var ASSETS = [
   './', 'index.html', 'styles.css', 'i18n.js', 'app.js', 'viz.min.js', 'manifest.json',
   'logo.png', 'logo-text.svg', 'favicon.ico', 'favicon-16x16.png', 'favicon-32x32.png',
