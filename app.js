@@ -1035,19 +1035,36 @@ function ensureCatTagCounts(cat){
   if(CAT_TAG_COUNTS[cat]!==undefined) return Promise.resolve(CAT_TAG_COUNTS[cat]);
   return rawNodeCall('prediction_market_api','get_category_tag_counts',[cat]).then(function(res){
     var arr=(res&&res.hot_tags)||[], map={};
-    arr.forEach(function(x){ if(x&&x.tag!=null) map[String(x.tag).toLowerCase()]=Number(x.count)||0; });
+    // keep the original label (case preserved) alongside the count so the tag bar can be built
+    // authoritatively — a tag with markets deeper than the loaded window still gets a chip.
+    arr.forEach(function(x){ if(x&&x.tag!=null){ var s=String(x.tag); map[s.toLowerCase()]={label:s.trim(), n:Number(x.count)||0}; } });
     CAT_TAG_COUNTS[cat]=map; return map;
   }).catch(function(){ CAT_TAG_COUNTS[cat]=null; return null; });
 }
-/* Patch rendered tag-chip pills with authoritative counts once they arrive (no-op on old nodes). */
-function patchTagCounts(host){
+/* Once authoritative per-category tag counts arrive, rebuild the tag bar from them (adds chips for
+   tags absent from the loaded window, e.g. Dota 2) and re-wire clicks. No-op / count-only patch on
+   old nodes that lack get_category_tag_counts. */
+function refreshTagBar(host){
   if(!host || mkFilter.category==='') return;
   ensureCatTagCounts(mkFilter.category).then(function(map){
-    if(!map) return;
-    Array.prototype.forEach.call(host.querySelectorAll('.chip-n[data-tagn]'), function(sp){
-      var n=map[sp.getAttribute('data-tagn')]; if(n!=null) sp.textContent=n;
-    });
+    var barEl=host.querySelector('.tagbar');
+    if(!map){ return; }                                              // old node → keep window bar as-is
+    var html=catTagBar([]);                                          // auth cached now → built authoritatively
+    if(!html){ if(barEl&&barEl.parentNode) barEl.parentNode.removeChild(barEl); return; }
+    var tmp=document.createElement('div'); tmp.innerHTML=html; var fresh=tmp.firstChild;
+    if(barEl){ barEl.parentNode.replaceChild(fresh,barEl); } else { host.insertBefore(fresh, host.firstChild); }
+    Array.prototype.forEach.call(host.querySelectorAll('[data-tagf]'), function(b){
+      b.onclick=function(){ mkFilter.tag=b.getAttribute('data-tagf')||''; go(marketsHash()); }; });
   }).catch(function(){});
+}
+/* A tag worth showing as an in-category filter chip (drops the category itself, umbrella labels,
+   jurisdiction/reward source-noise and bare number fragments). */
+function tagUseful(raw, catLow){
+  var s=String(raw).trim(); if(s.length<2) return false;
+  if(/jurisdiction-ban:/i.test(s)||/^rewards\b/i.test(s)||/deprec/i.test(s)) return false;
+  if(/^[\d.,\s]+$/.test(s)) return false;
+  var low=s.toLowerCase(); if(low===catLow||GENERIC_TAGS[low]) return false;
+  return true;
 }
 // tags too broad to be useful as an in-category filter (the category itself, umbrella labels, source noise)
 var GENERIC_TAGS={sports:1,games:1,esports:1,gaming:1,all:1,crypto:1,politics:1,news:1,culture:1,business:1,economy:1,tech:1,science:1,world:1,other:1,general:1};
@@ -1056,20 +1073,26 @@ var GENERIC_TAGS={sports:1,games:1,esports:1,gaming:1,all:1,crypto:1,politics:1,
 function catTagBar(list){
   if(mkFilter.category==='') return '';
   var counts={}, order=[], catLow=String(mkFilter.category).toLowerCase();
-  list.forEach(function(m){ var tg=parseMeta(m).tags||m.tags||[]; if(typeof tg==='string') tg=tg.split(/[,;]+/);
-    (tg||[]).forEach(function(raw){ var s=String(raw).trim(); if(s.length<2) return;
-      if(/jurisdiction-ban:/i.test(s)||/^rewards\b/i.test(s)||/deprec/i.test(s)) return;  // internal / source-config noise
-      if(/^[\d.,\s]+$/.test(s)) return;                                 // reward-config number fragments ("4.5","50","100")
-      var low=s.toLowerCase(); if(low===catLow||GENERIC_TAGS[low]) return;
-      if(!counts[low]){ counts[low]={label:s,n:0}; order.push(low); } counts[low].n++;
+  var auth=CAT_TAG_COUNTS[mkFilter.category];
+  if(auth){
+    // Authoritative per-category tag set: every tag with markets in the category gets a chip,
+    // regardless of whether one happens to be in the currently-loaded page (fixes missing "Dota 2").
+    Object.keys(auth).forEach(function(low){ var it=auth[low]; if(!tagUseful(it.label,catLow)) return;
+      counts[low]={label:it.label,n:it.n}; order.push(low); });
+  } else {
+    // Fallback (first paint / old node without get_category_tag_counts): derive from the loaded window.
+    list.forEach(function(m){ var tg=parseMeta(m).tags||m.tags||[]; if(typeof tg==='string') tg=tg.split(/[,;]+/);
+      (tg||[]).forEach(function(raw){ if(!tagUseful(raw,catLow)) return; var s=String(raw).trim(), low=s.toLowerCase();
+        if(!counts[low]){ counts[low]={label:s,n:0}; order.push(low); } counts[low].n++;
+      });
     });
-  });
+  }
   order.sort(function(a,b){ return counts[b].n-counts[a].n; });
   var top=order.slice(0,14);
+  // keep the currently-selected tag visible even if it fell outside the top slice
+  if(mkFilter.tag && top.indexOf(mkFilter.tag)<0){ if(!counts[mkFilter.tag]) counts[mkFilter.tag]={label:mkFilter.tag,n:0}; top.push(mkFilter.tag); }
   if(!top.length && !mkFilter.tag) return '';
   var chips='<button class="btn chip'+(!mkFilter.tag?' active':'')+'" data-tagf="">'+esc(t('mk.all_tags'))+'</button>';
-  // count shown in a separate rounded pill (data-tagn → patched with the node's authoritative
-  // per-category count so it's stable, not tied to the currently-loaded page).
   top.forEach(function(low){ chips+='<button class="btn chip'+(mkFilter.tag===low?' active':'')+'" data-tagf="'+esc(low)+'">'+esc(counts[low].label)+'<span class="chip-n" data-tagn="'+esc(low)+'">'+counts[low].n+'</span></button>'; });
   return '<div class="filters tagbar">'+chips+'</div>';
 }
@@ -1353,7 +1376,7 @@ async function loadMarketList(){
     var more=hasMore ? '<div class="mt" style="text-align:center"><button class="btn" id="mk-more-btn">'+esc(t('common.load_more'))+'</button></div>' : '';
     host.innerHTML=bar+(firstPage.length?firstPage.map(marketCard).join(''):'<div class="empty">'+esc(t('mk.none_tag'))+'</div>')+more;
     enrichCardBars(host);                                            // async-fill named outcome bars for the rendered cards
-    patchTagCounts(host);                                            // replace page-window tag counts with authoritative per-category counts
+    refreshTagBar(host);                                             // rebuild tag chips from authoritative per-category counts (adds tags outside the window)
     Array.prototype.forEach.call(host.querySelectorAll('[data-tagf]'), function(b){       // wire tag chips (idempotent per render)
       b.onclick=function(){ mkFilter.tag=b.getAttribute('data-tagf')||''; go(marketsHash()); };
     });
