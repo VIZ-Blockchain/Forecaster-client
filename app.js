@@ -1473,8 +1473,10 @@ async function screenMarket(id){
   try{ full=await api('getMarketFull', id, SESSION?SESSION.account:''); }
   catch(e){ try{ full=await api('getMarket', id); }catch(e2){ setContent('<div class="box err">'+esc(errText(e2))+'</div>');return; } }
   try{ dispute=await api('getDispute', id); }catch(e){}
-  // merge the node meta object (full.meta: title/image/category/…) over any metadata blob
-  var m=full.market||full; var meta=Object.assign({}, parseMeta(m), full.meta||{});
+  // market.metadata (parseMeta: array tags, reconstructed by the node) is authoritative and wins over
+  // the raw full.meta storage object (CSV tags) — per the tags contract, we don't let raw meta CSV leak
+  // into the UI. full.meta only fills fields market.metadata lacks (child/expiry/…).
+  var m=full.market||full; var meta=Object.assign({}, full.meta||{}, parseMeta(m));
   // Real outcome labels live in full.outcomes (pm_outcome objects), NOT on the market object — attach
   // them so the page shows the true labels ("Over 2.5 / Under 2.5", candidate names, …) instead of the
   // Yes/No fallback. Every consumer here reads them via marketOutcomes(m) → m.outcome_names.
