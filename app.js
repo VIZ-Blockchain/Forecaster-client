@@ -1483,9 +1483,7 @@ async function screenMarket(id){
   if(status===0){ var _ad=assetTime(m.accept_deadline);
     if(_ad>0) html+='<div class="box '+(_ad>now()?'warn':'err')+'">'+esc(t('md.accept_by',{T:tsToLocal(_ad), IN:fmtIn(_ad)}))+'</div>'; }
 
-  if(meta.description) html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('md.rules'))+'</div>'+esc(meta.description)+'</div>';
-
-  // Outcomes + implied prices (best-effort)
+  // Outcomes + implied prices (best-effort). #owner 2026-07-12: Rules moved below Outcomes.
   html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('md.outcomes'))+'</div>';
   var prices=outcomePrices(full, ocs.length, isMulti);
   ocs.forEach(function(name,i){
@@ -1498,6 +1496,9 @@ async function screenMarket(id){
           '<div class="oc-bar"><div class="oc-fill '+cls+'" style="width:'+(pct!=null?Math.max(2,pct*100):0)+'%"></div></div></div>';
   });
   html+='</div>';
+
+  // Rules (moved here, below Outcomes, per owner 2026-07-12)
+  if(meta.description) html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('md.rules'))+'</div>'+esc(meta.description)+'</div>';
 
   // Outcome-ratio chart (from get_market_kline). #2: loadKline removes this whole card (id=kline-card)
   // when there is no price history — an empty "no history yet" box on a resolved market is just noise.
@@ -1914,16 +1915,20 @@ async function loadMyPositions(id, mkt){
       var last;
       if(resolved){
         var won=(idx===winIdx);
-        var pay=assetNum(p.expected_payout);
-        last='<td>'+(won?'<span class="ok">'+esc(t('md.pos_win'))+(pay>0?' '+fmtViz(p.expected_payout):'')+'</span>'
-                        :'<span class="mut">'+esc(t('md.pos_loss'))+' —</span>')+'</td>';
+        // Result = badge (win/loss) + the net delta (payout − stake) shown separately and colour-coded:
+        // profit = green, loss = red, break-even 0 = orange (owner 2026-07-12).
+        var dRaw=Math.round((assetNum(p.expected_payout)-assetNum(p.amount||p.stake))*1000);
+        var dCls=dRaw>0?'delta-pos':(dRaw<0?'delta-neg':'delta-zero');
+        var dStr=(dRaw>0?'+':'')+fmtViz(dRaw);   // fmtViz already carries a leading '-' for negatives
+        var badge='<span class="badge '+(won?'pos-win':'pos-loss')+'">'+esc(won?t('md.pos_win'):t('md.pos_loss'))+'</span>';
+        last='<td>'+badge+' <span class="'+dCls+'">'+esc(dStr)+'</span></td>';
       }else{
         last='<td><button class="btn small" data-xfer="'+bid+'" data-sh="'+shares+'">'+esc(t('md.col_transfer'))+'</button> '+
              '<button class="btn small bad" data-cancel="'+bid+'">'+esc(t('md.col_cancel'))+'</button></td>';
       }
       return '<tr><td>'+esc(oc)+'</td>'+
         '<td>'+fmtViz(p.amount||p.stake)+'</td>'+
-        '<td>'+fmtShares(shares)+'</td>'+last+'</tr>';
+        '<td>'+(shares>0?fmtShares(shares):'—')+'</td>'+last+'</tr>';
     }).join('');
     box.innerHTML='<table class="tbl"><tr><th>'+esc(t('md.col_outcome'))+'</th><th>'+esc(t('md.col_amount'))+'</th><th>'+esc(t('md.col_tokens'))+'</th><th>'+esc(resolved?t('md.col_result'):'')+'</th></tr>'+rows+'</table>';
     $all('[data-cancel]',box).forEach(function(b){ b.onclick=function(){

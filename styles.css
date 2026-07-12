@@ -99,6 +99,12 @@ small{font-size:.85em}
 .crumb-chip.crumb-tag:hover{background:#d8e6fb; text-decoration:none; color:#2f6fb0}
 /* #1: winning outcome on a resolved market */
 .oc-win .oc-name{color:#2fa84f; font-weight:700}
+/* My-positions result: win/loss badge + colour-coded net delta (green/red/orange) */
+.badge.pos-win{background:#e6f4ea; color:#2fa84f}
+.badge.pos-loss{background:#fdecea; color:#d64545}
+.delta-pos{color:#2fa84f; font-weight:600}
+.delta-neg{color:#d64545; font-weight:600}
+.delta-zero{color:#e08a00; font-weight:600}
 .card-meta{display:flex; align-items:center; gap:10px; flex-wrap:wrap; color:var(--muted); font-size:12.5px}
 .card-meta .card-vol{margin-left:auto; color:var(--muted); white-space:nowrap}
 .kv{display:flex; justify-content:space-between; gap:12px; padding:5px 0; border-bottom:1px solid var(--line,rgba(255,255,255,.06)); font-size:13px}
