@@ -1103,8 +1103,6 @@ function catTagBar(list){
   top.forEach(function(low){ chips+='<button class="btn chip'+(mkFilter.tag===low?' active':'')+'" data-tagf="'+esc(low)+'">'+esc(counts[low].label)+'<span class="chip-n" data-tagn="'+esc(low)+'">'+counts[low].n+'</span></button>'; });
   return '<div class="filters tagbar">'+chips+'</div>';
 }
-function marketHasTag(m,low){ var tg=parseMeta(m).tags; if(!Array.isArray(tg)) tg=[];
-  return tg.some(function(x){ return String(x).trim().toLowerCase()===low; }); }
 /* Markets browse state lives in the URL hash query so category/tag selections are deep-linkable &
    shareable (owner request). #/markets?v=hot&c=<catId>&t=<tag>&s=<status>&q=<search>. Only non-default
    keys are emitted; category/tag only make sense in the browsable views (hot/all). */
@@ -1369,7 +1367,11 @@ async function loadMarketList(){
     try{ if(mkFilter.view==='hot'||mkFilter.view==='all'||mkFilter.view==='popular') indexPut(list); }catch(e){} // refresh discovery cache (never used for betting)
     if(!list.length){ host.innerHTML='<div class="empty">'+esc(t('mk.none'))+'</div>'; return; }
     var bar=catTagBar(list);                                          // in-category tag chips (from full category list)
-    var shownAll=mkFilter.tag ? list.filter(function(m){return marketHasTag(m,mkFilter.tag);}) : list;
+    // The node already applied the tag filter server-side (list_markets_by_category tag param,
+    // case-insensitive) — the returned rows ARE the tagged set. No client re-filter: browse rows are
+    // the lightweight meta_object shape (top-level CSV `tags`, no market.metadata), and per the tags
+    // contract we don't parse raw meta CSV in the UI. Trust the server-filtered list.
+    var shownAll=list;
     // Float "who wins" markets above props — but only for the default newest order; an explicit
     // volume/expiration sort is the user's chosen order and must be preserved verbatim.
     if((mkFilter.category!==''||mkFilter.tag) && (mkFilter.sort||'newest')==='newest') shownAll=moneylineFirst(shownAll);
