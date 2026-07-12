@@ -213,9 +213,8 @@ function marketBannedIn(m,jur){
   var banned=meta.jurisdiction_banned||meta.banned_jurisdictions||meta.banned||[];
   if(typeof banned==='string') banned=banned.split(/[,\s]+/);
   if(Array.isArray(banned)) for(var i=0;i<banned.length;i++){ if(String(banned[i]).trim().toUpperCase()===jur)return true; }
-  var tags=meta.tags||m.tags||[];
-  if(typeof tags==='string') tags=tags.split(/[,\s]+/);
-  if(Array.isArray(tags)) for(var k=0;k<tags.length;k++){ var mt=String(tags[k]).match(/jurisdiction-ban:([A-Za-z]{2})/); if(mt&&mt[1].toUpperCase()===jur)return true; }
+  var tags=Array.isArray(meta.tags)?meta.tags:[]; // tags: only market.metadata.tags (array); raw meta CSV not parsed in UI
+  for(var k=0;k<tags.length;k++){ var mt=String(tags[k]).match(/jurisdiction-ban:([A-Za-z]{2})/); if(mt&&mt[1].toUpperCase()===jur)return true; }
   return false;
 }
 
@@ -520,8 +519,8 @@ function crumbLabel(s){ return String(s||'').replace(/(^|[\s\-_/])([a-z])/g,func
 function marketCrumbs(meta){
   if(!meta) return '';
   var cat=meta.category||'';
-  // tags may arrive as an array (market.metadata) OR a CSV string (get_market_full.meta) — accept both.
-  var tags=Array.isArray(meta.tags)?meta.tags:(typeof meta.tags==='string'?meta.tags.split(/[,;]+/):[]);
+  // tags come only from market.metadata.tags (array; node reconstructs it via csv_to_array). Raw meta CSV is not parsed in UI.
+  var tags=Array.isArray(meta.tags)?meta.tags:[];
   var catLow=String(cat).toLowerCase();
   var parts=[];
   // Bubble chips (owner 2026-07-12 #6): category = blue chip, tags = lighter blue chips.
@@ -1089,8 +1088,8 @@ function catTagBar(list){
       counts[low]={label:it.label,n:it.n}; order.push(low); });
   } else {
     // Fallback (first paint / old node without get_category_tag_counts): derive from the loaded window.
-    list.forEach(function(m){ var tg=parseMeta(m).tags||m.tags||[]; if(typeof tg==='string') tg=tg.split(/[,;]+/);
-      (tg||[]).forEach(function(raw){ if(!tagUseful(raw,catLow)) return; var s=String(raw).trim(), low=s.toLowerCase();
+    list.forEach(function(m){ var tg=parseMeta(m).tags; if(!Array.isArray(tg)) tg=[];
+      tg.forEach(function(raw){ if(!tagUseful(raw,catLow)) return; var s=String(raw).trim(), low=s.toLowerCase();
         if(!counts[low]){ counts[low]={label:s,n:0}; order.push(low); } counts[low].n++;
       });
     });
@@ -1104,8 +1103,8 @@ function catTagBar(list){
   top.forEach(function(low){ chips+='<button class="btn chip'+(mkFilter.tag===low?' active':'')+'" data-tagf="'+esc(low)+'">'+esc(counts[low].label)+'<span class="chip-n" data-tagn="'+esc(low)+'">'+counts[low].n+'</span></button>'; });
   return '<div class="filters tagbar">'+chips+'</div>';
 }
-function marketHasTag(m,low){ var tg=parseMeta(m).tags||m.tags||[]; if(typeof tg==='string') tg=tg.split(/[,;]+/);
-  return (tg||[]).some(function(x){ return String(x).trim().toLowerCase()===low; }); }
+function marketHasTag(m,low){ var tg=parseMeta(m).tags; if(!Array.isArray(tg)) tg=[];
+  return tg.some(function(x){ return String(x).trim().toLowerCase()===low; }); }
 /* Markets browse state lives in the URL hash query so category/tag selections are deep-linkable &
    shareable (owner request). #/markets?v=hot&c=<catId>&t=<tag>&s=<status>&q=<search>. Only non-default
    keys are emitted; category/tag only make sense in the browsable views (hot/all). */
@@ -1172,7 +1171,7 @@ async function ensureCategories(fresh){
 
 /* Compact market index in LS: instant paint of the discovery feed + fast local search over known markets. */
 function idxRow(m){ return {id:marketId(m), title:marketTitle(m), cat:(parseMeta(m).category||''), sub:(parseMeta(m).subcategory||''),
-  tags:(parseMeta(m).tags||m.tags||''), exp:assetTime(m.betting_expiration)||0, status:marketStatus(m), vol:volOf(m), upd:now()}; }
+  tags:(Array.isArray(parseMeta(m).tags)?parseMeta(m).tags.join(','):''), exp:assetTime(m.betting_expiration)||0, status:marketStatus(m), vol:volOf(m), upd:now()}; }
 /* Compact market index in LS, keyed by market id. Ids are stable/permanent on chain, so an id always maps to
    the same market; mutable fields (status/vol/exp) self-refresh via the index TTL (default 30 min, user-set).
    This is discovery/metadata only — a market runs for weeks, and its details/prices are always fetched fresh
