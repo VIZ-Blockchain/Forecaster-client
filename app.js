@@ -544,10 +544,19 @@ function winningIndex(m){
 }
 function statusLabel(s){ return t('st.'+s); }
 function statusBadge(m){ var s=marketStatus(m); return '<span class="badge st-'+s+'">'+esc(statusLabel(s))+'</span>'; }
+/* Localize the generic binary outcome labels Yes/No → current language (Polymarket-style:
+   Yes»Да, No»Нет). Real on-chain names (team names, custom labels) pass through unchanged. */
+function locOutcome(lbl){
+  if(lbl==null) return lbl;
+  var s=String(lbl).trim().toLowerCase();
+  if(s==='yes') return t('oc.yes');
+  if(s==='no')  return t('oc.no');
+  return lbl;
+}
 function marketOutcomes(m){
   var o=m.outcomes||m.outcome_names||(parseMeta(m).outcomes);
-  if(!o)return (Number(m.market_type)===1?[]:['Yes','No']);
-  return o.map(function(x){ return typeof x==='string'?x:(x.name||x.title||x.label||String(x)); });
+  if(!o)return (Number(m.market_type)===1?[]:[t('oc.yes'),t('oc.no')]);
+  return o.map(function(x){ var s=typeof x==='string'?x:(x.name||x.title||x.label||String(x)); return locOutcome(s); });
 }
 /* Human label for a bet's chosen outcome. Binary bets carry side (0=A/Yes, 1=B/No) with
    outcome_index=-1; multi bets carry outcome_index (>=0). Use the market's real label when known,
@@ -557,7 +566,7 @@ function betOutcomeLabel(p, m){
   var idx=(p.outcome_index!=null && p.outcome_index>=0)?p.outcome_index:(p.side!=null?p.side:-1);
   if(idx<0) return '—';
   if(ocs[idx]!=null) return ocs[idx];
-  return idx===0?'Yes':(idx===1?'No':('#'+idx));
+  return idx===0?t('oc.yes'):(idx===1?t('oc.no'):('#'+idx));
 }
 /* Fetch market titles for a set of ids (cached), for tables that only have ids. Returns {id:market}.
    Keyed by market id — ids are stable/permanent on chain, so cached titles stay valid. */
@@ -582,7 +591,7 @@ function binaryProb(m){
 /* Glanceable probability strip for binary cards: "Yes 63% · No 37%" + a two-tone bar. */
 function probBar(m){
   var p=binaryProb(m); if(p==null) return '';
-  var ocs=marketOutcomes(m), yes=ocs[0]||'Yes', no=ocs[1]||'No';
+  var ocs=marketOutcomes(m), yes=ocs[0]||t('oc.yes'), no=ocs[1]||t('oc.no');
   var pctY=Math.round(p*100), pctN=100-pctY;
   return h(
     '<div class="pbar">',
