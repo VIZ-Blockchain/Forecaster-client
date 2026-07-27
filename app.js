@@ -3052,46 +3052,81 @@ async function screenOracleProfile(owner){
     '<div id="orp-mk"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>';
     el('orp-body').innerHTML=body;
 
-    // Markets feed — NEWEST-first. list_markets_by_oracle pages ascending from market id 0, so to show
-    // the latest markets first (and walk deeper into history on "load more") we fetch the oracle's set
-    // once — fast even for thousands: the node streams 1000/page (~1s for 8k markets) — sort it
-    // id-descending, then reveal 100 at a time from memory. The scoring card above already carries the
-    // lifetime counts, so this stays a flat feed. (A server-side newest-first page would drop even the
-    // one-time fetch; worth adding node-side later if oracles grow much past ~10k live markets.)
+    // Markets feed — tabbed by status (Active / Resolved), served straight off the node's dedicated
+    // list_markets_by_oracle_status(oracle, status, from, limit) query (by_oracle_status index) so we
+    // page one status at a time instead of pulling the oracle's whole (mostly-resolved) set into memory
+    // and filtering. Called via rawApi since the method may post-date the vendored viz.min.js; if the
+    // node lacks it (old build) we fall back to the previous fetch-all-and-filter path.
     (function(){
-      var PAGE=100, all=null, shown=0;
+      var PAGE=100;
+      var TABS=[{k:'active', st:1}, {k:'resolved', st:3}];
+      var cur='active', legacyAll=null;                               // legacyAll: cached full set for fallback
       function cardHtml(x){ var id=marketId(x);
         return '<div class="card click card-dense" data-nav="#/market/'+id+'">'+
           '<div class="card-q">'+esc(marketTitle(x))+'</div>'+
           '<div class="mut" style="font-size:12px">'+statusBadge(x)+'</div></div>';
       }
-      function renderMore(){
-        var slice=all.slice(shown, shown+PAGE); shown+=slice.length;
-        el('orp-mk-list').insertAdjacentHTML('beforeend', slice.map(cardHtml).join(''));
-        if(shown>=all.length){ el('orp-mk-more').innerHTML=''; }
-        else { el('orp-mk-more').innerHTML='<button class="btn" id="orp-more-btn">'+esc(t('orp.load_more'))+'</button>'; el('orp-more-btn').onclick=renderMore; }
+      function tabsHtml(){
+        return '<div class="chips mb">'+TABS.map(function(tb){
+          return '<button class="btn chip'+(tb.k===cur?' active':'')+'" data-orptab="'+tb.k+'">'+esc(t('orp.tab_'+tb.k))+'</button>';
+        }).join('')+'</div>';
       }
-      async function fetchAll(){
-        var acc=[], from=0, guard=0, seen={};
-        while(guard++<50){
-          var chunk=(await api('listMarketsByOracle', owner, from, 1000))||[];
-          if(!el('orp-mk')) return null;                              // navigated away mid-fetch
-          chunk.forEach(function(x){ var id=marketId(x); if(id!=null && !seen[id]){ seen[id]=1; acc.push(x); } });
-          from+=1000;
-          if(chunk.length<1000) break;
+      // ascending pager over one status; keeps a "from" cursor and reverses each page so newest shows first
+      function makeStatusFeed(st){
+        var from=0, done=false;
+        return async function next(){
+          if(done) return [];
+          var chunk=(await rawApi('prediction_market_api','list_markets_by_oracle_status',[owner, st, from, PAGE]))||[];
+          chunk.forEach(function(m){ if(m&&typeof m.market==='number') m.id=m.market; });   // mirror normApi
+          from+=chunk.length; if(chunk.length<PAGE) done=true;
+          return chunk;
+        };
+      }
+      // fallback: fetch the oracle's whole set once, filter+sort client-side (old behaviour)
+      async function legacyFetch(st){
+        if(legacyAll===null){
+          var acc=[], f=0, guard=0, seen={};
+          while(guard++<50){
+            var chunk=(await api('listMarketsByOracle', owner, f, 1000))||[];
+            if(!el('orp-mk')) return null;
+            chunk.forEach(function(x){ var id=marketId(x); if(id!=null && !seen[id]){ seen[id]=1; acc.push(x); } });
+            f+=1000; if(chunk.length<1000) break;
+          }
+          legacyAll=acc;
         }
-        acc.sort(function(a,b){ return marketId(b)-marketId(a); });   // newest (highest id) first → "load more" digs older
-        return acc;
+        return legacyAll.filter(function(x){ return marketStatus(x)===st; })
+                        .sort(function(a,b){ return marketId(b)-marketId(a); });
       }
-      (async function(){
-        try{
-          all=await fetchAll();
-          if(all===null || !el('orp-mk')) return;                     // navigated away
-          if(!all.length){ el('orp-mk').innerHTML='<div class="empty">'+esc(t('orp.no_markets'))+'</div>'; return; }
-          el('orp-mk').innerHTML='<div id="orp-mk-list"></div><div id="orp-mk-more" class="mt"></div>';
-          renderMore();
-        }catch(e2){ if(el('orp-mk')) el('orp-mk').innerHTML='<div class="box err">'+esc(t('orp.markets_error'))+'</div>'; }
-      })();
+      async function renderTab(){
+        var box=el('orp-mk'); if(!box) return;
+        box.innerHTML=tabsHtml()+'<div id="orp-mk-list"></div><div id="orp-mk-more" class="mt"><span class="spin"></span></div>';
+        wireTabs();
+        var st=(TABS.filter(function(tb){return tb.k===cur;})[0]||TABS[0]).st;
+        var useLegacy=false, feed=makeStatusFeed(st), shownAny=false, myTab=cur;
+        async function loadPage(){
+          var page;
+          try{ page = useLegacy ? null : await feed(); }
+          catch(e){ useLegacy=true; }                                  // node lacks method → switch to fallback
+          if(myTab!==cur || !el('orp-mk')) return;                     // tab switched / navigated away
+          if(useLegacy){
+            var all=await legacyFetch(st);
+            if(all===null || myTab!==cur || !el('orp-mk')) return;
+            renderChunk(all); if(el('orp-mk-more')) el('orp-mk-more').innerHTML=''; finishIfEmpty(all.length); return;
+          }
+          renderChunk(page);
+          if(!page.length){ finishIfEmpty(shownAny?1:0); if(el('orp-mk-more')) el('orp-mk-more').innerHTML=''; return; }
+          shownAny=true;
+          el('orp-mk-more').innerHTML='<button class="btn" id="orp-more-btn">'+esc(t('orp.load_more'))+'</button>';
+          el('orp-more-btn').onclick=function(){ el('orp-mk-more').innerHTML='<span class="spin"></span>'; loadPage(); };
+        }
+        function renderChunk(arr){ if(arr&&arr.length&&el('orp-mk-list')) el('orp-mk-list').insertAdjacentHTML('beforeend', arr.map(cardHtml).join('')); }
+        function finishIfEmpty(n){ if(!n && el('orp-mk-list')) el('orp-mk-list').innerHTML='<div class="empty">'+esc(t('orp.no_markets'))+'</div>'; }
+        loadPage();
+      }
+      function wireTabs(){ Array.prototype.forEach.call(document.querySelectorAll('[data-orptab]'), function(el2){
+        el2.onclick=function(){ var k=el2.getAttribute('data-orptab'); if(k===cur)return; cur=k; renderTab(); }; }); }
+      try{ renderTab(); }
+      catch(e2){ if(el('orp-mk')) el('orp-mk').innerHTML='<div class="box err">'+esc(t('orp.markets_error'))+'</div>'; }
     })();
   }catch(e){ el('orp-body').innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
 }

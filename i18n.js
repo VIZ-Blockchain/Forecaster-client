@@ -328,7 +328,7 @@ var EN = {
   'orp.disputes':'Disputes','orp.won_s':'W','orp.lost_s':'L','orp.resp_missed':'Dispute responses missed',
   'orp.vol_resolved':'Volume resolved','orp.insurance_slashed':'Insurance slashed','orp.avg_res_time':'Avg resolution time',
   'orp.penalty':'Penalty stamps','orp.bans':'Bans received','orp.active_since':'Active since','orp.last_active':'Last active',
-  'orp.banned_until':'Banned until {T}','orp.rules':'Resolution rules','orp.recent':'Recent markets','orp.scanning':'Counting markets… {N}','orp.no_markets':'No markets yet.','orp.markets_error':'Couldn’t load markets — reopen to retry.','orp.load_more':'Load more',
+  'orp.banned_until':'Banned until {T}','orp.rules':'Resolution rules','orp.recent':'Recent markets','orp.scanning':'Counting markets… {N}','orp.no_markets':'No markets yet.','orp.markets_error':'Couldn’t load markets — reopen to retry.','orp.load_more':'Load more','orp.tab_active':'Active','orp.tab_resolved':'Resolved',
 
   /* boot */
   'boot.viz_missing':'viz-js-lib not found.',
@@ -636,7 +636,7 @@ var RU = {
   'orp.disputes':'Диспуты','orp.won_s':'поб','orp.lost_s':'пор','orp.resp_missed':'Пропущено ответов на диспуты',
   'orp.vol_resolved':'Разрешённый объём','orp.insurance_slashed':'Списано страховки','orp.avg_res_time':'Ср. время разрешения',
   'orp.penalty':'Штрафные метки','orp.bans':'Получено банов','orp.active_since':'Активен с','orp.last_active':'Посл. активность',
-  'orp.banned_until':'Забанен до {T}','orp.rules':'Правила разрешения','orp.recent':'Последние рынки','orp.scanning':'Считаю рынки… {N}','orp.no_markets':'Рынков пока нет.','orp.markets_error':'Не удалось загрузить рынки — открой заново.','orp.load_more':'Загрузить ещё',
+  'orp.banned_until':'Забанен до {T}','orp.rules':'Правила разрешения','orp.recent':'Последние рынки','orp.scanning':'Считаю рынки… {N}','orp.no_markets':'Рынков пока нет.','orp.markets_error':'Не удалось загрузить рынки — открой заново.','orp.load_more':'Загрузить ещё','orp.tab_active':'Активные','orp.tab_resolved':'Зарезолвленные',
 
   /* boot */
   'boot.viz_missing':'viz-js-lib не найден.',
@@ -947,7 +947,7 @@ var ZH = {
   'orp.vol_resolved':'已裁决成交量','orp.insurance_slashed':'被罚没保险金','orp.avg_res_time':'平均裁决时间',
   'orp.penalty':'处罚记录','orp.bans':'被封次数','orp.active_since':'活跃起始','orp.last_active':'最后活跃',
   'orp.banned_until':'封禁至 {T}','orp.rules':'裁决规则','orp.recent':'最近的市场','orp.scanning':'正在统计市场… {N}','orp.no_markets':'暂无市场。','orp.load_more':'加载更多',
-  'orp.markets_error':'无法加载市场——重新打开重试。',
+  'orp.markets_error':'无法加载市场——重新打开重试。','orp.tab_active':'进行中','orp.tab_resolved':'已裁决',
 
   'boot.viz_missing':'未找到 viz-js-lib。',
   'boot.viz_hint':'viz-js-lib 未加载。请从 viz-js-lib 仓库下载 <span class="mono">viz.min.js</span> 并放到 index.html 旁边，然后刷新。'
