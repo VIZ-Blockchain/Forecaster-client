@@ -2048,6 +2048,25 @@ async function pmProps(){ if(_pmPropsCache)return _pmPropsCache; try{ _pmPropsCa
 function leverageOff(p){ return !!(p && p.pm_leverage_enabled===false); }
 
 /* ---- Leverage: open + list my positions + close/convert (all high-risk) ---- */
+/* Position status → label. Node enum: 0 active,1 liquidated,2 resolved_won,3 resolved_lost,4 closed_voluntary,5 converted. */
+var LEV_ST={0:'lev.st_active',1:'lev.st_liquidated',2:'lev.st_won',3:'lev.st_lost',4:'lev.st_closed',5:'lev.st_converted'};
+function levStatus(p){ return Number((p&&p.status)||0); }
+function levActive(p){ return levStatus(p)===0; }
+/* Terminal position that cashed out to the bettor's balance (has a P/L). 5=converted lives on as a normal bet → shown in bet history, not here. */
+function levTerminal(p){ var s=levStatus(p); return s>=1 && s<=4; }
+/* Fields are RAW ints (collateral=50000 → 50 VIZ). P/L raw = bettor_received − collateral. */
+function levPnlRaw(p){ return num(p&&p.bettor_received)-num(p&&p.collateral); }
+/* <td> with the settled result: badge + colour-coded net P/L (profit green, loss red). */
+function levResultCell(p){
+  var s=levStatus(p);
+  if(s===0) return '<td class="mut">'+esc(t('lev.st_active'))+'</td>';
+  if(s===5) return '<td><span class="badge">'+esc(t('lev.st_converted'))+'</span></td>';
+  var cls=(s===2)?'pos-win':((s===1||s===3)?'pos-loss':'');   // won→green badge, liquidated/lost→red, closed→neutral
+  var dRaw=Math.round(levPnlRaw(p));
+  var dCls=dRaw>0?'delta-pos':(dRaw<0?'delta-neg':'delta-zero');
+  var dStr=(dRaw>0?'+':'')+fmtViz(dRaw);   // fmtViz already prefixes '-' for negatives
+  return '<td><span class="badge '+cls+'">'+esc(t(LEV_ST[s]))+'</span> <span class="'+dCls+'">'+esc(dStr)+'</span></td>';
+}
 async function loadLeverage(id, ocs, isMulti){
   var box=el('lev-box'); if(!box)return;
   var props=await pmProps();
@@ -2097,11 +2116,14 @@ async function loadMyLeverage(id, ocs){
     var rows=mine.map(function(p){
       var pid=p.id!=null?p.id:p.position_id;
       var oc=ocs[p.outcome_index]!=null?ocs[p.outcome_index]:('#'+p.outcome_index);
-      return '<tr><td>#'+esc(pid)+'</td><td>'+esc(oc)+'</td><td>'+fmtViz(p.collateral||0)+'</td><td>'+fmtViz(p.loan||0)+'</td><td>'+fmtViz(p.funding_paid||0)+'</td>'+
-        '<td><button class="btn small" data-lc="'+esc(pid)+'">'+esc(t('lev.close'))+'</button> '+
-        '<button class="btn small ghost" data-lcv="'+esc(pid)+'">'+esc(t('lev.convert'))+'</button></td></tr>';
+      // active → manage buttons; terminal → settled result (badge + P/L), no actions
+      var last=levActive(p)
+        ? '<td><button class="btn small" data-lc="'+esc(pid)+'">'+esc(t('lev.close'))+'</button> '+
+            '<button class="btn small ghost" data-lcv="'+esc(pid)+'">'+esc(t('lev.convert'))+'</button></td>'
+        : levResultCell(p);
+      return '<tr><td>#'+esc(pid)+'</td><td>'+esc(oc)+'</td><td>'+fmtViz(p.collateral||0)+'</td><td>'+fmtViz(p.loan||0)+'</td><td>'+fmtViz(p.funding_paid||0)+'</td>'+last+'</tr>';
     }).join('');
-    box.innerHTML='<table class="tbl"><tr><th>'+esc(t('lev.col_id'))+'</th><th>'+esc(t('act.col_outcome'))+'</th><th>'+esc(t('lev.col_collateral'))+'</th><th>'+esc(t('lev.col_loan'))+'</th><th>'+esc(t('lev.col_funding'))+'</th><th></th></tr>'+rows+'</table>';
+    box.innerHTML='<table class="tbl"><tr><th>'+esc(t('lev.col_id'))+'</th><th>'+esc(t('act.col_outcome'))+'</th><th>'+esc(t('lev.col_collateral'))+'</th><th>'+esc(t('lev.col_loan'))+'</th><th>'+esc(t('lev.col_funding'))+'</th><th>'+esc(t('lev.col_result'))+'</th></tr>'+rows+'</table>';
     $all('[data-lc]',box).forEach(function(b){ b.onclick=function(){ leverageClose(id, b.getAttribute('data-lc')); }; });
     $all('[data-lcv]',box).forEach(function(b){ b.onclick=function(){ leverageConvert(id, b.getAttribute('data-lcv')); }; });
   }catch(e){ box.innerHTML='<div class="mut">'+esc(t('lev.none_mine'))+'</div>'; }
@@ -2156,18 +2178,22 @@ async function screenLeverage(){
     var ids={}; list.forEach(function(p){ var mid=Number(p.market_id!=null?p.market_id:p.market); if(!isNaN(mid)) ids[mid]=1; });
     var mkts={};
     await Promise.all(Object.keys(ids).map(function(mid){ return api('getMarket', Number(mid)).then(function(m){ mkts[mid]=m; }).catch(function(){}); }));
+    // active positions first, then settled — so live/manageable ones stay on top
+    list.sort(function(a,b){ return (levActive(b)?1:0)-(levActive(a)?1:0); });
     var rows=list.map(function(p){
       var mid=Number(p.market_id!=null?p.market_id:p.market);
       var ocs=mkts[mid]?marketOutcomes(mkts[mid]):[];
       var oc=ocs[p.outcome_index]!=null?ocs[p.outcome_index]:('#'+p.outcome_index);
       var pid=p.id!=null?p.id:p.position_id;
+      var last=levActive(p)
+        ? '<td><button class="btn small" data-lc="'+esc(pid)+'" data-m="'+mid+'">'+esc(t('lev.close'))+'</button> '+
+            '<button class="btn small ghost" data-lcv="'+esc(pid)+'" data-m="'+mid+'">'+esc(t('lev.convert'))+'</button></td>'
+        : levResultCell(p);
       return '<tr><td><a data-nav="#/market/'+mid+'">#'+mid+'</a></td><td>'+esc(oc)+'</td>'+
-        '<td>'+fmtViz(p.collateral||0)+'</td><td>'+fmtViz(p.loan||0)+'</td><td>'+fmtViz(p.funding_paid||0)+'</td>'+
-        '<td><button class="btn small" data-lc="'+esc(pid)+'" data-m="'+mid+'">'+esc(t('lev.close'))+'</button> '+
-        '<button class="btn small ghost" data-lcv="'+esc(pid)+'" data-m="'+mid+'">'+esc(t('lev.convert'))+'</button></td></tr>';
+        '<td>'+fmtViz(p.collateral||0)+'</td><td>'+fmtViz(p.loan||0)+'</td><td>'+fmtViz(p.funding_paid||0)+'</td>'+last+'</tr>';
     }).join('');
     el('lev-all').innerHTML='<div class="card"><table class="tbl"><tr><th>'+esc(t('pf.col_market'))+'</th><th>'+esc(t('act.col_outcome'))+'</th>'+
-      '<th>'+esc(t('lev.col_collateral'))+'</th><th>'+esc(t('lev.col_loan'))+'</th><th>'+esc(t('lev.col_funding'))+'</th><th></th></tr>'+rows+'</table></div>';
+      '<th>'+esc(t('lev.col_collateral'))+'</th><th>'+esc(t('lev.col_loan'))+'</th><th>'+esc(t('lev.col_funding'))+'</th><th>'+esc(t('lev.col_result'))+'</th></tr>'+rows+'</table></div>';
     $all('[data-lc]',el('lev-all')).forEach(function(b){ b.onclick=function(){ leverageClose(Number(b.getAttribute('data-m')), b.getAttribute('data-lc'), screenLeverage); }; });
     $all('[data-lcv]',el('lev-all')).forEach(function(b){ b.onclick=function(){ leverageConvert(Number(b.getAttribute('data-m')), b.getAttribute('data-lcv'), screenLeverage); }; });
   }catch(e){ el('lev-all').innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
@@ -2617,7 +2643,9 @@ function disputeOpen(d){
 async function ensureMy(){
   if(ACT.loaded) return;
   ACT.positions = ((await api('getAccountPositions', SESSION.account, 0, 300)) || []).map(normPos);
+  try{ ACT.leverage = (await api('getAccountLeveragePositions', SESSION.account, 0, 1000)) || []; }catch(e){ ACT.leverage=[]; }
   var idset={}; ACT.positions.forEach(function(p){ var id=Number(p.market_id!=null?p.market_id:p.market); if(!isNaN(id)) idset[id]=1; });
+  ACT.leverage.forEach(function(p){ var id=Number(p.market_id!=null?p.market_id:p.market); if(!isNaN(id)) idset[id]=1; });
   ACT.ids = Object.keys(idset).map(Number);
   ACT.markets={}; ACT.disputes={};
   await Promise.all(ACT.ids.map(function(id){ return api('getMarket', id).then(function(m){ACT.markets[id]=m;}).catch(function(){}); }));
@@ -2673,8 +2701,7 @@ async function renderActTab(){
   }catch(e){ if(seq===actSeq) box.innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
 }
 function renderActHistory(box){
-  if(!ACT.positions.length){ box.innerHTML='<div class="empty">'+esc(t('act.none_history'))+'</div>'; return; }
-  var rows=ACT.positions.map(function(p){
+  var betRows=ACT.positions.map(function(p){
     var id=Number(p.market_id!=null?p.market_id:p.market);
     var m=ACT.markets[id];
     var title=m?marketTitle(m):('#'+id);
@@ -2686,8 +2713,22 @@ function renderActHistory(box){
     var stt=m?statusLabel(marketStatus(m)):'';
     return '<tr><td><a data-nav="#/market/'+id+'">'+esc(title)+'</a> <span class="mut">#'+id+'</span></td>'+
       '<td>'+esc(oc)+'</td><td>'+fmtViz(p.amount||p.stake||0)+'</td><td>'+esc(stt)+'</td></tr>';
-  }).join('');
-  box.innerHTML='<table class="tbl"><tr><th>'+esc(t('act.col_market'))+'</th><th>'+esc(t('act.col_outcome'))+'</th><th>'+esc(t('act.col_amount'))+'</th><th>'+esc(t('act.col_status'))+'</th></tr>'+rows+'</table>';
+  });
+  // Settled leverage positions (liquidated/won/lost/closed) leave no pm_bet trail — surface them here
+  // explicitly so leverage P/L is visible in history. Amount shown = collateral (bettor's own stake).
+  var levRows=(ACT.leverage||[]).filter(levTerminal).map(function(p){
+    var id=Number(p.market_id!=null?p.market_id:p.market);
+    var m=ACT.markets[id];
+    var title=m?marketTitle(m):('#'+id);
+    var ocs=m?marketOutcomes(m):[];
+    var idx=Number(p.outcome_index);
+    var oc=(idx>=0 && ocs[idx]!=null)?ocs[idx]:('#'+idx);
+    return '<tr><td><a data-nav="#/market/'+id+'">'+esc(title)+'</a> <span class="mut">#'+id+'</span> <span class="badge">'+esc(t('lev.hist_marker'))+'</span></td>'+
+      '<td>'+esc(oc)+'</td><td>'+fmtViz(p.collateral||0)+'</td>'+levResultCell(p)+'</tr>';
+  });
+  var rows=betRows.concat(levRows);
+  if(!rows.length){ box.innerHTML='<div class="empty">'+esc(t('act.none_history'))+'</div>'; return; }
+  box.innerHTML='<table class="tbl"><tr><th>'+esc(t('act.col_market'))+'</th><th>'+esc(t('act.col_outcome'))+'</th><th>'+esc(t('act.col_amount'))+'</th><th>'+esc(t('act.col_status'))+'</th></tr>'+rows.join('')+'</table>';
 }
 function renderActActive(box){
   var ms=ACT.ids.map(function(id){return ACT.markets[id];}).filter(function(m){return m && marketStatus(m)===1;});
