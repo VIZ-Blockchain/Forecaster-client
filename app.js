@@ -992,6 +992,9 @@ async function fetchMarketsNextPage(from){
   if(mkFilter.view==='all' && mkFilter.status!=null && mkFilter.status!==-1){
     return (await api('listMarkets', mkFilter.status, from, MK_PAGE, !!mkFilter.showRisky, 'newest'))||[];
   }
+  if(mkFilter.view==='closing'){
+    return (await api('listMarkets', 1, from, MK_PAGE, !!mkFilter.showRisky, 'expiration'))||[];
+  }
   return [];
 }
 /* Append the next page of cards without disturbing what's already on screen. Dedupes against the DOM
@@ -1213,7 +1216,7 @@ async function screenMarkets(){
   lastBrowseHash=location.hash||'#/markets';        // so "← back to markets" from a market/event returns to THIS filtered view
   mkShownLimit=MK_PAGE;                             // reset pagination window on any filter/nav change
   var views='<div class="filters" id="mk-views">'+
-    viewChip('hot',t('mk.view_hot'))+viewChip('all',t('mk.view_all'))+viewChip('feed',t('mk.view_feed'))+viewChip('popular',t('mk.view_popular'))+
+    viewChip('hot',t('mk.view_hot'))+viewChip('closing',t('mk.view_closing'))+viewChip('all',t('mk.view_all'))+viewChip('feed',t('mk.view_feed'))+viewChip('popular',t('mk.view_popular'))+
     '<button class="btn chip" id="mk-fav-edit">'+esc(t('mk.edit_favorites'))+'</button></div>';
   var withCats=(mkFilter.view==='hot'||mkFilter.view==='all'); // hot & all support category browsing + local search
   var filters='';
@@ -1231,6 +1234,8 @@ async function screenMarkets(){
     filters+='<div class="hint">'+esc(t('mk.feed_hint'))+'</div>';
   } else if(mkFilter.view==='popular'){
     filters+='<div class="hint">'+esc(t('mk.popular_hint'))+'</div>';
+  } else if(mkFilter.view==='closing'){
+    filters+='<div class="hint">'+esc(t('mk.closing_hint'))+'</div>';
   }
   if(withCats) filters+=sortBar();   // native newest/volume/ending-soon sort — only while browsing a section/tag
   filters+='<div class="hint"><span data-nav="#/node" style="cursor:pointer">'+esc(t('mk.jur_hint',{J:jurDisplay()}))+'</span></div>';
@@ -1329,6 +1334,12 @@ async function loadMarketList(){
       var parts=await Promise.all(favs.map(function(cat){ return api('listMarketsByCategory', cat, 0, 30, jur||'', '', '', 'newest').catch(function(){return [];}); }));
       list=dedupeMarkets([].concat.apply([], parts));
       list.sort(function(a,b){ return marketId(b)-marketId(a); }); // newest first (higher id = newer)
+    } else if(mkFilter.view==='closing'){
+      // Global "ending soon" — the node returns still-open markets soonest-closing first
+      // (list_markets order='expiration'). Client-side ascending sort by betting_expiration is a
+      // safety net (also correct on a node predating the global expiration order); open-ended last.
+      list=(await api('listMarkets', 1, 0, mkShownLimit, !!mkFilter.showRisky, 'expiration'))||[];
+      list.sort(function(a,b){ var ea=assetTime(a.betting_expiration)||9e15, eb=assetTime(b.betting_expiration)||9e15; return ea-eb; });
     } else if(mkFilter.view==='popular'){
       // popularity = tokens locked by bettors → highest-volume markets first. The node has NO global
       // volume sort (list_markets does newest/oldest only); the old approach sorted just the newest-100
@@ -1370,7 +1381,7 @@ async function loadMarketList(){
     }
     // Paginated views (category browse, or All-view single status) fetch `mkShownLimit` rows; a full
     // page means the node likely has more → offer "load more" (grows the window, refetches from 0).
-    var paginated=(mkFilter.category!=='')||(mkFilter.view==='all'&&mkFilter.status!==-1);
+    var paginated=(mkFilter.category!=='')||(mkFilter.view==='all'&&mkFilter.status!==-1)||(mkFilter.view==='closing');
     var rawLen=list.length;                                          // fetched count, before jur/tag filtering
     if(jur) list=list.filter(function(m){return !marketBannedIn(m,jur);}); // '' jur = show all
     try{ if(mkFilter.view==='hot'||mkFilter.view==='all'||mkFilter.view==='popular') indexPut(list); }catch(e){} // refresh discovery cache (never used for betting)
