@@ -993,7 +993,7 @@ async function fetchMarketsNextPage(from){
     return (await api('listMarkets', mkFilter.status, from, MK_PAGE, !!mkFilter.showRisky, 'newest'))||[];
   }
   if(mkFilter.view==='closing'){
-    return (await api('listMarkets', 1, from, MK_PAGE, !!mkFilter.showRisky, 'expiration'))||[];
+    return ((await api('listMarkets', 1, from, MK_PAGE, !!mkFilter.showRisky, 'expiration'))||[]).filter(hasTitle);
   }
   return [];
 }
@@ -1034,6 +1034,10 @@ async function appendMoreMarkets(){
   if(!remaining){ if(wrap) wrap.remove(); }
   else if(btn){ btn.disabled=false; btn.textContent=t('common.load_more'); }
 }
+/* Metadata-lost markets (snapshot pruned their on-chain meta) carry an empty title/question and are
+   useless to bet on — filter them out of discovery feeds (esp. the expiration feed, which surfaces the
+   old metadata-lost backlog first). */
+function hasTitle(m){ return (''+((m&&m.title)||(m&&m.metadata&&m.metadata.title)||'')).trim()!==''; }
 /* Moneyline / "who wins" markets first — the most representative market of a matchup, so they don't
    sit buried under dozens of prop markets (Total Kills, First Blood, …). Stable for equal keys. */
 var MONEYLINE_RE=/\bwinner\b|moneyline|\bto win\b|match result|match winner/i;
@@ -1339,6 +1343,7 @@ async function loadMarketList(){
       // (list_markets order='expiration'). Client-side ascending sort by betting_expiration is a
       // safety net (also correct on a node predating the global expiration order); open-ended last.
       list=(await api('listMarkets', 1, 0, mkShownLimit, !!mkFilter.showRisky, 'expiration'))||[];
+      list=list.filter(hasTitle);   // the soonest-closing set is heavy with metadata-lost markets (empty title/question) — hide them
       list.sort(function(a,b){ var ea=assetTime(a.betting_expiration)||9e15, eb=assetTime(b.betting_expiration)||9e15; return ea-eb; });
     } else if(mkFilter.view==='popular'){
       // popularity = tokens locked by bettors → highest-volume markets first. The node has NO global
