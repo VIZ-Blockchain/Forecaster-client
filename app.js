@@ -2108,8 +2108,13 @@ async function loadLeverage(id, ocs, isMulti){
 
   if(el('lv-quote')) el('lv-quote').onclick=async function(){
     var out=el('lv-quote-out'); out.textContent=t('common.loading');
-    try{ var q=await api('getLeverageQuote', id, Number(el('lv-oc').value), toAsset(el('lv-col').value||'0'));
-      out.innerHTML=esc(t('lev.quote_result',{T:fmtShares(q&&(q.tokens!=null?q.tokens:q.expected_tokens)||0)}));
+    try{ var q=await api('getLeverageQuote', id, Number(el('lv-oc').value), Math.round((Number(el('lv-col').value)||0)*1000));
+      if(q && q.available===false){
+        var why=(q.failed_constraints&&q.failed_constraints.length)?q.failed_constraints.map(function(c){return c.reason||c.constraint;}).join('; '):'';
+        out.innerHTML='<span class="neg">'+esc(t('lev.quote_unavailable'))+(why?' — '+esc(why):'')+'</span>';
+      }else{
+        out.innerHTML=esc(t('lev.quote_result',{T:fmtShares(q&&(q.tokens!=null?q.tokens:q.expected_tokens)||0)}));
+      }
     }catch(e){ out.innerHTML='<span class="neg">'+esc(errText(e))+'</span>'; }
   };
   if(el('lv-open')) el('lv-open').onclick=function(){
