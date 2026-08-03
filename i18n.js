@@ -293,7 +293,7 @@ var EN = {
 
   /* leverage */
   'lev.title':'Leverage (advanced)','lev.disabled':'Leverage is disabled on this network.',
-  'lev.risk_notice':'HIGH RISK. Leverage borrows from the pool to enlarge your position. It can be LIQUIDATED and you can lose your whole collateral. Payouts are NOT fixed odds — they float with the pool.',
+  'lev.risk_notice':'HIGH RISK. Leverage borrows from the pool to enlarge your position. It can be LIQUIDATED and you can lose your whole collateral. Payouts are NOT fixed odds — they float with the pool. A leveraged position bets on the PRICE, not the outcome: it auto-closes at betting close (betting_expiration) and does NOT wait for the market to resolve.',
   'lev.collateral':'Collateral (VIZ)','lev.loan':'Loan (VIZ)','lev.min_tokens':'Min tokens','lev.max_slippage':'Max slippage %',
   'lev.quote_btn':'Quote','lev.open_btn':'Open position','lev.unlock':'Unlock your wallet to open a leveraged position.',
   'lev.mine_title':'My leverage positions','lev.quote_result':'Estimated tokens: {T}','lev.quote_unavailable':'Leverage unavailable for this market','lev.liq_at':'Liq. ≤ {V}','lev.live_pnl':'P/L {V}','lev.max_lev':'max ×{X}','lev.need_quote':'Get a quote first',
@@ -603,7 +603,7 @@ var RU = {
 
   /* leverage */
   'lev.title':'Плечо (продвинутое)','lev.disabled':'Плечо отключено в этой сети.',
-  'lev.risk_notice':'ВЫСОКИЙ РИСК. Плечо занимает средства из пула для увеличения позиции. Позиция может быть ЛИКВИДИРОВАНА, и вы можете потерять весь залог. Выплаты НЕ фиксированные — плавают вместе с пулом.',
+  'lev.risk_notice':'ВЫСОКИЙ РИСК. Плечо занимает средства из пула для увеличения позиции. Позиция может быть ЛИКВИДИРОВАНА, и вы можете потерять весь залог. Выплаты НЕ фиксированные — плавают вместе с пулом. Плечо — ставка на ЦЕНУ, а не на исход: позиция закрывается автоматически на закрытии ставок (betting_expiration) и НЕ дожидается резолва рынка.',
   'lev.collateral':'Залог (VIZ)','lev.loan':'Заём (VIZ)','lev.min_tokens':'Мин. токенов','lev.max_slippage':'Макс. проскальзывание %',
   'lev.quote_btn':'Оценить','lev.open_btn':'Открыть позицию','lev.unlock':'Разблокируйте кошелёк, чтобы открыть позицию с плечом.',
   'lev.mine_title':'Мои позиции с плечом','lev.quote_result':'Оценка токенов: {T}','lev.quote_unavailable':'Плечо недоступно для этого рынка','lev.liq_at':'Ликв. ≤ {V}','lev.live_pnl':'P/L {V}','lev.max_lev':'макс ×{X}','lev.need_quote':'Сначала нажмите «Оценить»',
@@ -913,7 +913,7 @@ var ZH = {
 
   /* leverage */
   'lev.title':'杠杆（高级）','lev.disabled':'本网络已禁用杠杆。',
-  'lev.risk_notice':'高风险。杠杆会从资金池借入以放大你的仓位。它可能被强制平仓，你可能损失全部保证金。赔付不是固定赔率——随资金池浮动。',
+  'lev.risk_notice':'高风险。杠杆会从资金池借入以放大你的仓位。它可能被强制平仓，你可能损失全部保证金。赔付不是固定赔率——随资金池浮动。杠杆是对价格而非结果的下注：仓位在停止投注时（betting_expiration）自动平仓，不会等待市场结算。',
   'lev.collateral':'保证金（VIZ）','lev.loan':'借款（VIZ）','lev.min_tokens':'最少代币','lev.max_slippage':'最大滑点 %',
   'lev.quote_btn':'报价','lev.open_btn':'开仓','lev.unlock':'请解锁钱包以开立杠杆仓位。',
   'lev.mine_title':'我的杠杆仓位','lev.quote_result':'预计代币：{T}','lev.quote_unavailable':'该市场不支持杠杆','lev.liq_at':'清算 ≤ {V}','lev.live_pnl':'盈亏 {V}','lev.max_lev':'最高 ×{X}','lev.need_quote':'请先获取报价',
