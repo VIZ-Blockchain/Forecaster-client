@@ -2087,7 +2087,7 @@ function levActiveCell(p,mid){
 function fillLevPnl(scope){ $all('[data-lpnl]',scope).forEach(function(elm){
   var pid=elm.getAttribute('data-lpnl'), col=Number(elm.getAttribute('data-col'))||0;
   api('getLeverageClosePreview', Number(pid)).then(function(pv){
-    var val=num(pv&&(pv.return_value!=null?pv.return_value:pv.bettor_received)); var d=Math.round(val-col);
+    var val=num(pv&&(pv.bettor_receives!=null?pv.bettor_receives:(pv.return_value!=null?pv.return_value:pv.bettor_received))); var d=Math.round(val-col);
     elm.className='small '+(d>0?'delta-pos':(d<0?'delta-neg':'delta-zero'));
     elm.textContent=t('lev.live_pnl',{V:(d>0?'+':'')+fmtViz(d)});
   }).catch(function(){ elm.textContent=''; });
@@ -2192,7 +2192,7 @@ function leverageClose(marketId, positionId, reload){
       function(){setTimeout(after,1300);});
   }}]);
   api('getLeverageClosePreview', Number(positionId)).then(function(p){ var b=el('lc-preview'); if(!b)return;
-    b.innerHTML=esc(t('lev.close_preview',{V:fmtViz(p&&(p.return_value!=null?p.return_value:p.bettor_received)||0)}));
+    b.innerHTML=esc(t('lev.close_preview',{V:fmtViz(p&&(p.bettor_receives!=null?p.bettor_receives:(p.return_value!=null?p.return_value:p.bettor_received))||0)}));
   }).catch(function(){ var b=el('lc-preview'); if(b) b.innerHTML=esc(t('lev.preview_na')); });
 }
 function leverageConvert(marketId, positionId, reload){
