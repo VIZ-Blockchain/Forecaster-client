@@ -36,6 +36,8 @@ small{font-size:.85em}
 .brand-logo{height:30px; width:30px; border-radius:50%; object-fit:cover; display:block; box-shadow:0 1px 3px rgba(0,0,0,.15)}
 .brand-text{height:20px; width:auto; max-width:150px; display:block}
 .topbar-right{display:flex; align-items:center; gap:8px}
+.topbar-balance{font-size:12.5px; font-weight:700; color:var(--brand); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:3px 8px; cursor:pointer; white-space:nowrap}
+.topbar-balance .tb-ic{margin-right:3px; opacity:.75}
 .node-status{font-size:12px; color:var(--bad); font-weight:600}
 .node-status.online{color:var(--ok)}
 .node-status.syncing{color:var(--warn)}

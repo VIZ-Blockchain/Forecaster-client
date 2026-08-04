@@ -683,6 +683,24 @@ async function refreshPoolTab(){
   try{ var u=await api('getLazyDeposit', SESSION.account); tab.classList.toggle('hide', !(u && Number(u.shares)>0)); }
   catch(e){ tab.classList.add('hide'); }
 }
+/* Top-right live balance chip: the unlocked account's liquid VIZ, tap → #/balance.
+   Refreshed on unlock/lock/lang (updateChrome) and on each navigation (route, throttled). */
+var _tbBalTs=0;
+async function updateTopbarBalance(force){
+  var elb=el('topbar-balance'); if(!elb) return;
+  if(!isUnlocked()){ elb.classList.add('hide'); elb.textContent=''; _tbBalTs=0; return; }
+  var nowms=Date.now();
+  if(!force && (nowms-_tbBalTs)<4000) return;     // throttle rapid navigation
+  _tbBalTs=nowms;
+  try{
+    var acc=(await api('getAccounts',[SESSION.account]))[0];
+    if(acc && acc.balance!=null){
+      elb.title=t('bal.liquid')+': '+fmtViz(acc.balance);
+      elb.innerHTML='<span class="tb-ic">💰</span>'+fmtVizK(acc.balance);
+      elb.classList.remove('hide');
+    }
+  }catch(e){ /* keep last shown value on transient error */ }
+}
 function updateChrome(){
   var unlocked=isUnlocked();
   el('btn-lock').classList.toggle('hide',!unlocked);
@@ -691,6 +709,7 @@ function updateChrome(){
   refreshStaticLabels();
   var prof=el('tab-profile'); if(prof) prof.querySelector('span:last-child').textContent = unlocked?('@'+SESSION.account):t('tab.profile');
   refreshPoolTab();
+  updateTopbarBalance(true);
 }
 function setActiveTab(hash){
   $all('.tab').forEach(function(t){
@@ -736,6 +755,7 @@ function route(){
   var base=hash.split('?')[0];                   // strip query (markets filters live in the query string)
   var parts=base.replace(/^#\//,'').split('/'); // e.g. ['market','12']
   setActiveTab(base);
+  updateTopbarBalance();                          // keep the top-right balance chip fresh across navigation
   var scr=parts[0]||'markets';
   try{
     if(scr==='markets') return screenMarkets();
