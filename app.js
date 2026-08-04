@@ -1988,6 +1988,8 @@ async function loadMyPositions(id, mkt){
     var rows=mine.map(function(p){
       var bid=p.id!=null?p.id:p.bet_id;
       var shares=Number(p.tokens||p.shares||0);
+      // bet status: 0 active, 1 cancelled, 2 refunded, 3 resolved, 5 queued, 6 revealed-pending
+      var st=Number(p.status||0);
       // binary bets carry side (0/1) with outcome_index=-1; multi carry outcome_index (>=0)
       var idx=(p.outcome_index!=null && p.outcome_index>=0)?p.outcome_index:(p.side!=null?p.side:-1);
       var oc=(idx>=0 && ocs[idx]!=null)?ocs[idx]:(idx>=0?('#'+idx):'—');
@@ -2001,11 +2003,16 @@ async function loadMyPositions(id, mkt){
         var dStr=(dRaw>0?'+':'')+fmtViz(dRaw);   // fmtViz already carries a leading '-' for negatives
         var badge='<span class="badge '+(won?'pos-win':'pos-loss')+'">'+esc(won?t('md.pos_win'):t('md.pos_loss'))+'</span>';
         last='<td>'+badge+' <span class="'+dCls+'">'+esc(dStr)+'</span></td>';
+      }else if(st!==0){
+        // non-active bet on a live market → cancelled/refunded/queued: show a status badge, no actions
+        // (the node rejects a repeat cancel with "Bet not active").
+        var slbl=(st===1)?t('md.pos_cancelled'):(st===2)?t('md.pos_refunded'):(st===3)?t('md.pos_settled'):t('md.pos_pending');
+        last='<td><span class="badge">'+esc(slbl)+'</span></td>';
       }else{
         last='<td><button class="btn small" data-xfer="'+bid+'" data-sh="'+shares+'">'+esc(t('md.col_transfer'))+'</button> '+
              '<button class="btn small bad" data-cancel="'+bid+'">'+esc(t('md.col_cancel'))+'</button></td>';
       }
-      return '<tr><td>'+esc(oc)+'</td>'+
+      return '<tr'+(st!==0&&!resolved?' class="row-muted"':'')+'><td>'+esc(oc)+'</td>'+
         '<td>'+fmtViz(p.amount||p.stake)+'</td>'+
         '<td>'+(shares>0?fmtShares(shares):'—')+'</td>'+last+'</tr>';
     }).join('');
@@ -2051,9 +2058,14 @@ async function loadMyLiquidity(id, status){
     var rows=mine.map(function(l){
       var lid=l.id!=null?l.id:(l.liquidity_id!=null?l.liquidity_id:l.liquidity);
       var amt=l.amount!=null?l.amount:(l.balance!=null?l.balance:l.shares);
+      // LP status: 0 active, 3 closed (fully withdrawn). A closed position can't be withdrawn again
+      // (the node rejects with "Position already closed") → show a "withdrawn" badge, no button.
+      var st=Number(l.status||0);
       // amt is already raw (fmtShares divides by 1000); pass it through as raw — do NOT ×1000 again
-      return '<tr><td>#'+esc(lid)+'</td><td>'+fmtViz(amt)+'</td>'+
-        '<td><button class="btn small" data-wl="'+esc(lid)+'" data-amt="'+esc(Number(amt)||0)+'">'+esc(t('lq.withdraw'))+'</button></td></tr>';
+      var act=(st!==0)
+        ? '<span class="badge">'+esc(t('lq.withdrawn'))+'</span>'
+        : '<button class="btn small" data-wl="'+esc(lid)+'" data-amt="'+esc(Number(amt)||0)+'">'+esc(t('lq.withdraw'))+'</button>';
+      return '<tr'+(st!==0?' class="row-muted"':'')+'><td>#'+esc(lid)+'</td><td>'+fmtViz(amt)+'</td><td>'+act+'</td></tr>';
     }).join('');
     box.innerHTML='<table class="tbl"><tr><th>'+esc(t('lq.col_id'))+'</th><th>'+esc(t('lq.col_amount'))+'</th><th></th></tr>'+rows+'</table>';
     $all('[data-wl]',box).forEach(function(b){ b.onclick=function(){

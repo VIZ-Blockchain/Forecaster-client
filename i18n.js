@@ -86,7 +86,7 @@ var EN = {
   /* market detail */
   'md.loading':'loading market #{ID}…','md.onix_binary':'Onix Binary','md.onix_multi':'Onix Multi',
   'md.by':'by: {C}','md.oracle':'oracle: {O}','md.outcomes':'Outcomes','md.status':'Status','md.result':'Result',
-  'md.awaiting_result':'awaiting oracle result','md.pos_win':'win','md.pos_loss':'loss','md.col_result':'result',
+  'md.awaiting_result':'awaiting oracle result','md.pos_win':'win','md.pos_loss':'loss','md.pos_cancelled':'cancelled','md.pos_refunded':'refunded','md.pos_settled':'settled','md.pos_pending':'pending','md.col_result':'result',
   'md.event':'event ↗','ev.title':'Event','ev.count':'{N} markets','ev.empty':'No markets in this event yet.',
   'md.chart_title':'Outcome ratio over time','md.chart_empty':'No price history yet.','md.chart_volume':'Volume','md.chart_events':'leverage events',
   'oc.yes':'Yes','oc.no':'No',
@@ -288,7 +288,7 @@ var EN = {
   /* liquidity withdraw */
   'lq.risk_notice':'Providing liquidity is at risk: in parimutuel/LMSR markets your withdrawable amount floats with market exposure and may be less than deposited.',
   'lq.mine_title':'My liquidity','lq.none_mine':'You have no liquidity in this market.',
-  'lq.withdraw':'Withdraw','lq.col_id':'Position','lq.col_amount':'Amount',
+  'lq.withdraw':'Withdraw','lq.withdrawn':'Withdrawn','lq.col_id':'Position','lq.col_amount':'Amount',
   'lq.withdraw_title':'Withdraw liquidity','txn.withdraw_liq':'Withdraw liquidity',
 
   /* leverage */
@@ -406,7 +406,7 @@ var RU = {
 
   'md.loading':'загрузка рынка #{ID}…','md.onix_binary':'Onix Binary','md.onix_multi':'Onix Multi',
   'md.by':'автор: {C}','md.oracle':'оракул: {O}','md.outcomes':'Исходы','md.status':'Статус','md.result':'Результат',
-  'md.awaiting_result':'ожидает результата оракула','md.pos_win':'выигрыш','md.pos_loss':'проигрыш','md.col_result':'результат',
+  'md.awaiting_result':'ожидает результата оракула','md.pos_win':'выигрыш','md.pos_loss':'проигрыш','md.pos_cancelled':'отменено','md.pos_refunded':'возврат','md.pos_settled':'рассчитано','md.pos_pending':'в очереди','md.col_result':'результат',
   'md.event':'событие ↗','ev.title':'Событие','ev.count':'рынков: {N}','ev.empty':'В этом событии пока нет рынков.',
   'md.chart_title':'Соотношение исходов во времени','md.chart_empty':'Пока нет истории.','md.chart_volume':'Объём','md.chart_events':'события плеча',
   'oc.yes':'Да','oc.no':'Нет',
@@ -598,7 +598,7 @@ var RU = {
   /* liquidity withdraw */
   'lq.risk_notice':'Предоставление ликвидности — с риском: в parimutuel/LMSR-рынках сумма к выводу плавает вместе с экспозицией рынка и может быть меньше внесённой.',
   'lq.mine_title':'Моя ликвидность','lq.none_mine':'У вас нет ликвидности в этом рынке.',
-  'lq.withdraw':'Вывести','lq.col_id':'Позиция','lq.col_amount':'Сумма',
+  'lq.withdraw':'Вывести','lq.withdrawn':'Выведено','lq.col_id':'Позиция','lq.col_amount':'Сумма',
   'lq.withdraw_title':'Вывод ликвидности','txn.withdraw_liq':'Вывод ликвидности',
 
   /* leverage */
@@ -716,7 +716,7 @@ var ZH = {
 
   'md.loading':'加载市场 #{ID}…','md.onix_binary':'Onix 二元','md.onix_multi':'Onix 多选',
   'md.by':'创建者：{C}','md.oracle':'预言机：{O}','md.outcomes':'结果','md.status':'状态','md.result':'裁决结果',
-  'md.awaiting_result':'等待预言机结果','md.pos_win':'赢','md.pos_loss':'输','md.col_result':'结果',
+  'md.awaiting_result':'等待预言机结果','md.pos_win':'赢','md.pos_loss':'输','md.pos_cancelled':'已取消','md.pos_refunded':'已退款','md.pos_settled':'已结算','md.pos_pending':'排队中','md.col_result':'结果',
   'md.event':'赛事 ↗','ev.title':'赛事','ev.count':'{N} 个市场','ev.empty':'该赛事暂无市场。',
   'md.chart_title':'各结果占比走势','md.chart_empty':'暂无历史。','md.chart_volume':'成交量','md.chart_events':'杠杆事件',
   'oc.yes':'是','oc.no':'否',
@@ -908,7 +908,7 @@ var ZH = {
   /* liquidity withdraw */
   'lq.risk_notice':'提供流动性有风险：在 parimutuel/LMSR 市场中，可提取的金额随市场敞口浮动，可能少于存入的金额。',
   'lq.mine_title':'我的流动性','lq.none_mine':'你在该市场没有流动性。',
-  'lq.withdraw':'提取','lq.col_id':'仓位','lq.col_amount':'金额',
+  'lq.withdraw':'提取','lq.withdrawn':'已提取','lq.col_id':'仓位','lq.col_amount':'金额',
   'lq.withdraw_title':'提取流动性','txn.withdraw_liq':'提取流动性',
 
   /* leverage */
