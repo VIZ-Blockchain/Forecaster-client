@@ -331,6 +331,11 @@ var EN = {
   'orp.vol_resolved':'Volume resolved','orp.insurance_slashed':'Insurance slashed','orp.avg_res_time':'Avg resolution time',
   'orp.penalty':'Penalty stamps','orp.bans':'Bans received','orp.active_since':'Active since','orp.last_active':'Last active',
   'orp.banned_until':'Banned until {T}','orp.rules':'Resolution rules','orp.recent':'Recent markets','orp.scanning':'Counting markets… {N}','orp.no_markets':'No markets yet.','orp.markets_error':'Couldn’t load markets — reopen to retry.','orp.load_more':'Load more','orp.tab_active':'Active','orp.tab_resolved':'Resolved',
+  'orp.tab_awaiting':'Awaiting resolution','orp.tab_window':'In dispute window','orp.tab_disputes':'Disputes',
+  'orp.workload':'Workload','orp.wl_awaiting':'Awaiting resolution','orp.wl_window':'In dispute window',
+  'orp.wl_disp_resp':'Disputes — awaiting response','orp.wl_disp_dec':'Disputes — awaiting decision',
+  'orp.stage_response':'Awaiting oracle response','orp.stage_decision':'Awaiting decision',
+  'orp.deadline':'by {T}','orp.no_disputes':'No open disputes.',
 
   /* boot */
   'boot.viz_missing':'viz-js-lib not found.',
@@ -641,6 +646,11 @@ var RU = {
   'orp.vol_resolved':'Разрешённый объём','orp.insurance_slashed':'Списано страховки','orp.avg_res_time':'Ср. время разрешения',
   'orp.penalty':'Штрафные метки','orp.bans':'Получено банов','orp.active_since':'Активен с','orp.last_active':'Посл. активность',
   'orp.banned_until':'Забанен до {T}','orp.rules':'Правила разрешения','orp.recent':'Последние рынки','orp.scanning':'Считаю рынки… {N}','orp.no_markets':'Рынков пока нет.','orp.markets_error':'Не удалось загрузить рынки — открой заново.','orp.load_more':'Загрузить ещё','orp.tab_active':'Активные','orp.tab_resolved':'Зарезолвленные',
+  'orp.tab_awaiting':'Ждут резолва','orp.tab_window':'Окно спора','orp.tab_disputes':'Споры',
+  'orp.workload':'Нагрузка','orp.wl_awaiting':'Ждут резолва','orp.wl_window':'В окне спора',
+  'orp.wl_disp_resp':'Споры — ждут ответа','orp.wl_disp_dec':'Споры — ждут решения',
+  'orp.stage_response':'Ждёт ответа оракула','orp.stage_decision':'Ждёт решения',
+  'orp.deadline':'до {T}','orp.no_disputes':'Открытых споров нет.',
 
   /* boot */
   'boot.viz_missing':'viz-js-lib не найден.',
@@ -954,6 +964,11 @@ var ZH = {
   'orp.penalty':'处罚记录','orp.bans':'被封次数','orp.active_since':'活跃起始','orp.last_active':'最后活跃',
   'orp.banned_until':'封禁至 {T}','orp.rules':'裁决规则','orp.recent':'最近的市场','orp.scanning':'正在统计市场… {N}','orp.no_markets':'暂无市场。','orp.load_more':'加载更多',
   'orp.markets_error':'无法加载市场——重新打开重试。','orp.tab_active':'进行中','orp.tab_resolved':'已裁决',
+  'orp.tab_awaiting':'待裁决','orp.tab_window':'争议窗口','orp.tab_disputes':'争议',
+  'orp.workload':'工作量','orp.wl_awaiting':'待裁决','orp.wl_window':'处于争议窗口',
+  'orp.wl_disp_resp':'争议——待回应','orp.wl_disp_dec':'争议——待裁定',
+  'orp.stage_response':'等待预言机回应','orp.stage_decision':'等待裁定',
+  'orp.deadline':'截止 {T}','orp.no_disputes':'暂无未决争议。',
 
   'boot.viz_missing':'未找到 viz-js-lib。',
   'boot.viz_hint':'viz-js-lib 未加载。请从 viz-js-lib 仓库下载 <span class="mono">viz.min.js</span> 并放到 index.html 旁边，然后刷新。'

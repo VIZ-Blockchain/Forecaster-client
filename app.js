@@ -107,7 +107,12 @@ function normPos(p){
    so callers can read o.owner/o.fee_percent/o.insurance directly; pass flat rows through. */
 function unwrapOracle(o){
   if(o && o.oracle && typeof o.oracle==='object'){
-    return Object.assign({}, o.oracle, {reliability_score:(o.reliability_score!=null?o.reliability_score:o.oracle.reliability_score)});
+    // reliability_score and markets_awaiting_resolution live on the wrapper (computed on read), the
+    // three stored workload gauges live on o.oracle — carry the wrapper-only ones onto the flat shape.
+    return Object.assign({}, o.oracle, {
+      reliability_score:(o.reliability_score!=null?o.reliability_score:o.oracle.reliability_score),
+      markets_awaiting_resolution:(o.markets_awaiting_resolution!=null?o.markets_awaiting_resolution:o.oracle.markets_awaiting_resolution)
+    });
   }
   return o;
 }
@@ -3171,6 +3176,22 @@ async function screenOracleProfile(owner){
       (banned?'<div class="box err mt">'+esc(t('orp.banned_until',{T:tsToLocal(assetTime(o.banned_until))}))+'</div>':'')+
       ((o.rules_url||o.rules)?'<div class="hint mt"><a href="'+esc(o.rules_url||o.rules)+'" target="_blank">'+esc(t('orp.rules'))+'</a></div>':'')+
     '</div>'+
+    (function(){
+      // Workload gauges (P2/P3 oracle-metrics). markets_awaiting_resolution is computed on read;
+      // the other three are stored on the oracle. Old node (pre-redeploy) returns none → hide the card.
+      var aw=o.markets_awaiting_resolution, dw=o.markets_in_dispute_window,
+          dr=o.disputes_awaiting_response, dd=o.disputes_awaiting_decision;
+      if(aw==null && dw==null && dr==null && dd==null) return '';
+      var row=function(label,val,tab){
+        return '<div class="kv click" data-orpjump="'+tab+'"><span class="mut">'+esc(label)+'</span><b>'+(Number(val)||0)+'</b></div>'; };
+      return '<div class="card">'+
+        '<div class="section-title" style="margin-top:0">'+esc(t('orp.workload'))+'</div>'+
+        row(t('orp.wl_awaiting'), aw, 'awaiting')+
+        row(t('orp.wl_window'),   dw, 'window')+
+        row(t('orp.wl_disp_resp'),dr, 'disputes')+
+        row(t('orp.wl_disp_dec'), dd, 'disputes')+
+      '</div>';
+    })()+
     '<div class="section-title">'+esc(t('orp.recent'))+'</div>'+
     '<div id="orp-mk"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>';
     el('orp-body').innerHTML=body;
@@ -3182,30 +3203,61 @@ async function screenOracleProfile(owner){
     // node lacks it (old build) we fall back to the previous fetch-all-and-filter path.
     (function(){
       var PAGE=100;
-      var TABS=[{k:'active', st:1}, {k:'resolved', st:3}];
+      // Status tabs (Active/Resolved) + workload drill-ins fed by the P2/P3 oracle-metrics APIs.
+      // status → list_markets_by_oracle_status (legacy fetch-all fallback if the node lacks it);
+      // awaiting → list_markets_awaiting_resolution; window → list_markets_in_dispute_window;
+      // disputes → list_oracle_disputes (renders dispute cards with stage + deadline).
+      // Workload drill-in tabs appear only when the node exposes the P2/P3 gauges (old build → just
+      // Active/Resolved, unchanged). Same presence check as the workload card above.
+      var hasGauges=(o.markets_awaiting_resolution!=null || o.markets_in_dispute_window!=null ||
+                     o.disputes_awaiting_response!=null || o.disputes_awaiting_decision!=null);
+      var TABS=hasGauges
+        ? [{k:'active',kind:'status',st:1},
+           {k:'awaiting',kind:'awaiting'},
+           {k:'window',kind:'window'},
+           {k:'disputes',kind:'disputes'},
+           {k:'resolved',kind:'status',st:3}]
+        : [{k:'active',kind:'status',st:1},
+           {k:'resolved',kind:'status',st:3}];
       var cur='active', legacyAll=null;                               // legacyAll: cached full set for fallback
-      function cardHtml(x){ var id=marketId(x);
+      function marketCardHtml(x){ var id=marketId(x);
         return '<div class="card click card-dense" data-nav="#/market/'+id+'">'+
           '<div class="card-q">'+esc(marketTitle(x))+'</div>'+
           '<div class="mut" style="font-size:12px">'+statusBadge(x)+'</div></div>';
+      }
+      function disputeCardHtml(d){
+        var mk=d.market||{}, id=(d.market_id!=null?d.market_id:marketId(mk));
+        var dec=(d.stage==='awaiting_decision');
+        var badge='<span class="badge '+(dec?'st-0':'risk')+'">'+esc(t(dec?'orp.stage_decision':'orp.stage_response'))+'</span>';
+        var dl=dec?d.voting_end_time:d.oracle_response_deadline;
+        var dls=dl?('<span class="mut" style="font-size:12px"> · '+esc(t('orp.deadline',{T:tsToLocal(assetTime(dl))}))+'</span>'):'';
+        return '<div class="card click card-dense" data-nav="#/market/'+id+'">'+
+          '<div class="card-q">'+esc(marketTitle(mk))+'</div>'+
+          '<div style="font-size:12px">'+badge+dls+'</div></div>';
       }
       function tabsHtml(){
         return '<div class="chips mb">'+TABS.map(function(tb){
           return '<button class="btn chip'+(tb.k===cur?' active':'')+'" data-orptab="'+tb.k+'">'+esc(t('orp.tab_'+tb.k))+'</button>';
         }).join('')+'</div>';
       }
-      // ascending pager over one status; keeps a "from" cursor and reverses each page so newest shows first
-      function makeStatusFeed(st){
+      // per-tab ascending pager. status uses list_markets_by_oracle_status; workload tabs use their
+      // dedicated (oracle, from, limit) methods. Dispute rows carry market as an object, not an id.
+      function makeFeed(tb){
         var from=0, done=false;
+        var method = tb.kind==='awaiting' ? 'list_markets_awaiting_resolution'
+                   : tb.kind==='window'   ? 'list_markets_in_dispute_window'
+                   : tb.kind==='disputes' ? 'list_oracle_disputes' : null;
         return async function next(){
           if(done) return [];
-          var chunk=(await rawApi('prediction_market_api','list_markets_by_oracle_status',[owner, st, from, PAGE]))||[];
-          chunk.forEach(function(m){ if(m&&typeof m.market==='number') m.id=m.market; });   // mirror normApi
+          var chunk = tb.kind==='status'
+            ? (await rawApi('prediction_market_api','list_markets_by_oracle_status',[owner, tb.st, from, PAGE]))||[]
+            : (await rawApi('prediction_market_api',method,[owner, from, PAGE]))||[];
+          chunk.forEach(function(m){ if(m&&typeof m.market==='number') m.id=m.market; });   // market-id rows only
           from+=chunk.length; if(chunk.length<PAGE) done=true;
           return chunk;
         };
       }
-      // fallback: fetch the oracle's whole set once, filter+sort client-side (old behaviour)
+      // fallback (status tabs only): fetch the oracle's whole set once, filter+sort client-side
       async function legacyFetch(st){
         if(legacyAll===null){
           var acc=[], f=0, guard=0, seen={};
@@ -3224,15 +3276,16 @@ async function screenOracleProfile(owner){
         var box=el('orp-mk'); if(!box) return;
         box.innerHTML=tabsHtml()+'<div id="orp-mk-list"></div><div id="orp-mk-more" class="mt"><span class="spin"></span></div>';
         wireTabs();
-        var st=(TABS.filter(function(tb){return tb.k===cur;})[0]||TABS[0]).st;
-        var useLegacy=false, feed=makeStatusFeed(st), shownAny=false, myTab=cur;
+        var tb=(TABS.filter(function(x){return x.k===cur;})[0]||TABS[0]);
+        var isDisp=(tb.kind==='disputes');
+        var useLegacy=false, feed=makeFeed(tb), shownAny=false, myTab=cur;
         async function loadPage(){
           var page;
           try{ page = useLegacy ? null : await feed(); }
-          catch(e){ useLegacy=true; }                                  // node lacks method → switch to fallback
+          catch(e){ if(tb.kind==='status'){ useLegacy=true; } else { page=[]; } }  // status → fallback; workload → empty
           if(myTab!==cur || !el('orp-mk')) return;                     // tab switched / navigated away
           if(useLegacy){
-            var all=await legacyFetch(st);
+            var all=await legacyFetch(tb.st);
             if(all===null || myTab!==cur || !el('orp-mk')) return;
             renderChunk(all); if(el('orp-mk-more')) el('orp-mk-more').innerHTML=''; finishIfEmpty(all.length); return;
           }
@@ -3242,13 +3295,17 @@ async function screenOracleProfile(owner){
           el('orp-mk-more').innerHTML='<button class="btn" id="orp-more-btn">'+esc(t('orp.load_more'))+'</button>';
           el('orp-more-btn').onclick=function(){ el('orp-mk-more').innerHTML='<span class="spin"></span>'; loadPage(); };
         }
-        function renderChunk(arr){ if(arr&&arr.length&&el('orp-mk-list')) el('orp-mk-list').insertAdjacentHTML('beforeend', arr.map(cardHtml).join('')); }
-        function finishIfEmpty(n){ if(!n && el('orp-mk-list')) el('orp-mk-list').innerHTML='<div class="empty">'+esc(t('orp.no_markets'))+'</div>'; }
+        function renderChunk(arr){ if(arr&&arr.length&&el('orp-mk-list')) el('orp-mk-list').insertAdjacentHTML('beforeend', arr.map(isDisp?disputeCardHtml:marketCardHtml).join('')); }
+        function finishIfEmpty(n){ if(!n && el('orp-mk-list')) el('orp-mk-list').innerHTML='<div class="empty">'+esc(t(isDisp?'orp.no_disputes':'orp.no_markets'))+'</div>'; }
         loadPage();
       }
       function wireTabs(){ Array.prototype.forEach.call(document.querySelectorAll('[data-orptab]'), function(el2){
         el2.onclick=function(){ var k=el2.getAttribute('data-orptab'); if(k===cur)return; cur=k; renderTab(); }; }); }
-      try{ renderTab(); }
+      // workload-card counters jump to their drill-in tab
+      function wireJumps(){ Array.prototype.forEach.call(document.querySelectorAll('[data-orpjump]'), function(el2){
+        el2.onclick=function(){ var k=el2.getAttribute('data-orpjump'); if(!TABS.some(function(x){return x.k===k;}))return;
+          cur=k; renderTab(); var mk=el('orp-mk'); if(mk&&mk.scrollIntoView) mk.scrollIntoView({behavior:'smooth',block:'start'}); }; }); }
+      try{ renderTab(); wireJumps(); }
       catch(e2){ if(el('orp-mk')) el('orp-mk').innerHTML='<div class="box err">'+esc(t('orp.markets_error'))+'</div>'; }
     })();
   }catch(e){ el('orp-body').innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
