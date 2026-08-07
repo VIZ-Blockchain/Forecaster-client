@@ -2194,11 +2194,18 @@ function levResultCell(p){
   var s=levStatus(p);
   if(s===0) return '<td class="mut">'+esc(t('lev.st_active'))+'</td>';
   if(s===5) return '<td><span class="badge">'+esc(t('lev.st_converted'))+'</span></td>';
-  var cls=(s===2)?'pos-win':((s===1||s===3)?'pos-loss':'');   // won→green badge, liquidated/lost→red, closed→neutral
+  // A leverage position terminates by PRICE cash-out — liquidation (1), voluntary close (4) or
+  // force-close at settlement (2/3) — NOT by receiving the market's outcome payout. So a won/lost
+  // OUTCOME label ("Выигрыш/Проигрыш") is misleading (owner 2026-08-07): the position never took the
+  // resolved payout, it was cashed out at the curve price. Show a neutral status + the realized net
+  // P/L. The win/loss framing only fits a position CONVERTED to a regular bet (status 5) — that then
+  // shows on its own bet row when the market resolves.
+  var lbl = (s===1) ? t('lev.st_liquidated') : t('lev.st_closed');   // 2/3/4 → neutral "closed"
+  var cls = (s===1) ? 'pos-loss' : '';                               // liquidation stays red; rest neutral
   var dRaw=Math.round(levPnlRaw(p));
   var dCls=dRaw>0?'delta-pos':(dRaw<0?'delta-neg':'delta-zero');
   var dStr=(dRaw>0?'+':'')+fmtViz(dRaw);   // fmtViz already prefixes '-' for negatives
-  return '<td><span class="badge '+cls+'">'+esc(t(LEV_ST[s]))+'</span> <span class="'+dCls+'">'+esc(dStr)+'</span></td>';
+  return '<td><span class="badge '+cls+'">'+esc(lbl)+'</span> <span class="'+dCls+'">'+esc(dStr)+'</span></td>';
 }
 async function loadLeverage(id, ocs, isMulti){
   var box=el('lev-box'); if(!box)return;
