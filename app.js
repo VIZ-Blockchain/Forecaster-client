@@ -2199,6 +2199,12 @@ function withdrawLiquidity(marketId, liquidityId, haveRaw){
 var _pmPropsCache=null;
 async function pmProps(){ if(_pmPropsCache)return _pmPropsCache; try{ _pmPropsCache=(await api('getPmChainProperties'))||{}; return _pmPropsCache; }catch(e){ return {}; } }
 function leverageOff(p){ return !!(p && p.pm_leverage_enabled===false); }
+/* User display preference (independent of the chain gate above): hide the advanced-leverage UI across
+   the whole interface. Toggled off by a "hide" button in the leverage card, re-enabled from Profile.
+   Default = shown. Leverage stays a real chain feature — this only controls whether THIS user sees it. */
+var LS_LEV='lc_lev_hide';
+function levHidden(){ try{ return localStorage.getItem(LS_LEV)==='1'; }catch(e){ return false; } }
+function setLevHidden(v){ try{ if(v) localStorage.setItem(LS_LEV,'1'); else localStorage.removeItem(LS_LEV); }catch(e){} }
 
 /* ---- Leverage: open + list my positions + close/convert (all high-risk) ---- */
 /* Position status → label. Node enum: 0 active,1 liquidated,2 resolved_won,3 resolved_lost,4 closed_voluntary,5 converted. */
@@ -2253,6 +2259,7 @@ function levResultCell(p){
 }
 async function loadLeverage(id, ocs, isMulti, status){
   var box=el('lev-box'); if(!box)return;
+  if(levHidden()){ var cardU=box.closest('.card'); if(cardU) cardU.remove(); return; } // user hid leverage → drop the card
   var props=await pmProps();
   if(leverageOff(props)){ var card=box.closest('.card'); if(card) card.remove(); return; } // chain-off → hide the whole card
   // Open form only while the market is active/pending. On a resolved/closed market keep the card ONLY to
@@ -2280,7 +2287,12 @@ async function loadLeverage(id, ocs, isMulti, status){
   }
   html+='<div class="section-title"'+(canOpen?'':' style="margin-top:0"')+'>'+esc(t('lev.mine_title'))+'</div><div id="lev-mine">'+
     (isUnlocked()?'<span class="spin"></span>':'<div class="mut">'+unlockLink('md.unlock_view')+'</div>')+'</div>';
+  // "Hide leverage" — a display toggle for users who don't want the advanced-leverage UI. Re-enable
+  // from Profile. Removes the card immediately (and every leverage entry point on next render).
+  html+='<div class="mt"><button class="btn small ghost" id="lev-hide">'+esc(t('lev.hide_btn'))+'</button> '+
+    '<span class="mut small">'+esc(t('lev.hide_hint'))+'</span></div>';
   box.innerHTML=html;
+  if(el('lev-hide')) el('lev-hide').onclick=function(){ setLevHidden(true); var c=box.closest('.card'); if(c) c.remove(); toast('ok',t('lev.hidden_toast')); };
 
   // Open is gated on a successful quote: disabled until getLeverageQuote returns available:true.
   function levOpenGate(on){ var b=el('lv-open'); if(b){ b.disabled=!on; b.title=on?'':t('lev.need_quote'); } }
@@ -2371,6 +2383,8 @@ function leverageConvert(marketId, positionId, reload){
  * ========================================================================= */
 async function screenLeverage(){
   if(!requireUnlock())return;
+  if(levHidden()){ setContent('<div class="title">'+esc(t('lev.screen_title'))+'</div>'+
+    '<div class="box info">'+esc(t('lev.hidden_screen'))+' <a data-nav="#/profile">'+esc(t('tab.profile'))+' →</a></div>'); return; }
   setContent('<div class="title">'+esc(t('lev.screen_title'))+'</div>'+
     (leverageOff(await pmProps())?'<div class="box info">'+esc(t('lev.disabled'))+'</div>':'')+  // chain-off banner (still lets you view/close existing positions)
     '<div class="box err">'+esc(t('lev.risk_notice'))+'</div>'+
@@ -2667,7 +2681,7 @@ async function screenBalance(){
     html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('bal.lazy_pool'))+'</div>'+
       '<div class="hint mb">'+esc(t('pool.lead'))+'</div>'+
       '<button class="btn block" data-nav="#/pool">'+esc(t('pool.open_btn'))+'</button></div>';
-    if(!leverageOff(await pmProps()))                             // hide leverage entry while chain-disabled
+    if(!leverageOff(await pmProps()) && !levHidden())            // hide entry while chain-disabled OR user-hidden
       html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('lev.screen_title'))+'</div>'+
         '<div class="hint mb">'+esc(t('lev.lead'))+'</div>'+
         '<button class="btn block" data-nav="#/leverage">'+esc(t('lev.open_screen_btn'))+'</button></div>';
@@ -3102,6 +3116,9 @@ async function screenProfile(){
     '<div class="mb"><a class="mut" data-nav="#/activity">'+esc(t('act.title'))+' →</a></div>'+
     '<div id="pf-pos"><span class="spin"></span></div></div>';
 
+  html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('lev.pref_title'))+'</div>'+
+    '<label class="lab" style="margin-top:0"><input type="checkbox" id="pf-lev-show"'+(!levHidden()?' checked':'')+'> '+esc(t('lev.show_pref'))+'</label>'+
+    '<div class="hint">'+esc(t('lev.pref_hint'))+'</div></div>';
   html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('common.node'))+'</div><div class="kv"><b>'+esc(t('common.api'))+'</b><span class="mono">'+esc(loadNode().ws)+'</span></div><button class="btn ghost small mt" data-nav="#/node">'+esc(t('common.change_node'))+'</button></div>';
   html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('common.language'))+'</div>'+langSelHtml('pf-lang')+'</div>';
   html+=termsCardHtml();
@@ -3110,6 +3127,7 @@ async function screenProfile(){
   wireLangSel('pf-lang');
   var pftr=el('pf-terms-review'); if(pftr) pftr.onclick=function(){ showTerms(false); };
   el('pf-lock').onclick=function(){lock();toast('ok',t('common.locked'));};
+  if(el('pf-lev-show')) el('pf-lev-show').onchange=function(){ setLevHidden(!this.checked); toast('ok',t('lev.pref_saved')); };
   if(el('pf-add-regular')) el('pf-add-regular').onclick=addRegularKey;
   if(el('or-reg')) el('or-reg').onclick=oracleRegisterModal;
   if(el('or-update')) el('or-update').onclick=function(){oracleUpdateModal(oracle);};

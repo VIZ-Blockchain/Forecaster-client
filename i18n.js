@@ -312,6 +312,7 @@ var EN = {
   'lev.profit_cost':'Profit cost %','lev.convert_preview':'Estimated tokens after convert: {V}',
   'txn.leverage_open':'Open leverage','txn.leverage_close':'Close leverage','txn.leverage_convert':'Convert leverage',
   'lev.screen_title':'Leverage positions','lev.none_all':'You have no leverage positions.',
+  'lev.hide_btn':'Hide leverage','lev.hide_hint':'You can turn it back on in Profile.','lev.hidden_toast':'Leverage hidden — re-enable it in Profile.','lev.hidden_screen':'Leverage is hidden in your settings.','lev.pref_title':'Leverage (advanced)','lev.show_pref':'Show leverage in the interface','lev.pref_hint':'Off hides all leverage forms and entry points. Existing positions are unaffected on-chain.','lev.pref_saved':'Saved.',
   'lev.lead':'Borrowed (leveraged) bets across all markets — manage or close them.','lev.open_screen_btn':'Open leverage positions',
 
   /* unban (resolver governance) */
@@ -630,6 +631,7 @@ var RU = {
   'lev.profit_cost':'Стоимость прибыли %','lev.convert_preview':'Оценка токенов после конвертации: {V}',
   'txn.leverage_open':'Открытие плеча','txn.leverage_close':'Закрытие плеча','txn.leverage_convert':'Конвертация плеча',
   'lev.screen_title':'Позиции с плечом','lev.none_all':'У вас нет позиций с плечом.',
+  'lev.hide_btn':'Не показывать плечо','lev.hide_hint':'Вернуть можно в профиле.','lev.hidden_toast':'Плечо скрыто — включить обратно можно в профиле.','lev.hidden_screen':'Плечо скрыто в настройках.','lev.pref_title':'Плечо (продвинутое)','lev.show_pref':'Показывать плечо в интерфейсе','lev.pref_hint':'Выкл — прячет все формы и точки входа плеча. На ваши позиции on-chain это не влияет.','lev.pref_saved':'Сохранено.',
   'lev.lead':'Заёмные (плечевые) ставки по всем рынкам — управляйте или закрывайте их.','lev.open_screen_btn':'Открыть позиции с плечом',
 
   /* unban (resolver governance) */
@@ -948,6 +950,7 @@ var ZH = {
   'lev.profit_cost':'利润成本 %','lev.convert_preview':'转换后预计代币：{V}',
   'txn.leverage_open':'开立杠杆','txn.leverage_close':'平掉杠杆','txn.leverage_convert':'转换杠杆',
   'lev.screen_title':'杠杆仓位','lev.none_all':'你没有杠杆仓位。',
+  'lev.hide_btn':'隐藏杠杆','lev.hide_hint':'可在个人资料中重新开启。','lev.hidden_toast':'杠杆已隐藏——可在个人资料中重新启用。','lev.hidden_screen':'杠杆已在设置中隐藏。','lev.pref_title':'杠杆（高级）','lev.show_pref':'在界面中显示杠杆','lev.pref_hint':'关闭将隐藏所有杠杆表单和入口。链上的现有仓位不受影响。','lev.pref_saved':'已保存。',
   'lev.lead':'所有市场中的借入（杠杆）投注——管理或平仓。','lev.open_screen_btn':'打开杠杆仓位',
 
   /* unban (resolver governance) */
