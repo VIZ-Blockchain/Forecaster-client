@@ -1050,15 +1050,34 @@ var POPULAR_PER_CAT=12;               // "Popular" fetches this many volume-top 
    page in place (no re-fetch, no wiping the list / flicker). server!=null → the fetched window may be
    partial (server-paginated), so once the cache runs out we pull the next server page and append. */
 var mkMore=null;
+/* list_markets_by_category with a SERVER-SIDE status filter (accurate paging in the "All" view — the
+   node returns a full page of matching-status rows instead of the client over-fetching and dropping
+   the rest). The status arg post-dates the vendored viz.min.js and older nodes, so call via rawApi and
+   fall back to the plain (status-less) api() + client-side filter when the node rejects the extra arg.
+   CAT_STATUS_OK caches the probe so a pre-status node isn't retried every page. */
+var CAT_STATUS_OK=null;
+async function fetchCatPage(from, limit){
+  var jur=getJur();
+  var wantStatus=(mkFilter.view==='all' && mkFilter.status!=null && mkFilter.status!==-1);
+  if(wantStatus && CAT_STATUS_OK!==false){
+    try{
+      var p=[mkFilter.category, from, limit, jur||'', '', mkFilter.tag||'', mkFilter.sort||'newest', true, false, mkFilter.status];
+      var r=(await rawApi('prediction_market_api','list_markets_by_category',p))||[];
+      r.forEach(function(m){ if(m&&typeof m.market==='number') m.id=m.market; }); // id←market (normApi does this for api())
+      CAT_STATUS_OK=true; return r;
+    }catch(e){ CAT_STATUS_OK=false; } // node predates the status arg → legacy path below
+  }
+  var r2=(await api('listMarketsByCategory', mkFilter.category, from, limit, jur||'', '', mkFilter.tag||'', mkFilter.sort||'newest'))||[];
+  if(wantStatus) r2=r2.filter(function(m){return marketStatus(m)===mkFilter.status;}); // fallback filter (no-op on new node)
+  return r2;
+}
 /* Fetch the next server page for the CURRENT filter (only the server-paginated shapes: a category
    with no tag, or a single-status All view). Returns [] for cache-complete shapes. */
 async function fetchMarketsNextPage(from){
   var jur=getJur();
   if(mkFilter.category!==''){
     if(mkFilter.tag) return []; // tag view is fully cached client-side
-    var r=(await api('listMarketsByCategory', mkFilter.category, from, MK_PAGE, jur||'', '', '', mkFilter.sort||'newest'))||[];
-    if(mkFilter.view==='all' && mkFilter.status!==-1) r=r.filter(function(m){return marketStatus(m)===mkFilter.status;});
-    return r;
+    return await fetchCatPage(from, MK_PAGE);
   }
   if(mkFilter.view==='all' && mkFilter.status!=null && mkFilter.status!==-1){
     return (await api('listMarkets', mkFilter.status, from, MK_PAGE, !!mkFilter.showRisky, 'newest'))||[];
@@ -1438,7 +1457,7 @@ async function loadMarketList(){
       }
     } else {
       if(mkFilter.category!==''){
-        list=await api('listMarketsByCategory', mkFilter.category, 0, (mkFilter.tag?TAG_DEEP:mkShownLimit), jur||'', '', mkFilter.tag||'', mkFilter.sort||'newest');
+        list=await fetchCatPage(0, (mkFilter.tag?TAG_DEEP:mkShownLimit)); // server-side status filter (All view), legacy fallback inside
       } else if(mkFilter.status===-1){
         // node list_markets keys on an EXACT status; -1 is not "all" → aggregate real statuses
         var STS=[1,2,3,0]; // active, closed, resolved, waiting
@@ -3301,7 +3320,7 @@ async function screenOracleProfile(owner){
            {k:'resolved',kind:'status',st:3}]
         : [{k:'active',kind:'status',st:1},
            {k:'resolved',kind:'status',st:3}];
-      var cur='active', legacyAll=null;                               // legacyAll: cached full set for fallback
+      var cur='active', orpSort='newest', legacyAll=null;            // legacyAll: cached full set for fallback; orpSort: status-tab order
       function marketCardHtml(x){ var id=marketId(x);
         return '<div class="card click card-dense" data-nav="#/market/'+id+'">'+
           '<div class="card-q">'+esc(marketTitle(x))+'</div>'+
@@ -3322,6 +3341,16 @@ async function screenOracleProfile(owner){
           return '<button class="btn chip'+(tb.k===cur?' active':'')+'" data-orptab="'+tb.k+'">'+esc(t('orp.tab_'+tb.k))+'</button>';
         }).join('')+'</div>';
       }
+      // Sort chips for the status tabs (Active / Resolved) — the node sorts by_oracle_status natively
+      // (newest / volume desc / ending soon). Shown only on status tabs; workload/dispute tabs keep
+      // their own oldest-first work-queue order. Degrades to newest on nodes predating the order arg.
+      function sortChipsHtml(){
+        return '<div class="chips mb">'+[['newest','mk.sort_newest'],['volume','mk.sort_volume'],['expiration','mk.sort_ending']].map(function(c){
+          return '<button class="btn chip'+(orpSort===c[0]?' active':'')+'" data-orpsort="'+c[0]+'">'+esc(t(c[1]))+'</button>';
+        }).join('')+'</div>';
+      }
+      function wireSort(){ Array.prototype.forEach.call(document.querySelectorAll('[data-orpsort]'), function(el2){
+        el2.onclick=function(){ var s=el2.getAttribute('data-orpsort'); if(s===orpSort)return; orpSort=s; renderTab(); }; }); }
       // per-tab ascending pager. status uses list_markets_by_oracle_status; workload tabs use their
       // dedicated (oracle, from, limit) methods. Dispute rows carry market as an object, not an id.
       function makeFeed(tb){
@@ -3332,7 +3361,7 @@ async function screenOracleProfile(owner){
         return async function next(){
           if(done) return [];
           var chunk = tb.kind==='status'
-            ? (await rawApi('prediction_market_api','list_markets_by_oracle_status',[owner, tb.st, from, PAGE]))||[]
+            ? (await rawApi('prediction_market_api','list_markets_by_oracle_status',[owner, tb.st, from, PAGE, orpSort]))||[] // order post-dates old nodes → they throw → useLegacy (newest) fallback
             : (await rawApi('prediction_market_api',method,[owner, from, PAGE]))||[];
           chunk.forEach(function(m){ if(m&&typeof m.market==='number') m.id=m.market; });   // market-id rows only
           from+=chunk.length; if(chunk.length<PAGE) done=true;
@@ -3356,9 +3385,10 @@ async function screenOracleProfile(owner){
       }
       async function renderTab(){
         var box=el('orp-mk'); if(!box) return;
-        box.innerHTML=tabsHtml()+'<div id="orp-mk-list"></div><div id="orp-mk-more" class="mt"><span class="spin"></span></div>';
-        wireTabs();
         var tb=(TABS.filter(function(x){return x.k===cur;})[0]||TABS[0]);
+        var isStatus=(tb.kind==='status');
+        box.innerHTML=tabsHtml()+(isStatus?sortChipsHtml():'')+'<div id="orp-mk-list"></div><div id="orp-mk-more" class="mt"><span class="spin"></span></div>';
+        wireTabs(); if(isStatus) wireSort();
         var isDisp=(tb.kind==='disputes');
         var useLegacy=false, feed=makeFeed(tb), shownAny=false, myTab=cur;
         async function loadPage(){
