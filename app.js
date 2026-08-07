@@ -708,7 +708,14 @@ async function updateTopbarBalance(force){
 }
 function updateChrome(){
   var unlocked=isUnlocked();
-  el('btn-lock').classList.toggle('hide',!unlocked);
+  // Top-right lock toggle: 🔒 to lock when unlocked; 🔓 to unlock when a vault exists but is locked.
+  // (owner: locked wallet had no unlock affordance up top.) No vault → hide (user signs in via profile).
+  var lb=el('btn-lock');
+  if(lb){
+    if(unlocked){ lb.classList.remove('hide'); lb.textContent='🔒'; lb.title=t('common.lock_wallet'); }
+    else if(hasVault()){ lb.classList.remove('hide'); lb.textContent='🔓'; lb.title=t('common.unlock_wallet'); }
+    else { lb.classList.add('hide'); }
+  }
   $all('.tab-auth').forEach(function(x){x.classList.toggle('hide',!unlocked);});
   $all('.tab-create').forEach(function(x){x.classList.toggle('hide',!unlocked);});
   refreshStaticLabels();
@@ -732,7 +739,7 @@ document.addEventListener('click',function(e){
   if(n){ e.preventDefault(); go(n.getAttribute('data-nav')); }
 });
 el('btn-settings').addEventListener('click',function(){go('#/node');});
-el('btn-lock').addEventListener('click',function(){ lock(); toast('ok',t('common.locked')); });
+el('btn-lock').addEventListener('click',function(){ if(isUnlocked()){ lock(); toast('ok',t('common.locked')); } else { setReturn(location.hash); go('#/unlock'); } });
 
 /* language selector */
 (function initLangSel(){
@@ -1671,8 +1678,9 @@ async function screenMarket(id){
 
   // Dispute section — render only when a dispute is active OR the user can actually file one
   // (owner: no dead "Open dispute" on markets where it isn't possible)
-  var dCanOpen=canOpenDispute(m,dispute,status,await pmProps());
-  var dHtml=disputeBlock(id,m,ocs,dispute,dCanOpen);
+  var dProps=await pmProps();
+  var dCanOpen=canOpenDispute(m,dispute,status,dProps);
+  var dHtml=disputeBlock(id,m,ocs,dispute,dCanOpen,status,dProps);
   if(dHtml) html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('md.dispute_gov'))+'</div>'+dHtml+'</div>';
 
   setContent(html);
@@ -1887,7 +1895,7 @@ function canOpenDispute(m,dispute,status,props){
    deleted/void (status -1). Owner 2026-07-12 (#A): hide the whole dispute/governance card
    after finalization — nothing is actionable then (any dispute is already closed). */
 function marketFinalized(m){ return Number(m.payout_status)===2 || Number(m.status)===-1; }
-function disputeBlock(id,m,ocs,dispute,canOpen){
+function disputeBlock(id,m,ocs,dispute,canOpen,status,props){
   if(marketFinalized(m)) return '';   // finalized → no governance card at all
   var out='';
   if(dispute&&(dispute.id!=null||dispute.disputer||dispute.status!=null)){
@@ -1903,10 +1911,19 @@ function disputeBlock(id,m,ocs,dispute,canOpen){
       '<button class="btn ghost small" id="dv-resolve">'+esc(t('dp.resolver'))+'</button>'+
       (SESSION&&m.oracle===SESSION.account?'<button class="btn ghost small" id="dv-respond">'+esc(t('dp.oracle_respond'))+'</button>':'')+
     '</div>';
-  } else {
-    if(!canOpen) return '';                       // no dispute and can't file one → caller hides the whole card
-    out+='<div class="mut mb">'+esc(t('dp.no_dispute'))+'</div>';
+  } else if(canOpen){
+    // Resolved market still inside its dispute window — show UNTIL WHEN, so a "dispute a resolved
+    // market?" button isn't confusing. Deadline = result_expiration + pm_dispute_grace_sec.
+    var grace=(props&&props.pm_dispute_grace_sec!=null)?Number(props.pm_dispute_grace_sec):0;
+    var rexp=assetTime(m&&m.result_expiration);
+    var dl=(grace&&rexp)?tsToLocal(rexp+grace):null;
+    out+='<div class="mut mb">'+esc(t('dp.no_dispute'))+(dl?' '+esc(t('dp.window_until',{D:dl})):'')+'</div>';
     out+='<button class="btn ghost small" id="dv-create">'+esc(t('dp.create_title'))+'</button>';
+  } else if(Number(status)===3 && m&&m.payout_status!=null && Number(m.payout_status)===1){
+    // Resolved, payout still pending, but the dispute window has passed → explain, hide the button.
+    return '<div class="mut">'+esc(t('dp.window_closed'))+'</div>';
+  } else {
+    return '';                                     // no dispute and nothing actionable → caller hides the card
   }
   return out;
 }

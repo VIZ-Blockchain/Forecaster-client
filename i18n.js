@@ -108,6 +108,7 @@ var EN = {
   /* dispute block + modals */
   'dp.open':'Open dispute','dp.by':' by {D}','dp.claims':' — claims: {O}','dp.oracle_response':'Oracle response:',
   'dp.no_dispute':'No dispute on this market.','dp.after_resolution':'Disputes can be opened after resolution.',
+  'dp.window_until':'The result is in — you can still dispute it until {D}, after that it finalizes.','dp.window_closed':'The dispute window has closed — this market can no longer be disputed and is being finalized.',
   'dp.dao_vote':'DAO vote','dp.resolver':'Resolver verdict','dp.oracle_respond':'Oracle respond',
   'dp.create_title':'Open dispute','dp.proposed':'Proposed correct outcome','dp.void_nc':'Void / no-contest (-1)',
   'dp.reason_ev':'Reason / evidence','dp.reason_ph':'Why is the resolution wrong?',
@@ -432,6 +433,7 @@ var RU = {
 
   'dp.open':'Открытый спор','dp.by':' от {D}','dp.claims':' — заявлено: {O}','dp.oracle_response':'Ответ оракула:',
   'dp.no_dispute':'По этому рынку споров нет.','dp.after_resolution':'Спор можно открыть после разрешения.',
+  'dp.window_until':'Результат уже есть — его ещё можно оспорить до {D}, после этого рынок финализируется.','dp.window_closed':'Окно спора закрыто — оспорить этот рынок уже нельзя, идёт финализация.',
   'dp.dao_vote':'Голос DAO','dp.resolver':'Вердикт резолвера','dp.oracle_respond':'Ответ оракула',
   'dp.create_title':'Открыть спор','dp.proposed':'Предлагаемый верный исход','dp.void_nc':'Аннулировать / без результата (-1)',
   'dp.reason_ev':'Причина / доказательства','dp.reason_ph':'Почему разрешение неверно?',
@@ -747,6 +749,7 @@ var ZH = {
 
   'dp.open':'进行中的争议','dp.by':' 由 {D}','dp.claims':' — 主张：{O}','dp.oracle_response':'预言机回应：',
   'dp.no_dispute':'此市场没有争议。','dp.after_resolution':'裁决后方可发起争议。',
+  'dp.window_until':'结果已出 — 在 {D} 之前仍可对其提出争议，之后市场将最终确定。','dp.window_closed':'争议窗口已关闭 — 此市场无法再提出争议，正在最终确定。',
   'dp.dao_vote':'DAO 投票','dp.resolver':'仲裁者裁定','dp.oracle_respond':'预言机回应',
   'dp.create_title':'发起争议','dp.proposed':'主张的正确结果','dp.void_nc':'作废 / 无效 (-1)',
   'dp.reason_ev':'原因 / 证据','dp.reason_ph':'为何裁决有误？',
