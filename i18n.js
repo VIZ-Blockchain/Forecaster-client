@@ -163,7 +163,7 @@ var EN = {
 
   /* profile */
   'pf.not_signed':'Not signed in','pf.active_pubkey':'Active pubkey','pf.regular_key':'Regular key',
-  'pf.regular_loaded':'loaded','pf.regular_not':'not loaded (DAO votes disabled)','pf.oracle':'Oracle',
+  'pf.same_as_active':'same as active','pf.regular_loaded':'loaded','pf.regular_not':'not loaded (DAO votes disabled)','pf.oracle':'Oracle',
   'pf.add_regular':'add','pf.add_regular_title':'Add regular key','pf.or_master':'or master password',
   'pf.add_regular_desc':'The regular key signs DAO dispute votes. Enter your regular WIF, or your master password to derive it. Your PIN re-encrypts the wallet.',
   'pf.add_regular_need':'Enter a regular WIF or master password','pf.regular_added':'Regular key added',
@@ -484,7 +484,7 @@ var RU = {
   'bal.emergency_confirm':'Экстренный вывод (штраф с заблокированной прибыли)?','bal.amount_q':'Сумма?',
 
   'pf.not_signed':'Вы не вошли','pf.active_pubkey':'Публичный активный ключ','pf.regular_key':'Обычный ключ',
-  'pf.regular_loaded':'загружен','pf.regular_not':'не загружен (голосования DAO недоступны)','pf.oracle':'Оракул',
+  'pf.same_as_active':'тот же, что active','pf.regular_loaded':'загружен','pf.regular_not':'не загружен (голосования DAO недоступны)','pf.oracle':'Оракул',
   'pf.add_regular':'добавить','pf.add_regular_title':'Добавить обычный ключ','pf.or_master':'или мастер-пароль',
   'pf.add_regular_desc':'Обычный ключ подписывает голосования DAO по спорам. Введите обычный WIF или мастер-пароль для его вычисления. Ваш PIN заново зашифрует кошелёк.',
   'pf.add_regular_need':'Введите обычный WIF или мастер-пароль','pf.regular_added':'Обычный ключ добавлен',
@@ -800,7 +800,7 @@ var ZH = {
   'bal.emergency_confirm':'紧急取出（对锁定利润收取罚金）？','bal.amount_q':'金额？',
 
   'pf.not_signed':'未登录','pf.active_pubkey':'活动公钥','pf.regular_key':'常规密钥',
-  'pf.regular_loaded':'已加载','pf.regular_not':'未加载（无法进行 DAO 投票）','pf.oracle':'预言机',
+  'pf.same_as_active':'与活动密钥相同','pf.regular_loaded':'已加载','pf.regular_not':'未加载（无法进行 DAO 投票）','pf.oracle':'预言机',
   'pf.add_regular':'添加','pf.add_regular_title':'添加常规密钥','pf.or_master':'或主密码',
   'pf.add_regular_desc':'常规密钥用于签署 DAO 争议投票。输入你的常规 WIF，或用主密码推导。你的 PIN 会重新加密钱包。',
   'pf.add_regular_need':'请输入常规 WIF 或主密码','pf.regular_added':'常规密钥已添加',

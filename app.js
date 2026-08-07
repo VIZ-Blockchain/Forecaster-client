@@ -2888,7 +2888,11 @@ async function screenProfile(){
     kv(t('pf.active_pubkey'), shortKey(SESSION.pubs.active))+
     '<div class="kv"><b>'+esc(t('pf.regular_key'))+'</b><span>'+
       (SESSION.wifs.regular
-        ? '<span class="pos">'+esc(t('pf.regular_loaded'))+'</span>'
+        ? (function(){ var rp=''; try{ rp=viz.auth.wifToPublic(SESSION.wifs.regular); }catch(e){}
+            var same=rp&&rp===SESSION.pubs.active;
+            return '<span class="pos">'+esc(t('pf.regular_loaded'))+'</span>'+
+              (rp?' · <span class="mono">'+esc(shortKey(rp))+'</span>':'')+
+              (same?' <span class="mut">('+esc(t('pf.same_as_active'))+')</span>':''); })()
         : '<span class="neg">'+esc(t('pf.regular_not'))+'</span> · <a id="pf-add-regular">'+esc(t('pf.add_regular'))+'</a>')+
     '</span></div>'+
     '<button class="btn ghost small mt" id="pf-lock">'+esc(t('common.lock_wallet'))+'</button>'+
