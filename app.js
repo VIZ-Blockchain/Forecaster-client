@@ -2866,7 +2866,8 @@ function renderActHistory(box){
     var ocs=m?marketOutcomes(m):[];
     var idx=Number(p.outcome_index);
     var oc=(idx>=0 && ocs[idx]!=null)?ocs[idx]:('#'+idx);
-    return '<tr><td><a data-nav="#/market/'+id+'">'+esc(title)+'</a> <span class="mut">#'+id+'</span> <span class="badge">'+esc(t('lev.hist_marker'))+'</span></td>'+
+    var mult=levMult(p);   // effective leverage = (collateral+loan)/collateral → e.g. ×2.78
+    return '<tr><td><a data-nav="#/market/'+id+'">'+esc(title)+'</a> <span class="mut">#'+id+'</span> <span class="badge">'+esc(t('lev.hist_marker'))+(mult?' '+esc(fmtMult(mult)):'')+'</span></td>'+
       '<td>'+esc(oc)+'</td><td>'+fmtViz(p.collateral||0)+'</td>'+levResultCell(p)+'</tr>';
   });
   var rows=betRows.concat(levRows);
