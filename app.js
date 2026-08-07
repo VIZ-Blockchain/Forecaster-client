@@ -693,7 +693,8 @@ async function refreshPoolTab(){
 var _tbBalTs=0;
 async function updateTopbarBalance(force){
   var elb=el('topbar-balance'); if(!elb) return;
-  if(!isUnlocked()){ elb.classList.add('hide'); elb.textContent=''; _tbBalTs=0; return; }
+  var elp=el('topbar-pool');
+  if(!isUnlocked()){ elb.classList.add('hide'); elb.textContent=''; if(elp){elp.classList.add('hide'); elp.textContent='';} _tbBalTs=0; return; }
   var nowms=Date.now();
   if(!force && (nowms-_tbBalTs)<4000) return;     // throttle rapid navigation
   _tbBalTs=nowms;
@@ -705,6 +706,24 @@ async function updateTopbarBalance(force){
       elb.classList.remove('hide');
     }
   }catch(e){ /* keep last shown value on transient error */ }
+  // Pool position badge (💧): value the user would receive on a planned withdrawal of their shares —
+  // same figure as the pool screen's "your value" (principal + accrued). Click → pool. Hidden at 0.
+  if(elp){
+    try{
+      var dep=await api('getLazyDeposit', SESSION.account);
+      var shares=dep?(Number(dep.shares)||0):0;
+      if(shares>0){
+        var pool=await api('getLazyPool');
+        var rps=Number(pool&&pool.reward_per_share)||0;
+        var snap=Number(dep.reward_snapshot)||0;
+        var live=Math.max(0,(rps-snap)*shares/1e9);
+        var valueRaw=(Number(dep.principal)||0)+live+(Number(dep.pending_rewards)||0);   // raw units
+        elp.title=t('pool.your_value')+': '+fmtViz(valueRaw);
+        elp.innerHTML='<span class="tb-ic">💧</span>'+fmtVizK(valueRaw);
+        elp.classList.remove('hide');
+      } else { elp.classList.add('hide'); elp.textContent=''; }
+    }catch(e){ /* keep last shown value on transient error */ }
+  }
 }
 function updateChrome(){
   var unlocked=isUnlocked();
