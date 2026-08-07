@@ -2794,9 +2794,15 @@ async function ensureMy(){
   if(ACT.loaded) return;
   ACT.positions = ((await api('getAccountPositions', SESSION.account, 0, 300)) || []).map(normPos);
   try{ ACT.leverage = (await api('getAccountLeveragePositions', SESSION.account, 0, 1000)) || []; }catch(e){ ACT.leverage=[]; }
-  var idset={}; ACT.positions.forEach(function(p){ var id=Number(p.market_id!=null?p.market_id:p.market); if(!isNaN(id)) idset[id]=1; });
-  ACT.leverage.forEach(function(p){ var id=Number(p.market_id!=null?p.market_id:p.market); if(!isNaN(id)) idset[id]=1; });
-  ACT.ids = Object.keys(idset).map(Number);
+  // Preserve the node's order (newest-first) when collecting the unique market ids: an integer-keyed
+  // object re-sorts numeric keys ascending (a JS gotcha), which would flip the derived tabs back to
+  // oldest-first. Dedup with a Set + array instead, positions first (they lead the activity feed).
+  var seen={}, ids=[];
+  ACT.positions.concat(ACT.leverage).forEach(function(p){
+    var id=Number(p.market_id!=null?p.market_id:p.market);
+    if(!isNaN(id) && !seen[id]){ seen[id]=1; ids.push(id); }
+  });
+  ACT.ids = ids;
   ACT.markets={}; ACT.disputes={};
   await Promise.all(ACT.ids.map(function(id){ return api('getMarket', id).then(function(m){ACT.markets[id]=m;}).catch(function(){}); }));
   await Promise.all(ACT.ids.map(function(id){ return api('getDispute', id).then(function(d){ACT.disputes[id]=d;}).catch(function(){}); }));
