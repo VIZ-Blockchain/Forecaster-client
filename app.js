@@ -3433,7 +3433,49 @@ async function screenAccount(name){
     '<div class="hint mb">'+esc(t('acc.public_note'))+'</div>'+
     '<div id="acc-bal"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>'+
     '<div class="section-title">'+esc(t('acc.bets'))+'</div>'+
-    '<div id="acc-bets"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
+    '<div id="acc-bets"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>'+
+    '<div class="section-title">'+esc(t('acc.created_markets'))+'</div>'+
+    '<div id="acc-created"><button class="btn" id="acc-created-btn">'+esc(t('acc.show_created'))+'</button></div>');
+  // Created markets — lazy (most inspected accounts are bettors, not creators; don't fetch until asked).
+  // Wired before the bets block below because that block returns early when the account has no bets.
+  (function(){
+    var host=el('acc-created'), btn=el('acc-created-btn'); if(!host||!btn) return;
+    var sort='newest', ORDER_OK=null, from=0, done=false, PAGE=50, legacy=[];
+    btn.onclick=function(){ render(); };
+    function chipsHtml(){ return '<div class="chips mb">'+[['newest','mk.sort_newest'],['volume','mk.sort_volume'],['expiration','mk.sort_ending']].map(function(c){
+      return '<button class="btn chip'+(sort===c[0]?' active':'')+'" data-crsort="'+c[0]+'">'+esc(t(c[1]))+'</button>'; }).join('')+'</div>'; }
+    function cardHtml(m){ var id=marketId(m); return '<div class="card click card-dense" data-nav="#/market/'+id+'"><div class="card-q">'+esc(marketTitle(m))+'</div><div class="mut" style="font-size:12px">'+statusBadge(m)+'</div></div>'; }
+    function sortClient(arr){ var a=arr.slice();
+      if(sort==='volume') a.sort(function(x,y){ return (volOf(y)-volOf(x))||(marketId(y)-marketId(x)); });
+      else if(sort==='expiration') a.sort(function(x,y){ var ex=assetTime(x.betting_expiration)||9e15, ey=assetTime(y.betting_expiration)||9e15; return ex-ey; });
+      else a.sort(function(x,y){ return marketId(y)-marketId(x); }); return a; }
+    async function fetchPage(f){
+      // order arg post-dates old nodes → they throw → fall back to the 3-arg call + client-side sort
+      if(ORDER_OK!==false){
+        try{ var r=(await rawApi('prediction_market_api','list_markets_by_creator',[name,f,PAGE,sort]))||[];
+          r.forEach(function(m){ if(m&&typeof m.market==='number') m.id=m.market; }); ORDER_OK=true; return {rows:r,ordered:true}; }
+        catch(e){ ORDER_OK=false; }
+      }
+      var r2=(await api('listMarketsByCreator', name, f, PAGE))||[]; return {rows:r2,ordered:false};
+    }
+    function setMore(has){ var m=el('acc-cr-more'); if(!m) return; if(!has){ m.innerHTML=''; return; }
+      m.innerHTML='<button class="btn" id="acc-cr-more-btn">'+esc(t('orp.load_more'))+'</button>';
+      el('acc-cr-more-btn').onclick=function(){ m.innerHTML='<span class="spin"></span>'; loadPage(false); }; }
+    async function loadPage(first){
+      var res; try{ res=await fetchPage(from); }catch(e){ if(el('acc-cr-list')) el('acc-cr-list').innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; return; }
+      if(!el('acc-cr-list')) return; var rows=res.rows||[];
+      from+=rows.length; if(rows.length<PAGE) done=true;
+      if(res.ordered){
+        if(rows.length) el('acc-cr-list').insertAdjacentHTML('beforeend', rows.map(cardHtml).join(''));
+      } else { legacy=legacy.concat(rows); el('acc-cr-list').innerHTML=sortClient(legacy).map(cardHtml).join(''); } // old node: re-sort accumulated set
+      if(first && !legacy.length && !el('acc-cr-list').children.length) el('acc-cr-list').innerHTML='<div class="empty">'+esc(t('acc.no_created'))+'</div>';
+      setMore(!done);
+    }
+    function wireChips(){ Array.prototype.forEach.call(document.querySelectorAll('[data-crsort]'), function(el2){
+      el2.onclick=function(){ var s=el2.getAttribute('data-crsort'); if(s===sort)return; sort=s; render(); }; }); }
+    async function render(){ host.innerHTML=chipsHtml()+'<div id="acc-cr-list"></div><div id="acc-cr-more" class="mt"><span class="spin"></span></div>';
+      wireChips(); from=0; done=false; legacy=[]; await loadPage(true); }
+  })();
   // balance
   try{
     var acc=(await api('getAccounts',[name]))[0];
