@@ -1712,11 +1712,11 @@ async function screenMarket(id){
     html+='</div>';
   }
 
-  // Leverage (open / manage borrowed positions) — high-risk, chain-gated
-  if(status===0||status===1){
-    html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('lev.title'))+'</div>'+
-      '<div id="lev-box"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>';
-  }
+  // Leverage (open / manage borrowed positions) — high-risk, chain-gated. Card shell rendered for every
+  // status; loadLeverage shows the open form only while active and keeps the card on resolved/closed
+  // markets solely to display the user's own (settled) leverage positions, else removes itself.
+  html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('lev.title'))+'</div>'+
+    '<div id="lev-box"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>';
 
   // (My positions card rendered earlier, above recent bets — see #4)
 
@@ -1747,7 +1747,7 @@ async function screenMarket(id){
   loadKline(id, ocs, isMulti);
   if(isUnlocked()) loadMyPositions(id, m);
   if(isUnlocked()) loadMyLiquidity(id, status);
-  if(status===0||status===1) loadLeverage(id, ocs, isMulti);
+  loadLeverage(id, ocs, isMulti, status);   // renders open form only when active; shows settled positions on resolved markets
   if(dispute&&(dispute.id!=null||dispute.disputer||dispute.status!=null)) loadDisputeVotes(id, ocs);
   loadMarketBets(id, ocs, isMulti);
   loadMarketLazyAlloc(id);
@@ -2226,26 +2226,34 @@ function levResultCell(p){
   var dStr=(dRaw>0?'+':'')+fmtViz(dRaw);   // fmtViz already prefixes '-' for negatives
   return '<td><span class="badge '+cls+'">'+esc(lbl)+'</span> <span class="'+dCls+'">'+esc(dStr)+'</span></td>';
 }
-async function loadLeverage(id, ocs, isMulti){
+async function loadLeverage(id, ocs, isMulti, status){
   var box=el('lev-box'); if(!box)return;
   var props=await pmProps();
   if(leverageOff(props)){ var card=box.closest('.card'); if(card) card.remove(); return; } // chain-off → hide the whole card
-  var html='<div class="box err">'+esc(t('lev.risk_notice'))+'</div>'+
-    '<div class="hint">'+esc(t('lev.funding_note',{R:fmtFundingRate(props.pm_leverage_funding_rate_ppm_per_day)}))+'</div>';
-  if(isUnlocked()){
-    html+='<div class="field"><label class="lab">'+esc(t('md.outcome'))+'</label><select id="lv-oc">'+
-      ocs.map(function(n,i){return '<option value="'+i+'">'+esc(n)+'</option>';}).join('')+'</select></div>'+
-      '<div class="row"><div class="grow"><label class="lab">'+esc(t('lev.collateral'))+'</label><input id="lv-col" type="number" step="0.001" min="0.001" placeholder="10.000"></div>'+
-      '<div class="grow"><label class="lab">'+esc(t('lev.loan'))+'</label><input id="lv-loan" type="number" step="0.001" min="0" placeholder="20.000"></div></div>'+
-      '<div class="row"><div class="grow"><label class="lab">'+esc(t('lev.min_tokens'))+'</label><input id="lv-min" type="number" step="1" min="0" value="0"></div>'+
-      '<div class="grow"><label class="lab">'+esc(t('lev.max_slippage'))+'</label><input id="lv-slip" type="number" step="0.1" min="0" value="5"></div></div>'+
-      '<div class="row mt"><button class="btn ghost" id="lv-quote">'+esc(t('lev.quote_btn'))+'</button>'+
-      '<button class="btn ok" id="lv-open">'+esc(t('lev.open_btn'))+'</button></div>'+
-      '<div id="lv-quote-out" class="hint"></div>';
-  } else {
-    html+='<div class="box info">'+unlockLink('lev.unlock')+'</div>';
+  // Open form only while the market is active/pending. On a resolved/closed market keep the card ONLY to
+  // show the user's own settled leverage positions (so it doesn't look like they never participated);
+  // a locked user there has nothing to show → drop the card.
+  var canOpen=(status===0||status===1);
+  if(!canOpen && !isUnlocked()){ var c2=box.closest('.card'); if(c2) c2.remove(); return; }
+  var html='';
+  if(canOpen){
+    html+='<div class="box err">'+esc(t('lev.risk_notice'))+'</div>'+
+      '<div class="hint">'+esc(t('lev.funding_note',{R:fmtFundingRate(props.pm_leverage_funding_rate_ppm_per_day)}))+'</div>';
+    if(isUnlocked()){
+      html+='<div class="field"><label class="lab">'+esc(t('md.outcome'))+'</label><select id="lv-oc">'+
+        ocs.map(function(n,i){return '<option value="'+i+'">'+esc(n)+'</option>';}).join('')+'</select></div>'+
+        '<div class="row"><div class="grow"><label class="lab">'+esc(t('lev.collateral'))+'</label><input id="lv-col" type="number" step="0.001" min="0.001" placeholder="10.000"></div>'+
+        '<div class="grow"><label class="lab">'+esc(t('lev.loan'))+'</label><input id="lv-loan" type="number" step="0.001" min="0" placeholder="20.000"></div></div>'+
+        '<div class="row"><div class="grow"><label class="lab">'+esc(t('lev.min_tokens'))+'</label><input id="lv-min" type="number" step="1" min="0" value="0"></div>'+
+        '<div class="grow"><label class="lab">'+esc(t('lev.max_slippage'))+'</label><input id="lv-slip" type="number" step="0.1" min="0" value="5"></div></div>'+
+        '<div class="row mt"><button class="btn ghost" id="lv-quote">'+esc(t('lev.quote_btn'))+'</button>'+
+        '<button class="btn ok" id="lv-open">'+esc(t('lev.open_btn'))+'</button></div>'+
+        '<div id="lv-quote-out" class="hint"></div>';
+    } else {
+      html+='<div class="box info">'+unlockLink('lev.unlock')+'</div>';
+    }
   }
-  html+='<div class="section-title">'+esc(t('lev.mine_title'))+'</div><div id="lev-mine">'+
+  html+='<div class="section-title"'+(canOpen?'':' style="margin-top:0"')+'>'+esc(t('lev.mine_title'))+'</div><div id="lev-mine">'+
     (isUnlocked()?'<span class="spin"></span>':'<div class="mut">'+unlockLink('md.unlock_view')+'</div>')+'</div>';
   box.innerHTML=html;
 
@@ -2277,14 +2285,16 @@ async function loadLeverage(id, ocs, isMulti){
     tx(t('txn.leverage_open'),function(){return bc('pmLeverageOpen',wifFor('active'),SESSION.account,id,oc,toAsset(col),toAsset(loan),minT,slip,[]);},
       function(){setTimeout(function(){screenMarket(id);},1300);});
   };
-  if(isUnlocked()) loadMyLeverage(id, ocs);
+  if(isUnlocked()) loadMyLeverage(id, ocs, canOpen);
 }
-async function loadMyLeverage(id, ocs){
+async function loadMyLeverage(id, ocs, keepEmpty){
   var box=el('lev-mine'); if(!box)return;
   try{
     var all=await api('getAccountLeveragePositions', SESSION.account, 0, 1000);
     var mine=(all||[]).filter(function(p){ return Number(p.market_id!=null?p.market_id:p.market)===Number(id); });
-    if(!mine.length){ box.innerHTML='<div class="mut">'+esc(t('lev.none_mine'))+'</div>'; return; }
+    // On an active market keep the empty note (the open form is still useful); on a resolved/closed
+    // market with no positions there's nothing to show → drop the whole leverage card.
+    if(!mine.length){ if(keepEmpty){ box.innerHTML='<div class="mut">'+esc(t('lev.none_mine'))+'</div>'; } else { var c3=box.closest('.card'); if(c3) c3.remove(); } return; }
     var rows=mine.map(function(p){
       var pid=p.id!=null?p.id:p.position_id;
       var oc=ocs[p.outcome_index]!=null?ocs[p.outcome_index]:('#'+p.outcome_index);
