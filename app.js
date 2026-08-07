@@ -2125,10 +2125,15 @@ async function loadMyPositions(id, mkt){
 /* pm_transfer_position — hand a position (by bet_id, in shares) to another account */
 function transferPosition(marketId, betId, haveShares){
   if(!requireUnlock())return;
+  // Field is in SHARES = weight/1000. Build the numeric value LOCALE-INDEPENDENTLY: fmtShares() is a
+  // display formatter (toLocaleString) that in comma-decimal locales (ru) returns "3,233" for 3.233 —
+  // stripping non-[\d.] then deleted the comma, yielding "3233" (×1000 too big). A number input needs a
+  // dot decimal, so compute it directly. (owner hit this: default filled 3233, and 233 was rejected.)
+  var maxSh=(haveShares/1000).toFixed(3);
   openModal(t('xfer.title'), h(
     '<div class="hint mb">'+esc(t('xfer.desc',{ID:betId}))+'</div>',
     '<label class="lab">'+esc(t('common.to'))+'</label><input id="xf-to" type="text" autocomplete="off" spellcheck="false" placeholder="account">',
-    '<label class="lab">'+esc(t('xfer.shares'))+'</label><input id="xf-sh" type="number" step="0.001" min="0.001" max="'+fmtShares(haveShares).replace(/[^\d.]/g,'')+'" value="'+fmtShares(haveShares).replace(/[^\d.]/g,'')+'">',
+    '<label class="lab">'+esc(t('xfer.shares'))+'</label><input id="xf-sh" type="number" step="0.001" min="0.001" max="'+maxSh+'" value="'+maxSh+'">',
     '<div class="hint" id="xf-max" style="cursor:pointer">'+esc(t('xfer.max',{S:fmtShares(haveShares)}))+'</div>',
     '<label class="lab">'+esc(t('common.memo'))+'</label><input id="xf-memo" type="text">'
   ),[{label:t('common.cancel'),cls:'ghost',act:closeModal},{label:t('xfer.send'),cls:'',act:function(){
@@ -2145,7 +2150,7 @@ function transferPosition(marketId, betId, haveShares){
     tx(t('txn.transfer_position'),function(){return bc('pmTransferPosition',wifFor('active'),SESSION.account,betId,to,amount,memo,[]);},
       function(){setTimeout(function(){screenMarket(marketId);},1200);});
   }}]);
-  var mx=el('xf-max'); if(mx) mx.onclick=function(){ var f=el('xf-sh'); if(f) f.value=fmtShares(haveShares).replace(/[^\d.]/g,''); };
+  var mx=el('xf-max'); if(mx) mx.onclick=function(){ var f=el('xf-sh'); if(f) f.value=maxSh; };
 }
 
 /* pm_withdraw_liquidity — my LP positions on this market + partial/full withdraw */
