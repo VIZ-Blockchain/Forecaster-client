@@ -814,7 +814,7 @@ function route(){
     if(scr==='balance') return screenBalance();
     if(scr==='pool')    return screenPool();
     if(scr==='leverage')return screenLeverage();
-    if(scr==='activity')return screenActivity();
+    if(scr==='activity')return screenActivity(parts[1]||'');
     if(scr==='profile') return screenProfile();
     if(scr==='oracle')  return screenOracle();
     if(scr==='oracles') return parts[1]?screenOracleProfile(decodeURIComponent(parts[1])):screenOracles();
@@ -2813,14 +2813,19 @@ async function ensureMy(){
   if(ACT.loaded) return;
   ACT.positions = ((await api('getAccountPositions', SESSION.account, 0, 300)) || []).map(normPos);
   try{ ACT.leverage = (await api('getAccountLeveragePositions', SESSION.account, 0, 1000)) || []; }catch(e){ ACT.leverage=[]; }
-  // Preserve the node's order (newest-first) when collecting the unique market ids: an integer-keyed
-  // object re-sorts numeric keys ascending (a JS gotcha), which would flip the derived tabs back to
-  // oldest-first. Dedup with a Set + array instead, positions first (they lead the activity feed).
+  // Collect the unique market ids that drive the Active / Disputable / My-disputes tabs. Preserve the
+  // node's newest-first order (an integer-keyed object re-sorts numeric keys ascending — a JS gotcha),
+  // so dedup with a Set + array, positions first (they lead the activity feed).
+  // Leverage: include ONLY active (status 0) positions. A leverage position settles on the price at
+  // betting close, INDEPENDENT of the oracle's resolution ([[pm-leverage-close-timing]]), so once it's
+  // terminal (settled/liquidated/closed/converted) there's no live stake and no reason to dispute the
+  // resolution — surfacing such a market under Disputable/Active is just noise (owner hit this: a
+  // resolved market showed as "disputable" though he only ever had a since-settled leverage position,
+  // never a bet). Terminal leverage still appears in the History tab (levTerminal).
   var seen={}, ids=[];
-  ACT.positions.concat(ACT.leverage).forEach(function(p){
-    var id=Number(p.market_id!=null?p.market_id:p.market);
-    if(!isNaN(id) && !seen[id]){ seen[id]=1; ids.push(id); }
-  });
+  function addId(p){ var id=Number(p.market_id!=null?p.market_id:p.market); if(!isNaN(id) && !seen[id]){ seen[id]=1; ids.push(id); } }
+  ACT.positions.forEach(addId);                                     // every bet (settled bets keep a payout/dispute claim)
+  ACT.leverage.forEach(function(p){ if(levStatus(p)===0) addId(p); }); // active leverage only
   ACT.ids = ids;
   ACT.markets={}; ACT.disputes={};
   await Promise.all(ACT.ids.map(function(id){ return api('getMarket', id).then(function(m){ACT.markets[id]=m;}).catch(function(){}); }));
@@ -2847,15 +2852,17 @@ function disputeCard(m,d,mine){
   if(d&&d.reason) card=card.replace('</div><button', '</div><div class="hint">“'+esc(d.reason)+'”</div><button');
   return card;
 }
-async function screenActivity(){
+async function screenActivity(tab){
   ACT={loaded:false};
   var subs=[['history',t('act.tab_history')],['active',t('act.tab_active')],['disputable',t('act.tab_disputable')],
             ['mydisputes',t('act.tab_mydisputes')],['alldisputes',t('act.tab_alldisputes')]];
+  if(tab && subs.some(function(s){return s[0]===tab;})) actTab=tab;   // deep-link: honor the tab from #/activity/<tab>
   setContent('<div class="title">'+esc(t('act.title'))+'</div>'+
     '<div class="filters" id="act-tabs">'+subs.map(function(s){return '<button class="btn chip'+(actTab===s[0]?' active':'')+'" data-at="'+s[0]+'">'+esc(s[1])+'</button>';}).join('')+'</div>'+
     '<div id="act-list"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
   $('#act-tabs').addEventListener('click',function(e){ var c=e.target.closest('[data-at]'); if(!c)return;
     actTab=c.getAttribute('data-at');
+    try{ history.replaceState(null,'','#/activity/'+actTab); }catch(e2){}  // reflect the tab in the URL (quiet — no re-route, keeps the ACT cache)
     $all('#act-tabs .chip').forEach(function(x){x.classList.toggle('active',x.getAttribute('data-at')===actTab);});
     renderActTab(); });
   renderActTab();
