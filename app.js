@@ -2926,7 +2926,29 @@ function renderActHistory(box){
 function renderActActive(box){
   var ms=ACT.ids.map(function(id){return ACT.markets[id];}).filter(function(m){return m && marketStatus(m)===1;});
   if(!ms.length){ box.innerHTML='<div class="empty">'+esc(t('act.none_active'))+'</div>'; return; }
+  // Sum the user's OWN bet stake per (market, outcome) from ACT.positions so each active card shows
+  // e.g. «Yes»: 10 Ƶ, «No»: 2 Ƶ next to the volume. Outcomes with a zero total are omitted.
+  var myBets={};
+  (ACT.positions||[]).forEach(function(p){
+    var mid=Number(p.market_id!=null?p.market_id:p.market); if(isNaN(mid))return;
+    var idx=(p.outcome_index!=null && p.outcome_index>=0)?p.outcome_index:(p.side!=null?p.side:-1); if(idx<0)return;
+    var amt=num(p.amount!=null?p.amount:p.stake); if(!amt)return;
+    (myBets[mid]||(myBets[mid]={}))[idx]=(myBets[mid][idx]||0)+amt;
+  });
   box.innerHTML=ms.map(marketCard).join('');
+  ms.forEach(function(m){
+    var id=marketId(m), bets=myBets[id]; if(!bets)return;
+    var ocs=marketOutcomes(m);
+    var items=Object.keys(bets).map(Number).sort(function(a,b){return a-b;})
+      .filter(function(idx){return bets[idx]>0;})
+      .map(function(idx){ var lbl=(ocs[idx]!=null)?ocs[idx]:(idx===0?t('oc.yes'):(idx===1?t('oc.no'):('#'+idx)));
+        return '«'+esc(lbl)+'»: '+esc(fmtViz(bets[idx])); });
+    if(!items.length)return;
+    var card=box.querySelector('.card[data-market="'+id+'"]'); if(!card)return;
+    var line='<div class="mut act-mystakes" style="font-size:12px;margin-top:4px">'+esc(t('act.my_stakes'))+' '+items.join(', ')+'</div>';
+    var meta=card.querySelector('.card-meta');
+    if(meta) meta.insertAdjacentHTML('afterend', line); else card.insertAdjacentHTML('beforeend', line);
+  });
   enrichCardBars(box);
 }
 function renderActDisputable(box){
