@@ -289,7 +289,7 @@ var EN = {
   'txn.transfer_position':'Transfer position',
 
   /* liquidity withdraw */
-  'lq.risk_notice':'Providing liquidity is at risk: in parimutuel/LMSR markets your withdrawable amount floats with market exposure and may be less than deposited.',
+  'lq.risk_notice':'Liquidity earns a share of market fees. Withdrawals are price-neutral — your principal comes back (plus earned fees), and principal is returned in full at settlement. Funds are locked from betting close until settlement.',
   'lq.mine_title':'My liquidity','lq.none_mine':'You have no liquidity in this market.',
   'lq.withdraw':'Withdraw','lq.withdrawn':'Withdrawn','lq.col_id':'Position','lq.col_amount':'Amount',
   'lq.withdraw_title':'Withdraw liquidity','txn.withdraw_liq':'Withdraw liquidity',
@@ -312,6 +312,7 @@ var EN = {
   'lev.profit_cost':'Profit cost %','lev.convert_preview':'Estimated tokens after convert: {V}',
   'txn.leverage_open':'Open leverage','txn.leverage_close':'Close leverage','txn.leverage_convert':'Convert leverage',
   'lev.screen_title':'Leverage positions','lev.none_all':'You have no leverage positions.',
+  'set.interface_title':'Interface','liq.hide_btn':'Hide (don\u2019t offer)','liq.hide_hint':'You can turn it back on in Profile.','liq.hidden_toast':'Liquidity hidden \u2014 re-enable it in Profile.','liq.show_pref':'Show liquidity provision','liq.pref_hint':'Off hides the market Liquidity section (the lazy pool in Balance is unaffected).',
   'lev.hide_btn':'Hide leverage','lev.hide_hint':'You can turn it back on in Profile.','lev.hidden_toast':'Leverage hidden — re-enable it in Profile.','lev.hidden_screen':'Leverage is hidden in your settings.','lev.pref_title':'Leverage (advanced)','lev.show_pref':'Show leverage in the interface','lev.pref_hint':'Off hides all leverage forms and entry points. Existing positions are unaffected on-chain.','lev.pref_saved':'Saved.',
   'lev.lead':'Borrowed (leveraged) bets across all markets — manage or close them.','lev.open_screen_btn':'Open leverage positions',
 
@@ -608,7 +609,7 @@ var RU = {
   'txn.transfer_position':'Передача позиции',
 
   /* liquidity withdraw */
-  'lq.risk_notice':'Предоставление ликвидности — с риском: в parimutuel/LMSR-рынках сумма к выводу плавает вместе с экспозицией рынка и может быть меньше внесённой.',
+  'lq.risk_notice':'Ликвидность приносит долю комиссий рынка. Вывод — price-neutral: принципал возвращается (плюс заработанные комиссии), а при расчёте рынка принципал возвращается полностью. Средства заблокированы с закрытия ставок и до расчёта.',
   'lq.mine_title':'Моя ликвидность','lq.none_mine':'У вас нет ликвидности в этом рынке.',
   'lq.withdraw':'Вывести','lq.withdrawn':'Выведено','lq.col_id':'Позиция','lq.col_amount':'Сумма',
   'lq.withdraw_title':'Вывод ликвидности','txn.withdraw_liq':'Вывод ликвидности',
@@ -631,6 +632,7 @@ var RU = {
   'lev.profit_cost':'Стоимость прибыли %','lev.convert_preview':'Оценка токенов после конвертации: {V}',
   'txn.leverage_open':'Открытие плеча','txn.leverage_close':'Закрытие плеча','txn.leverage_convert':'Конвертация плеча',
   'lev.screen_title':'Позиции с плечом','lev.none_all':'У вас нет позиций с плечом.',
+  'set.interface_title':'Интерфейс','liq.hide_btn':'Скрыть и не предлагать','liq.hide_hint':'Вернуть можно в профиле.','liq.hidden_toast':'Ликвидность скрыта \u2014 включить обратно можно в профиле.','liq.show_pref':'Показывать предоставление ликвидности','liq.pref_hint':'Выкл \u2014 прячет раздел ликвидности на рынках (пул ликвидности в Балансе не затрагивается).',
   'lev.hide_btn':'Не показывать плечо','lev.hide_hint':'Вернуть можно в профиле.','lev.hidden_toast':'Плечо скрыто — включить обратно можно в профиле.','lev.hidden_screen':'Плечо скрыто в настройках.','lev.pref_title':'Плечо (продвинутое)','lev.show_pref':'Показывать плечо в интерфейсе','lev.pref_hint':'Выкл — прячет все формы и точки входа плеча. На ваши позиции on-chain это не влияет.','lev.pref_saved':'Сохранено.',
   'lev.lead':'Заёмные (плечевые) ставки по всем рынкам — управляйте или закрывайте их.','lev.open_screen_btn':'Открыть позиции с плечом',
 
@@ -927,7 +929,7 @@ var ZH = {
   'txn.transfer_position':'转移仓位',
 
   /* liquidity withdraw */
-  'lq.risk_notice':'提供流动性有风险：在 parimutuel/LMSR 市场中，可提取的金额随市场敞口浮动，可能少于存入的金额。',
+  'lq.risk_notice':'提供流动性可赚取市场手续费的一部分。提取为价格中性——本金会返还（加上已赚手续费），结算时本金全额返还。资金在停止投注至结算期间被锁定。',
   'lq.mine_title':'我的流动性','lq.none_mine':'你在该市场没有流动性。',
   'lq.withdraw':'提取','lq.withdrawn':'已提取','lq.col_id':'仓位','lq.col_amount':'金额',
   'lq.withdraw_title':'提取流动性','txn.withdraw_liq':'提取流动性',
@@ -950,6 +952,7 @@ var ZH = {
   'lev.profit_cost':'利润成本 %','lev.convert_preview':'转换后预计代币：{V}',
   'txn.leverage_open':'开立杠杆','txn.leverage_close':'平掉杠杆','txn.leverage_convert':'转换杠杆',
   'lev.screen_title':'杠杆仓位','lev.none_all':'你没有杠杆仓位。',
+  'set.interface_title':'界面','liq.hide_btn':'隐藏（不再提示）','liq.hide_hint':'可在个人资料中重新开启。','liq.hidden_toast':'流动性已隐藏——可在个人资料中重新启用。','liq.show_pref':'显示提供流动性','liq.pref_hint':'关闭将隐藏市场的流动性板块（余额中的懒人池不受影响）。',
   'lev.hide_btn':'隐藏杠杆','lev.hide_hint':'可在个人资料中重新开启。','lev.hidden_toast':'杠杆已隐藏——可在个人资料中重新启用。','lev.hidden_screen':'杠杆已在设置中隐藏。','lev.pref_title':'杠杆（高级）','lev.show_pref':'在界面中显示杠杆','lev.pref_hint':'关闭将隐藏所有杠杆表单和入口。链上的现有仓位不受影响。','lev.pref_saved':'已保存。',
   'lev.lead':'所有市场中的借入（杠杆）投注——管理或平仓。','lev.open_screen_btn':'打开杠杆仓位',
 

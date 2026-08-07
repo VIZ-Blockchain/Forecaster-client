@@ -1698,10 +1698,10 @@ async function screenMarket(id){
     html+='<button class="btn ok block mt" id="bt-go">'+esc(t('md.place_bet_btn'))+'</button></div>';
   }
 
-  // Liquidity (add + withdraw own positions)
-  if(status===0||status===1||status===2){
-    html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('md.liquidity'))+'</div>'+
-      '<div class="box warn">'+esc(t('lq.risk_notice'))+'</div>';
+  // Liquidity (add + withdraw own positions) — hidden by the user pref (few bettors provide LP)
+  if((status===0||status===1||status===2) && !liqHidden()){
+    html+='<div class="card" id="liq-card"><div class="section-title" style="margin-top:0">'+esc(t('md.liquidity'))+'</div>'+
+      '<div class="box info">'+esc(t('lq.risk_notice'))+'</div>';
     if(status===0||status===1){
       html+='<div class="field"><label class="lab">'+esc(t('md.add_liq'))+'</label><input id="lq-amt" type="number" step="0.001" min="0.001" placeholder="50.000"></div>'+
       '<button class="btn ghost" id="lq-go">'+esc(t('md.add_liq_btn'))+'</button>'+
@@ -1709,6 +1709,8 @@ async function screenMarket(id){
     }
     html+='<div class="section-title">'+esc(t('lq.mine_title'))+'</div><div id="lq-mine">'+
       (isUnlocked()?'<span class="spin"></span> '+esc(t('common.loading')):'<div class="mut">'+unlockLink('md.unlock_view')+'</div>')+'</div>';
+    html+='<div class="mt"><button class="btn small ghost" id="liq-hide">'+esc(t('liq.hide_btn'))+'</button> '+
+      '<span class="mut small">'+esc(t('liq.hide_hint'))+'</span></div>';
     html+='</div>';
   }
 
@@ -2038,6 +2040,8 @@ function wireMarket(id,m,ocs,isMulti){
     tx(t('txn.add_liq'), function(){return bc('pmAddLiquidity', wifFor('active'), SESSION.account, id, toAsset(amt), []);},
        function(){setTimeout(function(){screenMarket(id);},1200);});
   };
+  // hide the whole liquidity section (user pref, re-enable in Profile)
+  if(el('liq-hide')) el('liq-hide').onclick=function(){ setLiqHidden(true); var c=el('liq-card'); if(c) c.remove(); toast('ok',t('liq.hidden_toast')); };
   // oracle
   if(el('or-accept')) el('or-accept').onclick=function(){ if(!requireUnlock())return; tx(t('txn.accept'),function(){return bc('pmOracleAcceptMarket',wifFor('active'),SESSION.account,id,true,0,'0.000 VIZ',[]);},function(){setTimeout(function(){screenMarket(id);},1200);});};
   if(el('or-reject')) el('or-reject').onclick=function(){ if(!requireUnlock())return; tx(t('txn.reject'),function(){return bc('pmOracleAcceptMarket',wifFor('active'),SESSION.account,id,false,0,'0.000 VIZ',[]);},function(){setTimeout(function(){screenMarket(id);},1200);});};
@@ -2181,7 +2185,7 @@ async function loadMyLiquidity(id, status){
 function withdrawLiquidity(marketId, liquidityId, haveRaw){
   if(!requireUnlock())return;
   openModal(t('lq.withdraw_title'), h(
-    '<div class="box warn">'+esc(t('lq.risk_notice'))+'</div>',
+    '<div class="box info">'+esc(t('lq.risk_notice'))+'</div>',
     '<label class="lab">'+esc(t('common.amount_viz'))+'</label>',
     '<input id="wl-amt" type="number" step="0.001" min="0.001" value="'+(haveRaw/1000).toFixed(3)+'">',
     '<div class="hint">'+esc(t('pool.you_have',{S:fmtViz(haveRaw)}))+'</div>'
@@ -2205,6 +2209,11 @@ function leverageOff(p){ return !!(p && p.pm_leverage_enabled===false); }
 var LS_LEV='lc_lev_hide';
 function levHidden(){ try{ return localStorage.getItem(LS_LEV)==='1'; }catch(e){ return false; } }
 function setLevHidden(v){ try{ if(v) localStorage.setItem(LS_LEV,'1'); else localStorage.removeItem(LS_LEV); }catch(e){} }
+/* Same user display pref for market liquidity provision (few bettors ever provide LP). Hides the
+   market-page Liquidity section; re-enabled from Profile. Does not touch the lazy pool (#/pool). */
+var LS_LIQ='lc_liq_hide';
+function liqHidden(){ try{ return localStorage.getItem(LS_LIQ)==='1'; }catch(e){ return false; } }
+function setLiqHidden(v){ try{ if(v) localStorage.setItem(LS_LIQ,'1'); else localStorage.removeItem(LS_LIQ); }catch(e){} }
 
 /* ---- Leverage: open + list my positions + close/convert (all high-risk) ---- */
 /* Position status → label. Node enum: 0 active,1 liquidated,2 resolved_won,3 resolved_lost,4 closed_voluntary,5 converted. */
@@ -3116,9 +3125,11 @@ async function screenProfile(){
     '<div class="mb"><a class="mut" data-nav="#/activity">'+esc(t('act.title'))+' →</a></div>'+
     '<div id="pf-pos"><span class="spin"></span></div></div>';
 
-  html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('lev.pref_title'))+'</div>'+
+  html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('set.interface_title'))+'</div>'+
     '<label class="lab" style="margin-top:0"><input type="checkbox" id="pf-lev-show"'+(!levHidden()?' checked':'')+'> '+esc(t('lev.show_pref'))+'</label>'+
-    '<div class="hint">'+esc(t('lev.pref_hint'))+'</div></div>';
+    '<div class="hint">'+esc(t('lev.pref_hint'))+'</div>'+
+    '<label class="lab"><input type="checkbox" id="pf-liq-show"'+(!liqHidden()?' checked':'')+'> '+esc(t('liq.show_pref'))+'</label>'+
+    '<div class="hint">'+esc(t('liq.pref_hint'))+'</div></div>';
   html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('common.node'))+'</div><div class="kv"><b>'+esc(t('common.api'))+'</b><span class="mono">'+esc(loadNode().ws)+'</span></div><button class="btn ghost small mt" data-nav="#/node">'+esc(t('common.change_node'))+'</button></div>';
   html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('common.language'))+'</div>'+langSelHtml('pf-lang')+'</div>';
   html+=termsCardHtml();
@@ -3128,6 +3139,7 @@ async function screenProfile(){
   var pftr=el('pf-terms-review'); if(pftr) pftr.onclick=function(){ showTerms(false); };
   el('pf-lock').onclick=function(){lock();toast('ok',t('common.locked'));};
   if(el('pf-lev-show')) el('pf-lev-show').onchange=function(){ setLevHidden(!this.checked); toast('ok',t('lev.pref_saved')); };
+  if(el('pf-liq-show')) el('pf-liq-show').onchange=function(){ setLiqHidden(!this.checked); toast('ok',t('lev.pref_saved')); };
   if(el('pf-add-regular')) el('pf-add-regular').onclick=addRegularKey;
   if(el('or-reg')) el('or-reg').onclick=oracleRegisterModal;
   if(el('or-update')) el('or-update').onclick=function(){oracleUpdateModal(oracle);};
