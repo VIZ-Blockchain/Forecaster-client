@@ -2015,9 +2015,20 @@ function wireMarket(id,m,ocs,isMulti){
     var side=isMulti?-1:(i===0?0:1), oc=isMulti?i:-1;
     var mode=el('bt-batch')&&el('bt-batch').checked?1:0;
     var hidden=el('bt-hidden')&&el('bt-hidden').checked;
-    if(hidden) return placeHiddenBet(id,side,oc,amt,min);
-    tx(t('txn.place_bet'), function(){return bc('pmPlaceBet', wifFor('active'), SESSION.account, id, side, oc, toAsset(amt), min, mode, []);},
-       function(){ setTimeout(function(){screenMarket(id);},1200); });
+    function doBet(){
+      if(hidden) return placeHiddenBet(id,side,oc,amt,min);
+      tx(t('txn.place_bet'), function(){return bc('pmPlaceBet', wifFor('active'), SESSION.account, id, side, oc, toAsset(amt), min, mode, []);},
+         function(){ setTimeout(function(){screenMarket(id);},1200); });
+    }
+    // Pre-flight liquid-balance check: a parimutuel bet needs enough LIQUID VIZ — powered-up SHARES do
+    // NOT count. On testnet a sync broadcast can return OK while the final apply rejects for insufficient
+    // funds, showing a false ✓ (owner hit this on an all-powered-up account). Verify up front and give a
+    // clear message instead of a phantom success.
+    api('getAccounts',[SESSION.account]).then(function(rows){
+      var free=parseFloat(rows&&rows[0]&&rows[0].balance)||0;
+      if(assetNum(amt)>free){ var msg=t('bet.insufficient',{V:fmtViz(free)}); toast('warn',msg); persistErr(t('txn.place_bet'),msg); return; }
+      doBet();
+    }).catch(function(){ doBet(); });   // balance probe failed (network) → let the node be the judge
   };
   // add liquidity
   var lq=el('lq-go');
@@ -2840,10 +2851,39 @@ async function ensureMy(){
   ACT.positions.forEach(addId);                                     // every bet (settled bets keep a payout/dispute claim)
   ACT.leverage.forEach(function(p){ if(levStatus(p)===0) addId(p); }); // active leverage only
   ACT.ids = ids;
+  // get_account_positions already ships market_status per row → record it so each tab can filter by
+  // status WITHOUT a getMarket round-trip. This is what lets us fetch getMarket/getDispute lazily below.
+  ACT.status={};
+  ACT.positions.forEach(function(p){ var id=Number(p.market_id!=null?p.market_id:p.market);
+    if(!isNaN(id) && p.market_status!=null && ACT.status[id]==null) ACT.status[id]=Number(p.market_status); });
   ACT.markets={}; ACT.disputes={};
-  await Promise.all(ACT.ids.map(function(id){ return api('getMarket', id).then(function(m){ACT.markets[id]=m;}).catch(function(){}); }));
-  await Promise.all(ACT.ids.map(function(id){ return api('getDispute', id).then(function(d){ACT.disputes[id]=d;}).catch(function(){}); }));
   ACT.loaded=true;
+  // NB: markets & disputes are fetched LAZILY per tab (ensureMarkets/ensureDisputes below). A single
+  // account can hold positions in hundreds of markets — fetching getMarket + getDispute for ALL of them
+  // up front was the request storm the owner reported. Crucially getDispute is now issued ONLY for
+  // resolved (status 3) markets: an active/open market can never carry a dispute, so the per-market
+  // get_dispute calls he saw (e.g. get_dispute(14231) for a market he'd only bet on) are gone.
+}
+// Fetch getMarket for the given ids, memoized in ACT.markets (null on failure so we don't re-request).
+async function ensureMarkets(ids){
+  var need=ids.filter(function(id){ return ACT.markets[id]===undefined; });
+  if(!need.length) return;
+  await Promise.all(need.map(function(id){ return api('getMarket', id).then(function(m){ACT.markets[id]=m;}).catch(function(){ACT.markets[id]=null;}); }));
+}
+// Fetch getDispute for the given ids ONLY (callers pass resolved markets), memoized in ACT.disputes.
+async function ensureDisputes(ids){
+  var need=ids.filter(function(id){ return ACT.disputes[id]===undefined; });
+  if(!need.length) return;
+  await Promise.all(need.map(function(id){ return api('getDispute', id).then(function(d){ACT.disputes[id]=d;}).catch(function(){ACT.disputes[id]=null;}); }));
+}
+// Market ids to fetch for a given tab, filtered by the status the tab renders (from ACT.status, no
+// getMarket needed). History needs titles for every position + terminal-leverage market; Active needs
+// status-1 markets (+ active-leverage markets); Disputable/MyDisputes need only resolved (status 3).
+function actTabIds(tab){
+  function levIds(pred){ var out=[]; (ACT.leverage||[]).forEach(function(p){ if(pred(p)){ var id=Number(p.market_id!=null?p.market_id:p.market); if(!isNaN(id)) out.push(id); } }); return out; }
+  if(tab==='history'){ var s=ACT.ids.slice(); levIds(levTerminal).forEach(function(id){ if(s.indexOf(id)<0) s.push(id); }); return s; }
+  if(tab==='active'){ var a=ACT.ids.filter(function(id){return ACT.status[id]===1;}); levIds(function(p){return levStatus(p)===0;}).forEach(function(id){ if(a.indexOf(id)<0) a.push(id); }); return a; }
+  return ACT.ids.filter(function(id){return ACT.status[id]===3;}); // disputable / mydisputes
 }
 function actMarketCard(m, badgeHtml, btnLabel){
   var id=marketId(m);
@@ -2889,6 +2929,10 @@ async function renderActTab(){
     if(!isUnlocked()){ box.innerHTML='<div class="box info">'+unlockLink('act.unlock')+'</div>'; return; }
     await ensureMy();
     if(seq!==actSeq) return;                    // tab changed while loading → don't clobber the new tab
+    var ids=actTabIds(actTab);
+    await ensureMarkets(ids);                   // fetch only the markets THIS tab renders (lazy, memoized)
+    if(actTab==='disputable'||actTab==='mydisputes') await ensureDisputes(ids); // disputes: resolved-only
+    if(seq!==actSeq) return;
     if(actTab==='history')    return renderActHistory(box);
     if(actTab==='active')     return renderActActive(box);
     if(actTab==='disputable') return renderActDisputable(box);
