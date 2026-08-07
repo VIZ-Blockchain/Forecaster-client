@@ -2128,18 +2128,24 @@ function transferPosition(marketId, betId, haveShares){
   openModal(t('xfer.title'), h(
     '<div class="hint mb">'+esc(t('xfer.desc',{ID:betId}))+'</div>',
     '<label class="lab">'+esc(t('common.to'))+'</label><input id="xf-to" type="text" autocomplete="off" spellcheck="false" placeholder="account">',
-    '<label class="lab">'+esc(t('xfer.shares'))+'</label><input id="xf-sh" type="number" step="0.001" min="0.001" value="'+fmtShares(haveShares).replace(/[^\d.]/g,'')+'">',
-    '<div class="hint">'+esc(t('pool.you_have',{S:fmtShares(haveShares)}))+'</div>',
+    '<label class="lab">'+esc(t('xfer.shares'))+'</label><input id="xf-sh" type="number" step="0.001" min="0.001" max="'+fmtShares(haveShares).replace(/[^\d.]/g,'')+'" value="'+fmtShares(haveShares).replace(/[^\d.]/g,'')+'">',
+    '<div class="hint" id="xf-max" style="cursor:pointer">'+esc(t('xfer.max',{S:fmtShares(haveShares)}))+'</div>',
     '<label class="lab">'+esc(t('common.memo'))+'</label><input id="xf-memo" type="text">'
   ),[{label:t('common.cancel'),cls:'ghost',act:closeModal},{label:t('xfer.send'),cls:'',act:function(){
     var to=el('xf-to').value.trim().toLowerCase();
-    var amount=Math.round((Number(el('xf-sh').value)||0)*1000); // display shares → raw ×1000
+    var amount=Math.round((Number(el('xf-sh').value)||0)*1000); // display shares → raw ×1000 (= node weight)
     var memo=el('xf-memo').value||'';
     if(!to||!(amount>0)){ toast('warn',t('xfer.fill')); return; }
+    // Guard: the field is in SHARES (weight/1000), not whole tokens. Entering more than you hold sends a
+    // weight above bet.weight → the node rejects with "Invalid transfer amount", and the sync broadcast
+    // returns OK so the UI would flash a false ✓ (owner hit exactly this). Cap client-side with a clear
+    // message instead of a phantom success.
+    if(amount>haveShares){ toast('warn',t('xfer.too_many',{S:fmtShares(haveShares)})); return; }
     closeModal();
     tx(t('txn.transfer_position'),function(){return bc('pmTransferPosition',wifFor('active'),SESSION.account,betId,to,amount,memo,[]);},
       function(){setTimeout(function(){screenMarket(marketId);},1200);});
   }}]);
+  var mx=el('xf-max'); if(mx) mx.onclick=function(){ var f=el('xf-sh'); if(f) f.value=fmtShares(haveShares).replace(/[^\d.]/g,''); };
 }
 
 /* pm_withdraw_liquidity — my LP positions on this market + partial/full withdraw */

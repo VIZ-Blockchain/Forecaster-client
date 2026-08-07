@@ -285,6 +285,7 @@ var EN = {
   'md.col_transfer':'Transfer',
   'xfer.title':'Transfer position','xfer.desc':'Hand bet #{ID} (or part of it) to another account.',
   'xfer.shares':'Shares to transfer','xfer.send':'Transfer','xfer.fill':'Enter a recipient and amount',
+  'xfer.max':'Max: {S} shares (tap to fill). This is your position size, not whole tokens.','xfer.too_many':'More than you hold — max {S} shares.',
   'txn.transfer_position':'Transfer position',
 
   /* liquidity withdraw */
@@ -602,6 +603,7 @@ var RU = {
   'md.col_transfer':'Передать',
   'xfer.title':'Передача позиции','xfer.desc':'Передать ставку #{ID} (или её часть) другому аккаунту.',
   'xfer.shares':'Доли к передаче','xfer.send':'Передать','xfer.fill':'Укажите получателя и сумму',
+  'xfer.max':'Максимум: {S} долей (тап — подставить). Это размер твоей позиции, а не целые токены.','xfer.too_many':'Больше, чем у тебя есть — максимум {S} долей.',
   'txn.transfer_position':'Передача позиции',
 
   /* liquidity withdraw */
@@ -919,6 +921,7 @@ var ZH = {
   'md.col_transfer':'转移',
   'xfer.title':'转移仓位','xfer.desc':'将投注 #{ID}（或其一部分）转给另一个账户。',
   'xfer.shares':'转移的份额','xfer.send':'转移','xfer.fill':'请输入接收方和数量',
+  'xfer.max':'最多：{S} 份额（点按填入）。这是你的仓位大小，不是整数代币。','xfer.too_many':'超过你的持有量——最多 {S} 份额。',
   'txn.transfer_position':'转移仓位',
 
   /* liquidity withdraw */
