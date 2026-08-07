@@ -2067,7 +2067,10 @@ async function loadMyPositions(id, mkt){
     var resolved=(mkt && marketStatus(mkt)===3 && winIdx>=0);
     var rows=mine.map(function(p){
       var bid=p.id!=null?p.id:p.bet_id;
-      var shares=Number(p.tokens||p.shares||0);
+      // The bet's shares live in `weight` (raw, ×1000) — the node never sends `tokens`/`shares`, so the
+      // old p.tokens||p.shares read to 0: the tokens column showed "—" and Transfer opened with 0 shares
+      // (owner hit this on a 40 Ƶ bet). fmtShares divides by 1000; transfer sends display×1000 → weight.
+      var shares=Number(p.weight!=null?p.weight:(p.tokens||p.shares||0));
       // bet status: 0 active, 1 cancelled, 2 refunded, 3 resolved, 5 queued, 6 revealed-pending
       var st=Number(p.status||0);
       // binary bets carry side (0/1) with outcome_index=-1; multi carry outcome_index (>=0)
