@@ -216,7 +216,7 @@ var EN = {
   'terms.b5':'The software is provided “as is”, without warranty of any kind, and may be experimental or run on test networks. Use at your own risk.',
   'terms.agree':'I understand and agree — this is only a software client to the VIZ Ledger.',
   'terms.agree_btn':'Agree & continue','terms.review':'Review agreement','terms.close':'Close',
-  'terms.status_accepted':'Accepted','terms.status_not':'Not accepted','terms.must_accept':'You must accept the agreement to use the app.',
+  'terms.status_accepted':'Accepted','terms.accepted_at':'Accepted in this client: {T}','terms.status_not':'Not accepted','terms.must_accept':'You must accept the agreement to use the app.',
 
   /* activity page */
   'tab.activity':'Activity','act.title':'My activity',
@@ -535,7 +535,7 @@ var RU = {
   'terms.b5':'Программа предоставляется «как есть», без каких-либо гарантий, может быть экспериментальной или работать в тестовых сетях. Используйте на свой риск.',
   'terms.agree':'Я понимаю и согласен — это лишь программный клиент к реестру VIZ.',
   'terms.agree_btn':'Согласиться и продолжить','terms.review':'Прочитать соглашение','terms.close':'Закрыть',
-  'terms.status_accepted':'Принято','terms.status_not':'Не принято','terms.must_accept':'Чтобы пользоваться приложением, необходимо принять соглашение.',
+  'terms.status_accepted':'Принято','terms.accepted_at':'Принято в этом клиенте: {T}','terms.status_not':'Не принято','terms.must_accept':'Чтобы пользоваться приложением, необходимо принять соглашение.',
 
   'tab.activity':'Активность','act.title':'Моя активность',
   'act.tab_history':'Сделки','act.tab_active':'Активные','act.tab_disputable':'Можно оспорить','act.tab_mydisputes':'Мои диспуты','act.tab_alldisputes':'Все диспуты',
@@ -851,7 +851,7 @@ var ZH = {
   'terms.b5':'本软件按“现状”提供，不作任何担保，可能为实验性质或运行于测试网络。使用风险自负。',
   'terms.agree':'我已理解并同意 — 这只是一个连接 VIZ 账本的软件客户端。',
   'terms.agree_btn':'同意并继续','terms.review':'查看协议','terms.close':'关闭',
-  'terms.status_accepted':'已接受','terms.status_not':'未接受','terms.must_accept':'必须接受协议才能使用本应用。',
+  'terms.status_accepted':'已接受','terms.accepted_at':'在此客户端接受于：{T}','terms.status_not':'未接受','terms.must_accept':'必须接受协议才能使用本应用。',
 
   'tab.activity':'活动','act.title':'我的活动',
   'act.tab_history':'成交','act.tab_active':'进行中','act.tab_disputable':'可申诉','act.tab_mydisputes':'我的争议','act.tab_alldisputes':'全部争议',

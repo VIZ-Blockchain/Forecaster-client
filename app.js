@@ -225,7 +225,18 @@ function marketBannedIn(m,jur){
 
 /* ---- software agreement ---- */
 function termsAccepted(){ try{var x=JSON.parse(localStorage.getItem(LS_TERMS)); return !!(x&&x.v>=1);}catch(e){return false;} }
+function termsAcceptedAt(){ try{var x=JSON.parse(localStorage.getItem(LS_TERMS)); return (x&&x.at)?Number(x.at):0;}catch(e){return 0;} }  // unixtime of acceptance in this client
 function acceptTerms(){ localStorage.setItem(LS_TERMS, JSON.stringify({v:1, at:now()})); }
+/* Software-agreement card for the Profile screen: view status, when it was accepted in THIS client
+   (unixtime, human-readable), and a button to re-read the terms. Wire #pf-terms-review after render. */
+function termsCardHtml(){
+  var at=termsAcceptedAt();
+  return '<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('terms.section'))+'</div>'+
+    '<div class="kv"><b>'+esc(t('terms.title'))+'</b><span class="'+(termsAccepted()?'pos':'neg')+'">'+
+      esc(termsAccepted()?t('terms.status_accepted'):t('terms.status_not'))+'</span></div>'+
+    (at?'<div class="hint mb">'+esc(t('terms.accepted_at',{T:tsToLocal(at)}))+'</div>':'')+
+    '<button class="btn ghost block" id="pf-terms-review">'+esc(t('terms.review'))+'</button></div>';
+}
 function applyNode(n){
   n=n||loadNode();
   viz.config.set('websocket', n.ws);
@@ -2905,9 +2916,11 @@ async function screenProfile(){
       '<button class="btn block" data-unlock="1">'+esc(hasVault()?t('common.unlock_wallet'):t('common.sign_in'))+'</button>',
       '</div>',
       '<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('common.node'))+'</div><div class="kv"><b>'+esc(t('common.api'))+'</b><span class="mono">'+esc(loadNode().ws)+'</span></div><button class="btn ghost small mt" data-nav="#/node">'+esc(t('common.change_node'))+'</button></div>',
-      '<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('common.language'))+'</div>'+langSelHtml('pf-lang')+'</div>'
+      '<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('common.language'))+'</div>'+langSelHtml('pf-lang')+'</div>',
+      termsCardHtml()
     ));
     wireLangSel('pf-lang');
+    var trg=el('pf-terms-review'); if(trg) trg.onclick=function(){ showTerms(false); };
     return;
   }
   setContent('<div class="title">@'+esc(SESSION.account)+'</div><div id="pf-box"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
@@ -2961,9 +2974,11 @@ async function screenProfile(){
 
   html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('common.node'))+'</div><div class="kv"><b>'+esc(t('common.api'))+'</b><span class="mono">'+esc(loadNode().ws)+'</span></div><button class="btn ghost small mt" data-nav="#/node">'+esc(t('common.change_node'))+'</button></div>';
   html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('common.language'))+'</div>'+langSelHtml('pf-lang')+'</div>';
+  html+=termsCardHtml();
 
   el('pf-box').innerHTML=html;
   wireLangSel('pf-lang');
+  var pftr=el('pf-terms-review'); if(pftr) pftr.onclick=function(){ showTerms(false); };
   el('pf-lock').onclick=function(){lock();toast('ok',t('common.locked'));};
   if(el('pf-add-regular')) el('pf-add-regular').onclick=addRegularKey;
   if(el('or-reg')) el('or-reg').onclick=oracleRegisterModal;
