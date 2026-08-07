@@ -16,7 +16,7 @@ var EN = {
 
   /* common */
   'common.loading':'loading…','common.cancel':'Cancel','common.save':'Save','common.submit':'Submit',
-  'common.none':'None.','common.raw':'raw chain data','common.node':'Node','common.api':'API',
+  'common.none':'None.','common.raw':'raw chain data','common.node':'Node','common.language':'Language','common.api':'API',
   'common.change_node':'Change node','common.back_markets':'← markets','common.unlock_wallet':'Unlock wallet',
   'common.sign_in':'Sign in','common.lock_wallet':'Lock wallet','common.locked':'Locked','common.unlocked':'Unlocked',
   'common.failed':'{LABEL} failed: {E}','common.amount_viz':'Amount (VIZ)','common.to':'To','common.memo':'Memo',
@@ -348,7 +348,7 @@ var RU = {
   'brand.light':'лайт','status.online':'онлайн','status.offline':'офлайн','status.block':'блок {N}','status.latency':'{N} ms',
 
   'common.loading':'загрузка…','common.cancel':'Отмена','common.save':'Сохранить','common.submit':'Отправить',
-  'common.none':'Нет.','common.raw':'сырые данные из блокчейна','common.node':'Узел','common.api':'API',
+  'common.none':'Нет.','common.raw':'сырые данные из блокчейна','common.node':'Узел','common.language':'Язык','common.api':'API',
   'common.change_node':'Сменить узел','common.back_markets':'← к рынкам','common.unlock_wallet':'Разблокировать кошелёк',
   'common.sign_in':'Войти','common.lock_wallet':'Заблокировать','common.locked':'Заблокировано','common.unlocked':'Разблокировано',
   'common.failed':'{LABEL}: ошибка — {E}','common.amount_viz':'Сумма (VIZ)','common.to':'Кому','common.memo':'Заметка',
@@ -664,7 +664,7 @@ var ZH = {
   'brand.light':'轻','status.online':'在线','status.offline':'离线','status.block':'区块 {N}','status.latency':'{N} ms',
 
   'common.loading':'加载中…','common.cancel':'取消','common.save':'保存','common.submit':'提交',
-  'common.none':'无。','common.raw':'链上原始数据','common.node':'节点','common.api':'API',
+  'common.none':'无。','common.raw':'链上原始数据','common.node':'节点','common.language':'语言','common.api':'API',
   'common.change_node':'更换节点','common.back_markets':'← 返回市场','common.unlock_wallet':'解锁钱包',
   'common.sign_in':'登录','common.lock_wallet':'锁定钱包','common.locked':'已锁定','common.unlocked':'已解锁',
   'common.failed':'{LABEL} 失败：{E}','common.amount_viz':'金额 (VIZ)','common.to':'收款人','common.memo':'备注',

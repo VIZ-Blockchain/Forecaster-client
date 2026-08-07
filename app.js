@@ -741,20 +741,27 @@ document.addEventListener('click',function(e){
 el('btn-settings').addEventListener('click',function(){go('#/node');});
 el('btn-lock').addEventListener('click',function(){ if(isUnlocked()){ lock(); toast('ok',t('common.locked')); } else { setReturn(location.hash); go('#/unlock'); } });
 
-/* language selector */
-(function initLangSel(){
-  var sel=el('lang-sel'); if(!sel)return;
-  sel.innerHTML=(window.I18N_LANGS||[['en','English']]).map(function(l){
-    return '<option value="'+l[0]+'"'+(l[0]===window.i18nLang()?' selected':'')+'>'+l[1]+'</option>';
-  }).join('');
+/* language selector — shared helper. The header dropdown was removed (owner 2026-08-07); the
+   picker now lives in Profile (under the node card), on the Login screen and in the first-run
+   software-agreement gate. langSelHtml() renders the <select>; wireLangSel() attaches the change
+   handler. `after` lets a caller re-render its own view (e.g. re-open the terms modal so the
+   agreement text switches language live); default re-renders the current route. */
+function langSelHtml(id){
+  return '<select class="lang-sel" id="'+id+'" aria-label="Language">'+
+    (window.I18N_LANGS||[['en','English']]).map(function(l){
+      return '<option value="'+esc(l[0])+'"'+(l[0]===window.i18nLang()?' selected':'')+'>'+esc(l[1])+'</option>';
+    }).join('')+'</select>';
+}
+function wireLangSel(id, after){
+  var sel=el(id); if(!sel)return;
   sel.addEventListener('change',function(){
     window.i18nSetLang(sel.value);
     document.documentElement.lang=sel.value;
-    updateChrome();      // re-translate tab bar + brand
-    route();             // re-render current screen
+    updateChrome();                                   // re-translate tab bar + brand
+    if(typeof after==='function') after(); else route();
   });
-  document.documentElement.lang=window.i18nLang();
-})();
+}
+document.documentElement.lang=window.i18nLang();
 
 /* ------------------------------------------------------------------ router */
 function go(hash){ if(location.hash===hash){ route(); } else { location.hash=hash; } }
@@ -911,8 +918,10 @@ function screenLogin(){
         '<input id="lg-pass" type="password" autocomplete="off" placeholder="'+esc(t('login.password_ph'))+'">',
       '</div>',
       '<button class="btn block mt" id="lg-go">'+esc(t('login.verify'))+'</button>',
-    '</div>'
+    '</div>',
+    '<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('common.language'))+'</div>'+langSelHtml('lg-lang')+'</div>'
   ));
+  wireLangSel('lg-lang');
   var mode='wif';
   el('m-pass').onclick=function(){mode='pass';el('m-pass').classList.add('active');el('m-wif').classList.remove('active');el('lg-pass-fields').classList.remove('hide');el('lg-wif-fields').classList.add('hide');};
   el('m-wif').onclick=function(){mode='wif';el('m-wif').classList.add('active');el('m-pass').classList.remove('active');el('lg-wif-fields').classList.remove('hide');el('lg-pass-fields').classList.add('hide');};
@@ -2876,8 +2885,10 @@ async function screenProfile(){
       '<div class="card center"><div class="subtitle">'+esc(t('pf.not_signed'))+'</div>',
       '<button class="btn block" data-unlock="1">'+esc(hasVault()?t('common.unlock_wallet'):t('common.sign_in'))+'</button>',
       '</div>',
-      '<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('common.node'))+'</div><div class="kv"><b>'+esc(t('common.api'))+'</b><span class="mono">'+esc(loadNode().ws)+'</span></div><button class="btn ghost small mt" data-nav="#/node">'+esc(t('common.change_node'))+'</button></div>'
+      '<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('common.node'))+'</div><div class="kv"><b>'+esc(t('common.api'))+'</b><span class="mono">'+esc(loadNode().ws)+'</span></div><button class="btn ghost small mt" data-nav="#/node">'+esc(t('common.change_node'))+'</button></div>',
+      '<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('common.language'))+'</div>'+langSelHtml('pf-lang')+'</div>'
     ));
+    wireLangSel('pf-lang');
     return;
   }
   setContent('<div class="title">@'+esc(SESSION.account)+'</div><div id="pf-box"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
@@ -2930,8 +2941,10 @@ async function screenProfile(){
     '<div id="pf-pos"><span class="spin"></span></div></div>';
 
   html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('common.node'))+'</div><div class="kv"><b>'+esc(t('common.api'))+'</b><span class="mono">'+esc(loadNode().ws)+'</span></div><button class="btn ghost small mt" data-nav="#/node">'+esc(t('common.change_node'))+'</button></div>';
+  html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('common.language'))+'</div>'+langSelHtml('pf-lang')+'</div>';
 
   el('pf-box').innerHTML=html;
+  wireLangSel('pf-lang');
   el('pf-lock').onclick=function(){lock();toast('ok',t('common.locked'));};
   if(el('pf-add-regular')) el('pf-add-regular').onclick=addRegularKey;
   if(el('or-reg')) el('or-reg').onclick=oracleRegisterModal;
@@ -3390,7 +3403,10 @@ function closeModal(){ el('modal-host').innerHTML=''; }
 /* Software agreement — blocking gate on first run, or reviewable from settings. */
 function showTerms(blocking){
   var accepted=termsAccepted();
-  var body='<div class="box info">'+esc(t('terms.intro'))+'</div>'+
+  // Language picker inside the first-run agreement gate: changing it re-renders the modal so the
+  // whole agreement text switches language before the user accepts (owner 2026-08-07).
+  var body='<div class="lang-row mb"><span class="mut">'+esc(t('common.language'))+'</span> '+langSelHtml('tm-lang')+'</div>'+
+    '<div class="box info">'+esc(t('terms.intro'))+'</div>'+
     '<ul class="terms-list">'+['b1','b2','b3','b4','b5'].map(function(k){return '<li>'+esc(t('terms.'+k))+'</li>';}).join('')+'</ul>'+
     (accepted?'':'<label class="lab"><input type="checkbox" id="tm-cb"> '+esc(t('terms.agree'))+'</label>');
   var actions='';
@@ -3400,6 +3416,7 @@ function showTerms(blocking){
   el('modal-host').innerHTML='<div class="overlay" id="tm-ovl"><div class="modal"><h3>'+esc(t('terms.title'))+'</h3>'+
     '<div class="modal-body">'+body+'</div><div class="modal-actions">'+actions+'</div></div></div>';
   var host=el('modal-host');
+  wireLangSel('tm-lang', function(){ showTerms(blocking); });   // re-render agreement in the new language
   var closeBtn=host.querySelector('[data-tm="close"]'); if(closeBtn) closeBtn.onclick=closeModal;
   var agreeBtn=host.querySelector('[data-tm="agree"]');
   if(agreeBtn) agreeBtn.onclick=function(){
