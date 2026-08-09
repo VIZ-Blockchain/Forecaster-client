@@ -1674,7 +1674,8 @@ async function screenMarket(id){
 
   // #4: My positions FIRST (above recent bets) — the user's own stake matters more than the feed.
   html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('md.my_positions'))+'</div><div id="mine-box">'+
-        (isUnlocked()?'<span class="spin"></span> '+esc(t('common.loading')):'<div class="mut">'+unlockLink('md.unlock_view')+'</div>')+'</div></div>';
+        (isUnlocked()?'<span class="spin"></span> '+esc(t('common.loading')):'<div class="mut">'+unlockLink('md.unlock_view')+'</div>')+'</div>'+
+        '<div id="mine-claims"></div></div>';
 
   // Recent bets (getMarketBets) — transparency into the order flow
   html+='<div class="card"><details class="raw"><summary>'+esc(t('md.recent_bets'))+'</summary><div id="mkt-bets"><span class="spin"></span> '+esc(t('common.loading'))+'</div></details></div>';
@@ -1748,6 +1749,7 @@ async function screenMarket(id){
   if(m.oracle) loadOracleHint(m.oracle, m.volume!=null?Number(m.volume)/1000:0);
   loadKline(id, ocs, isMulti);
   if(isUnlocked()) loadMyPositions(id, m);
+  if(isUnlocked()) loadMyDeferredClaims(id, m);
   if(isUnlocked()) loadMyLiquidity(id, status);
   loadLeverage(id, ocs, isMulti, status);   // renders open form only when active; shows settled positions on resolved markets
   if(dispute&&(dispute.id!=null||dispute.disputer||dispute.status!=null)) loadDisputeVotes(id, ocs);
@@ -2069,6 +2071,30 @@ function placeHiddenBet(id,side,oc,amt,min){
       toast('info',t('md.committed_note'),7000);
       setTimeout(function(){screenMarket(id);},1200);
     });
+}
+/* F1 early-exit: show the user's pending outcome-contingent deferred claims on THIS market
+   (from an early bet-cancel or leverage close). One get_deferred_claims call per market page
+   (per-market API) — deliberately NOT fanned out across the activity feed (request-storm). The
+   claim is paid at settlement ONLY if its outcome wins, FIFO from a capped slice of the losing
+   pool (may be reduced), so it is shown as pending, not as a guaranteed balance. */
+async function loadMyDeferredClaims(id, mkt){
+  var box=el('mine-claims'); if(!box)return;
+  var claims;
+  try{ claims=(await rawApi('prediction_market_api','get_deferred_claims',[Number(id),0,100]))||[]; }
+  catch(e){ return; } // method post-dates the vendored viz.min.js / old node → silently skip
+  var mine=claims.filter(function(c){ return c.account===SESSION.account; });
+  if(!mine.length){ box.innerHTML=''; return; }
+  var ocs=mkt?marketOutcomes(mkt):[];
+  var rows=mine.map(function(c){
+    var idx=(c.outcome_index!=null)?Number(c.outcome_index):-1;
+    var oc=(idx>=0 && ocs[idx]!=null)?ocs[idx]:(idx>=0?('#'+idx):'—');
+    var kind=(Number(c.kind||0)===1)?t('claim.kind_leverage'):t('claim.kind_bet');
+    var amt=Number(c.claim_amount!=null?(c.claim_amount.amount!=null?c.claim_amount.amount:c.claim_amount):0);
+    return '<tr><td>'+esc(oc)+'</td><td>'+esc(kind)+'</td><td>'+fmtViz(amt)+'</td></tr>';
+  }).join('');
+  box.innerHTML='<div class="section-title">'+esc(t('claim.title'))+'</div>'+
+    '<div class="box info">'+esc(t('claim.note'))+'</div>'+
+    '<table class="tbl"><thead><tr><th>'+esc(t('md.outcome'))+'</th><th>'+esc(t('claim.kind'))+'</th><th>'+esc(t('claim.amount'))+'</th></tr></thead><tbody>'+rows+'</tbody></table>';
 }
 async function loadMyPositions(id, mkt){
   var box=el('mine-box'); if(!box)return;
