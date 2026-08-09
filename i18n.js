@@ -270,7 +270,7 @@ var EN = {
   'bet.risk_warning':'⚠ This market looks under-collateralized: the oracle’s insurance may not cover the bet volume. If the oracle resolves incorrectly, compensation could be incomplete.',
   'bet.risk_confirm':'I understand the risks and want to continue','bet.risk_must_confirm':'Please confirm you understand the risks',
   'bet.insufficient':'Not enough liquid VIZ to bet — you have {V}. Powered-up SHARES can’t be bet; power down or top up first.',
-  'bet.cancel_note':'Cancellation sells your position at the current on-chain price. The returned amount may differ from your original bet (slippage) and can be lower. Continue?',
+  'bet.cancel_note':'Cancelling returns your principal now, capped at your original stake (if the price moved against you, you may get back less). Any profit is NOT paid now — it becomes a bounded, outcome-contingent claim paid at settlement from a capped slice of the losing pool (FIFO order, may be reduced), and pays nothing if your outcome loses. Continue?',
   'md.instant_disabled':'Instant betting is disabled by the market creator — bets go through the batch / commit-reveal queue.',
   'md.oracle_hint_new':'ℹ️ New oracle — not enough history to evaluate yet.',
   'md.oracle_hint_low':'⚠️ Low oracle reliability — this oracle has a history of issues. Be careful.',
@@ -296,7 +296,7 @@ var EN = {
 
   /* leverage */
   'lev.title':'Leverage (advanced)','lev.disabled':'Leverage is disabled on this network.',
-  'lev.risk_notice':'HIGH RISK. Leverage borrows from the pool to enlarge your position. It can be LIQUIDATED and you can lose your whole collateral. Payouts are NOT fixed odds — they float with the pool. A leveraged position bets on the PRICE, not the outcome: it auto-closes at betting close (betting_expiration) and does NOT wait for the market to resolve.',
+  'lev.risk_notice':'HIGH RISK. Leverage borrows from the lazy pool to enlarge your position; it can be LIQUIDATED and you can lose your whole collateral. Payouts are NOT fixed odds — they float with the pool. The position force-closes at betting close (betting_expiration): the pool is repaid its loan first, and any profit becomes a bounded, outcome-contingent claim — paid at settlement ONLY if your chosen outcome wins, from a capped slice of the losing pool (FIFO order, may be reduced). Leverage is a leveraged directional bet, not a volatility play.',
   'lev.collateral':'Collateral (VIZ)','lev.loan':'Loan (VIZ)','lev.min_tokens':'Min tokens','lev.max_slippage':'Max slippage %',
   'lev.quote_btn':'Quote','lev.open_btn':'Open position','lev.unlock':'Unlock your wallet to open a leveraged position.',
   'lev.mine_title':'My leverage positions','lev.quote_result':'Estimated tokens: {T}','lev.quote_unavailable':'Leverage unavailable for this market','lev.liq_at':'Liq. ≤ {V}','lev.live_pnl':'P/L {V}','lev.max_lev':'max ×{X}','lev.need_quote':'Get a quote first',
@@ -590,7 +590,7 @@ var RU = {
   'bet.risk_warning':'⚠ Рынок выглядит недообеспеченным: страховка оракула может не покрыть объём ставок. При неверном решении оракула компенсация может быть неполной.',
   'bet.risk_confirm':'Я понимаю риски и хочу продолжить','bet.risk_must_confirm':'Подтвердите, что понимаете риски',
   'bet.insufficient':'Недостаточно ликвидного VIZ для ставки — у вас {V}. Запауэрапленные SHARES ставить нельзя; сначала сделайте power down или пополните.',
-  'bet.cancel_note':'Отмена продаёт вашу позицию по текущей цене в блокчейне. Возврат может отличаться от исходной ставки (проскальзывание) и быть меньше. Продолжить?',
+  'bet.cancel_note':'Отмена возвращает ваш принципал сейчас, но не больше исходной ставки (если цена ушла против вас, вернётся меньше). Прибыль сейчас НЕ выплачивается — она становится ограниченным правом требования по исходу, выплачиваемым на расчёте из ограниченной доли пула проигравших (в порядке FIFO, может быть урезана), и не платит ничего, если ваш исход проиграл. Продолжить?',
   'md.instant_disabled':'Мгновенные ставки отключены создателем рынка — ставки идут через пакетную/commit-reveal очередь.',
   'md.oracle_hint_new':'ℹ️ Новый оракул — пока недостаточно истории для оценки.',
   'md.oracle_hint_low':'⚠️ Низкая надёжность оракула — в истории были проблемы. Будьте осторожны.',
@@ -616,7 +616,7 @@ var RU = {
 
   /* leverage */
   'lev.title':'Плечо (продвинутое)','lev.disabled':'Плечо отключено в этой сети.',
-  'lev.risk_notice':'ВЫСОКИЙ РИСК. Плечо занимает средства из пула для увеличения позиции. Позиция может быть ЛИКВИДИРОВАНА, и вы можете потерять весь залог. Выплаты НЕ фиксированные — плавают вместе с пулом. Плечо — ставка на ЦЕНУ, а не на исход: позиция закрывается автоматически на закрытии ставок (betting_expiration) и НЕ дожидается резолва рынка.',
+  'lev.risk_notice':'ВЫСОКИЙ РИСК. Плечо занимает средства из ленивого пула для увеличения позиции; она может быть ЛИКВИДИРОВАНА, и вы можете потерять весь залог. Выплаты НЕ фиксированные — плавают вместе с пулом. Позиция принудительно закрывается на закрытии ставок (betting_expiration): пул сначала возвращает свой заём, а прибыль становится ограниченным правом требования по исходу — выплачивается на расчёте ТОЛЬКО если выбранный вами исход победил, из ограниченной доли пула проигравших (в порядке FIFO, может быть урезана). Плечо — направленная ставка с плечом, а не игра на волатильности.',
   'lev.collateral':'Залог (VIZ)','lev.loan':'Заём (VIZ)','lev.min_tokens':'Мин. токенов','lev.max_slippage':'Макс. проскальзывание %',
   'lev.quote_btn':'Оценить','lev.open_btn':'Открыть позицию','lev.unlock':'Разблокируйте кошелёк, чтобы открыть позицию с плечом.',
   'lev.mine_title':'Мои позиции с плечом','lev.quote_result':'Оценка токенов: {T}','lev.quote_unavailable':'Плечо недоступно для этого рынка','lev.liq_at':'Ликв. ≤ {V}','lev.live_pnl':'P/L {V}','lev.max_lev':'макс ×{X}','lev.need_quote':'Сначала нажмите «Оценить»',
@@ -910,7 +910,7 @@ var ZH = {
   'bet.risk_warning':'⚠ 该市场似乎抵押不足：预言机的保证金可能无法覆盖下注量。若预言机裁决有误，赔付可能不完整。',
   'bet.risk_confirm':'我已了解风险并希望继续','bet.risk_must_confirm':'请确认你已了解风险',
   'bet.insufficient':'可用 VIZ 不足以下注——你有 {V}。已升级的 SHARES 无法用于下注；请先降级或充值。',
-  'bet.cancel_note':'取消将按当前链上价格卖出你的持仓。返还金额可能与原下注不同（滑点），也可能更少。是否继续？',
+  'bet.cancel_note':'取消将立即返还你的本金，上限为你的原始下注（若价格对你不利，返还可能更少）。任何盈利现在不支付——它将转为有上限、依赖结果的债权，在结算时从输方池的受限份额支付（按 FIFO 顺序，可能被削减）；若你的结果落败则不支付。是否继续？',
   'md.instant_disabled':'市场创建者已禁用即时下注 — 下注将通过批处理/提交揭示队列。',
   'md.oracle_hint_new':'ℹ️ 新预言机 — 暂无足够历史用于评估。',
   'md.oracle_hint_low':'⚠️ 预言机可靠性低 — 该预言机曾有问题记录。请谨慎。',
@@ -936,7 +936,7 @@ var ZH = {
 
   /* leverage */
   'lev.title':'杠杆（高级）','lev.disabled':'本网络已禁用杠杆。',
-  'lev.risk_notice':'高风险。杠杆会从资金池借入以放大你的仓位。它可能被强制平仓，你可能损失全部保证金。赔付不是固定赔率——随资金池浮动。杠杆是对价格而非结果的下注：仓位在停止投注时（betting_expiration）自动平仓，不会等待市场结算。',
+  'lev.risk_notice':'高风险。杠杆会从懒人池借入以放大你的仓位；它可能被强制平仓，你可能损失全部保证金。赔付不是固定赔率——随资金池浮动。仓位在停止投注时（betting_expiration）被强制平仓：先向池归还借款，任何盈利将转为有上限、依赖结果的债权——仅当你所选结果获胜时才在结算时支付，来自输方池的受限份额（按 FIFO 顺序，可能被削减）。杠杆是带杠杆的方向性下注，而非波动性套利。',
   'lev.collateral':'保证金（VIZ）','lev.loan':'借款（VIZ）','lev.min_tokens':'最少代币','lev.max_slippage':'最大滑点 %',
   'lev.quote_btn':'报价','lev.open_btn':'开仓','lev.unlock':'请解锁钱包以开立杠杆仓位。',
   'lev.mine_title':'我的杠杆仓位','lev.quote_result':'预计代币：{T}','lev.quote_unavailable':'该市场不支持杠杆','lev.liq_at':'清算 ≤ {V}','lev.live_pnl':'盈亏 {V}','lev.max_lev':'最高 ×{X}','lev.need_quote':'请先获取报价',
