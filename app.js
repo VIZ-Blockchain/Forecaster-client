@@ -3190,16 +3190,31 @@ async function screenProfile(){
     box.innerHTML='<table class="tbl"><tr><th>'+esc(t('pf.col_market'))+'</th><th>'+esc(t('pf.col_outcome'))+'</th><th>'+esc(t('pf.col_amount'))+'</th></tr>'+rows+'</table>'+more;
   }).catch(function(e){var box=el('pf-pos');if(box)box.innerHTML='<div class="box err">'+esc(errText(e))+'</div>';});
 }
+// object ids may serialize as a bare instance number or as "space.type.instance" — take the instance.
+function objIdNum(v){ var s=String(v); return s.indexOf('.')>=0 ? Number(s.split('.').pop()) : Number(s); }
 function revealPending(idx){
   var pend=JSON.parse(localStorage.getItem('lc_reveal')||'[]'); var p=pend[idx]; if(!p)return;
-  // needs commit_id — fetch from account's commits is chain-specific; ask user
-  openModal(t('pf.reveal_title'), '<label class="lab">'+esc(t('pf.commit_id'))+'</label><input id="rv-cid" type="number"><div class="hint">'+esc(t('pf.reveal_hint',{ID:p.market}))+'</div>',
-  [{label:t('common.cancel'),cls:'ghost',act:closeModal},{label:t('pf.reveal'),cls:'',act:function(){
-    var cid=Number(el('rv-cid').value); closeModal();
+  function doReveal(cid){
     tx(t('txn.reveal'),function(){return bc('pmRevealBet',wifFor('active'),SESSION.account,cid,p.side,p.oc,p.amount,p.salt,p.min,[]);},function(){
       pend.splice(idx,1); localStorage.setItem('lc_reveal',JSON.stringify(pend)); setTimeout(screenProfile,1200);
     });
-  }}]);
+  }
+  function manual(){ // fallback for old nodes without get_account_commits: ask the user for the id
+    openModal(t('pf.reveal_title'), '<label class="lab">'+esc(t('pf.commit_id'))+'</label><input id="rv-cid" type="number"><div class="hint">'+esc(t('pf.reveal_hint',{ID:p.market}))+'</div>',
+    [{label:t('common.cancel'),cls:'ghost',act:closeModal},{label:t('pf.reveal'),cls:'',act:function(){
+      var cid=Number(el('rv-cid').value); closeModal(); doReveal(cid);
+    }}]);
+  }
+  // Auto-resolve the on-chain commit_id (node get_account_commits) by matching the commitment hash we
+  // recompute from the locally-stashed params; fall back to manual entry if the node lacks the method or
+  // no match is found. Removes the dead-end where the user had no way to learn their commit id.
+  var want; try{ want=viz.formatter.predictionMarketCommitment(p.market, SESSION.account, p.side, p.oc, p.amount, p.min, p.salt); }catch(e){ want=null; }
+  rawApi('prediction_market_api','get_account_commits',[SESSION.account,true]).then(function(list){
+    list=list||[]; var hit=null;
+    if(want) hit=list.filter(function(c){return String(c.commitment).toLowerCase()===String(want).toLowerCase();})[0];
+    if(!hit){ var onMkt=list.filter(function(c){return Number(objIdNum(c.market))===Number(p.market)||Number(c.market)===Number(p.market);}); if(onMkt.length===1) hit=onMkt[0]; }
+    if(hit) doReveal(objIdNum(hit.id)); else manual();
+  }).catch(function(){ manual(); });
 }
 /* Add/complete the regular key after signing in without it — reuses the login key logic. */
 function addRegularKey(){
