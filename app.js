@@ -3460,6 +3460,7 @@ async function screenOracleProfile(owner){
         row(t('orp.wl_window'),   dw, 'window')+
         row(t('orp.wl_disp_resp'),dr, 'disputes')+
         row(t('orp.wl_disp_dec'), dd, 'disputes')+
+        '<div class="hint">'+esc(t('orp.wl_hint'))+'</div>'+
       '</div>';
     })()+
     '<div class="section-title">'+esc(t('orp.recent'))+'</div>'+

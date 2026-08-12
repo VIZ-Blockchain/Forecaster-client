@@ -343,6 +343,7 @@ var EN = {
   'orp.tab_awaiting':'Awaiting resolution','orp.tab_window':'In dispute window','orp.tab_disputes':'Disputes',
   'orp.workload':'Workload','orp.wl_awaiting':'Awaiting resolution','orp.wl_window':'In dispute window',
   'orp.wl_disp_resp':'Disputes — awaiting response','orp.wl_disp_dec':'Disputes — awaiting decision',
+  'orp.wl_hint':'Counts include markets still awaiting their scheduled resolution date — a large number is normal, not a problem.',
   'orp.stage_response':'Awaiting oracle response','orp.stage_decision':'Awaiting decision',
   'orp.deadline':'by {T}','orp.no_disputes':'No open disputes.',
 
@@ -667,6 +668,7 @@ var RU = {
   'orp.tab_awaiting':'Ждут резолва','orp.tab_window':'Окно спора','orp.tab_disputes':'Споры',
   'orp.workload':'Нагрузка','orp.wl_awaiting':'Ждут резолва','orp.wl_window':'В окне спора',
   'orp.wl_disp_resp':'Споры — ждут ответа','orp.wl_disp_dec':'Споры — ждут решения',
+  'orp.wl_hint':'Счётчики включают рынки, ждущие планового срока расчёта — большое число это нормально, не признак проблемы.',
   'orp.stage_response':'Ждёт ответа оракула','orp.stage_decision':'Ждёт решения',
   'orp.deadline':'до {T}','orp.no_disputes':'Открытых споров нет.',
 
@@ -994,6 +996,7 @@ var ZH = {
   'orp.tab_awaiting':'待裁决','orp.tab_window':'争议窗口','orp.tab_disputes':'争议',
   'orp.workload':'工作量','orp.wl_awaiting':'待裁决','orp.wl_window':'处于争议窗口',
   'orp.wl_disp_resp':'争议——待回应','orp.wl_disp_dec':'争议——待裁定',
+  'orp.wl_hint':'计数包含仍在等待其计划裁决日期的市场——数字较大属正常，并非问题。',
   'orp.stage_response':'等待预言机回应','orp.stage_decision':'等待裁定',
   'orp.deadline':'截止 {T}','orp.no_disputes':'暂无未决争议。',
 
