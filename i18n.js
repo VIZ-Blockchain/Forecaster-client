@@ -282,6 +282,8 @@ var EN = {
 
   /* risk notice (parimutuel / not fixed odds) */
   'risk.not_fixed_odds':'These are NOT fixed odds. Payouts float with the pool — your return depends on the final distribution of all bets and can be lower than implied. Never bet more than you can lose.',
+  'risk.why_floating_q':'Why do the odds float? (and why that is an advantage)',
+  'risk.why_floating':'No bookmaker sets or moves the line here. The odds float because payouts are computed by transparent, deterministic on-chain math from the real pool of bets: winners share the losing side in proportion to their stake. Nobody can quietly shade the price against you, and the operator never holds your funds. The trade-off is that your exact return is not locked at bet time — it settles from the final pool. Tip: betting while the pool is smaller earns a larger share; watch the pool size and set “Min tokens” to cap slippage.',
 
   /* transfer position */
   'md.col_transfer':'Transfer',
@@ -604,6 +606,8 @@ var RU = {
 
   /* risk notice (parimutuel / not fixed odds) */
   'risk.not_fixed_odds':'Это НЕ фиксированные коэффициенты. Выплаты плавающие — зависят от итогового распределения всех ставок в пуле и могут быть НИЖЕ ожидаемых. Не ставьте больше, чем готовы потерять.',
+  'risk.why_floating_q':'Почему коэффициент плавающий? (и почему это плюс)',
+  'risk.why_floating':'Здесь нет букмекера, который выставляет и двигает линию. Коэффициент плавает потому, что выплаты считает прозрачная детерминированная on-chain математика из реального пула ставок: победители делят сторону проигравших пропорционально своей доле. Никто не может незаметно сдвинуть цену против вас, а оператор не держит ваши средства. Плата за это — точная выплата не фиксируется в момент ставки, она формируется из итогового пула. Совет: чем меньше пул на момент ставки, тем больше ваша доля; следите за размером пула и задавайте «Мин. токенов», чтобы ограничить проскальзывание.',
 
   /* transfer position */
   'md.col_transfer':'Передать',
@@ -926,6 +930,8 @@ var ZH = {
 
   /* risk notice (parimutuel / not fixed odds) */
   'risk.not_fixed_odds':'这不是固定赔率。赔付随资金池浮动——你的回报取决于所有投注的最终分布，可能低于预期。切勿投入超过你能承受的损失。',
+  'risk.why_floating_q':'赔率为何浮动？（以及为何这是优势）',
+  'risk.why_floating':'这里没有庄家来设定或移动盘口。赔率浮动是因为派彩由透明、确定性的链上数学根据真实的投注资金池计算：赢家按各自份额比例瓜分输家一方。没有人能悄悄地把价格做得对你不利，运营方也不持有你的资金。代价是：你的确切回报在下注时并未锁定——它由最终资金池结算。提示：资金池较小时下注可获得更大份额；关注资金池规模，并设置“最少代币”以限制滑点。',
 
   /* transfer position */
   'md.col_transfer':'转移',

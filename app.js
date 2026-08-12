@@ -1684,6 +1684,7 @@ async function screenMarket(id){
   if(status===1){
     html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('md.place_bet'))+'</div>';
     html+='<div class="box warn">'+esc(t('risk.not_fixed_odds'))+'</div>';
+    html+='<details class="raw"><summary>'+esc(t('risk.why_floating_q'))+'</summary><div class="hint">'+esc(t('risk.why_floating'))+'</div></details>';
     if(!isUnlocked()) html+='<div class="box info">'+unlockLink('md.unlock_to_bet')+'</div>';
     if(risky) html+='<div class="box err">'+esc(t('bet.risk_warning'))+'</div>';
     if(instantDisabled) html+='<div class="box warn">'+esc(t('md.instant_disabled'))+'</div>';
