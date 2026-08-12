@@ -3298,7 +3298,8 @@ function oracleInsuranceModal(){
  * ========================================================================= */
 async function screenOracle(){
   if(!requireUnlock())return;
-  setContent('<div class="title">'+esc(t('or.title'))+'</div>'+
+  setContent('<div class="title">'+esc(t('or.console_title'))+'</div>'+
+    '<div id="or-fund" class="card"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>'+
     '<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('unban.title'))+'</div>'+
       '<div class="hint mb">'+esc(t('unban.desc'))+'</div>'+
       '<div class="row"><input id="ub-acc" class="grow" type="text" autocomplete="off" spellcheck="false" placeholder="account">'+
@@ -3308,8 +3309,11 @@ async function screenOracle(){
       '<label class="lab"><input type="checkbox" id="ub-creator"> '+esc(t('unban.creator'))+'</label>'+
       '<button class="btn block mt" id="ub-go">'+esc(t('unban.submit'))+'</button>'+
     '</div>'+
-    '<div class="section-title">'+esc(t('or.assigned'))+'</div>'+
-    '<div id="or-list"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
+    '<div id="or-list"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>'+
+    '<div class="section-title">'+esc(t('or.my_disputes'))+'</div>'+
+    '<div id="or-disp"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
+  renderOracleFund(SESSION.account);
+  renderOracleDisputes(SESSION.account);
   if(el('ub-check')) el('ub-check').onclick=async function(){
     var acc=el('ub-acc').value.trim().toLowerCase(), s=el('ub-status');
     if(!acc){ toast('warn',t('unban.enter_acc')); return; }
@@ -3360,13 +3364,114 @@ async function screenOracle(){
     if(awaiting.length){
       html+='<div class="section-title">'+esc(t('or.awaiting',{N:awaiting.length}))+'</div>'+
             '<div class="hint mb">'+esc(t('or.awaiting_hint'))+'</div>'+
-            awaiting.slice(0,CAP).map(marketCard).join('');
+            awaiting.slice(0,CAP).map(function(m){ return '<div class="or-aw">'+marketCard(m)+
+              '<button class="btn ok block" data-orresolve="'+marketId(m)+'">'+esc(t('or.resolve_btn'))+'</button></div>'; }).join('');
       if(awaiting.length>CAP) html+='<div class="hint mb">'+esc(t('or.more',{N:awaiting.length-CAP}))+'</div>';
     } else {
       html+='<div class="box info mb">'+esc(t('or.none_awaiting'))+'</div>';
     }
     el('or-list').innerHTML=html;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-orresolve]'), function(b){
+      b.onclick=function(ev){ ev.stopPropagation();
+        var id=b.getAttribute('data-orresolve'), m=null;
+        for(var i=0;i<awaiting.length;i++){ if(String(marketId(awaiting[i]))===String(id)){ m=awaiting[i]; break; } }
+        oracleResolveModal(id, m?marketOutcomes(m):[]);
+      };
+    });
   }catch(e){ el('or-list').innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
+}
+
+/* Fund + settings panel for the oracle console (#/oracle). Insurance balance/reliability + top-up,
+   an EXPLICIT withdraw (sends a negative insurance_delta; disabled while the oracle has unsettled
+   markets — after the #3 gate the node rejects it anyway), a one-tap auto-accept toggle, and full
+   settings. Open-obligation signal uses the P2/P3 gauges (awaiting-resolution + dispute-window +
+   open disputes) which mirror the node's finalized_time==0 gate; unknown on old nodes → allow and
+   let the node decide. */
+async function renderOracleFund(me){
+  var box=el('or-fund'); if(!box) return;
+  var o=null; try{ o=unwrapOracle(await api('getOracle', me)); }catch(e){}
+  if(!el('or-fund')) return;
+  if(!o || !(o.owner || o.insurance!=null || o.fee_percent!=null)){
+    box.innerHTML='<div class="section-title" style="margin-top:0">'+esc(t('or.console_title'))+'</div>'+
+      '<div class="box info">'+esc(t('pf.not_oracle'))+'</div>'+
+      '<button class="btn block mt" id="or-reg">'+esc(t('pf.register_oracle'))+'</button>';
+    if(el('or-reg')) el('or-reg').onclick=function(){ oracleRegisterModal(); };
+    return;
+  }
+  var score=(o.reliability_score!=null?o.reliability_score:o.score);
+  var open=(Number(o.markets_awaiting_resolution||0)+Number(o.markets_in_dispute_window||0)+
+            Number(o.disputes_awaiting_response||0)+Number(o.disputes_awaiting_decision||0))>0;
+  var autoOn=!!o.auto_accept;
+  var kv=function(l,v){ return '<div class="kv"><span class="mut">'+esc(l)+'</span><b>'+esc(String(v))+'</b></div>'; };
+  box.innerHTML='<div class="section-title" style="margin-top:0">'+esc(t('or.fund_panel'))+' '+(score!=null?relBadge(score):'')+'</div>'+
+    kv(t('pf.insurance'), fmtVizParam(o.insurance))+
+    kv(t('pf.fee_pct'), fromBP(o.fee_percent||0)+'%')+
+    (o.fixed_fee!=null&&assetNum(o.fixed_fee)>0?kv(t('pf.fixed_fee'), fmtVizParam(o.fixed_fee)):'')+
+    kv(t('or.autoaccept'), t(autoOn?'or.on':'or.off'))+
+    '<div class="row mt"><button class="btn ok grow" id="or-dep">'+esc(t('or.deposit'))+'</button>'+
+      '<button class="btn ghost grow" id="or-wd"'+(open?' disabled':'')+'>'+esc(t('or.withdraw'))+'</button></div>'+
+    (open?'<div class="hint">'+esc(t('or.withdraw_locked'))+'</div>':'')+
+    '<div class="row mt"><button class="btn ghost grow" id="or-auto">'+esc(t(autoOn?'or.autoaccept_off':'or.autoaccept_on'))+'</button>'+
+      '<button class="btn ghost grow" id="or-set">'+esc(t('or.settings'))+'</button></div>';
+  if(el('or-dep')) el('or-dep').onclick=function(){ oracleInsuranceModal(); };
+  if(el('or-wd'))  el('or-wd').onclick=function(){ if(open){ toast('warn',t('or.withdraw_locked')); return; } oracleWithdrawModal(o); };
+  if(el('or-set')) el('or-set').onclick=function(){ oracleUpdateModal(o); };
+  if(el('or-auto')) el('or-auto').onclick=function(){ if(!requireUnlock())return;
+    tx(t('txn.update_oracle'),function(){ return bc('pmOracleUpdate',wifFor('active'),SESSION.account,toAsset(0),null,null,null,null,null,!autoOn,[]); },
+      function(){ toast('ok',t('or.saved')); setTimeout(screenOracle,1500); }); };
+}
+
+/* Explicit "Withdraw from insurance" — enter a positive amount, broadcast a negative insurance_delta.
+   Solves the old non-obvious "type a negative number in insurance_delta". */
+function oracleWithdrawModal(o){
+  openModal(t('or.withdraw'),
+    '<div class="hint mb">'+esc(t('or.withdraw_hint'))+'</div>'+
+    '<label class="lab">'+esc(t('common.amount_viz'))+'</label><input id="o-wd" type="number" step="0.001" min="0.001" value="0.000">',
+  [{label:t('common.cancel'),cls:'ghost',act:closeModal},{label:t('or.withdraw'),cls:'',act:function(){
+    var a=Number(el('o-wd').value)||0; if(a<=0){ toast('warn',t('common.amount_viz')); return; }
+    closeModal();
+    tx(t('txn.update_oracle'),function(){ return bc('pmOracleUpdate',wifFor('active'),SESSION.account,toAsset(-a),null,null,null,null,null,null,[]); },
+      function(){ toast('ok',t('or.saved')); setTimeout(screenOracle,1500); });
+  }}]);
+}
+
+/* Resolve a market straight from the console: pick the winning outcome (or no-contest). Reuses the
+   same broadcasts as the market page. `ocs` = outcome labels from the awaiting row (no extra fetch). */
+function oracleResolveModal(id, ocs){
+  if(!requireUnlock())return;
+  ocs=ocs&&ocs.length?ocs:[t('oc.yes'),t('oc.no')];
+  openModal(t('md.oracle_actions'),
+    '<label class="lab">'+esc(t('md.resolve_win'))+'</label><select id="orx-win">'+
+      ocs.map(function(n,i){ return '<option value="'+i+'">'+esc(n)+'</option>'; }).join('')+'</select>'+
+    '<label class="lab">'+esc(t('md.decision_url'))+'</label><input id="orx-url" type="url" placeholder="https://…">'+
+    '<label class="lab">'+esc(t('common.reason'))+'</label><input id="orx-reason" type="text">',
+  [{label:t('common.cancel'),cls:'ghost',act:closeModal},
+   {label:t('md.no_contest'),cls:'bad',act:function(){ closeModal();
+     tx(t('txn.no_contest'),function(){ return bc('pmNoContest',wifFor('active'),SESSION.account,id,(el('orx-reason')&&el('orx-reason').value)||'no contest',[]); },
+       function(){ toast('ok',t('or.saved')); setTimeout(screenOracle,1500); }); }},
+   {label:t('md.resolve'),cls:'ok',act:function(){ var w=Number(el('orx-win').value)||0; closeModal();
+     tx(t('txn.resolve'),function(){ return bc('pmResolveMarket',wifFor('active'),SESSION.account,id,w,el('orx-url').value||'',el('orx-reason').value||'',[]); },
+       function(){ toast('ok',t('or.saved')); setTimeout(screenOracle,1500); }); }}]);
+}
+
+/* This oracle's markets currently under dispute (list_oracle_disputes). Card taps into the market to
+   respond/vote. Old node without the API → quiet notice. */
+async function renderOracleDisputes(me){
+  var box=el('or-disp'); if(!box) return;
+  var rows=null; try{ rows=await rawApi('prediction_market_api','list_oracle_disputes',[me,0,100]); }catch(e){ rows=null; }
+  if(!el('or-disp')) return;
+  if(rows===null){ box.innerHTML='<div class="hint">'+esc(t('or.disputes_na'))+'</div>'; return; }
+  rows=rows||[];
+  if(!rows.length){ box.innerHTML='<div class="box info">'+esc(t('or.no_disputes'))+'</div>'; return; }
+  box.innerHTML=rows.map(function(d){
+    var mk=d.market||{}, id=(d.market_id!=null?d.market_id:marketId(mk));
+    var dec=(d.stage==='awaiting_decision');
+    var badge='<span class="badge '+(dec?'st-0':'risk')+'">'+esc(t(dec?'orp.stage_decision':'orp.stage_response'))+'</span>';
+    var dl=dec?d.voting_end_time:d.oracle_response_deadline;
+    var dls=dl?('<span class="mut" style="font-size:12px"> · '+esc(t('orp.deadline',{T:tsToLocal(assetTime(dl))}))+'</span>'):'';
+    return '<div class="card click card-dense" data-nav="#/market/'+id+'"><div class="card-q">'+esc(marketTitle(mk))+'</div>'+
+      '<div style="font-size:12px">'+badge+dls+'</div></div>';
+  }).join('');
 }
 
 /* ========================================================================= *

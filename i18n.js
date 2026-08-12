@@ -186,6 +186,7 @@ var EN = {
   /* oracle screen */
   'or.title':'Oracle — my markets','or.none':'No markets assigned to you.',
   'or.awaiting':'⏳ Awaiting your result ({N})','or.awaiting_hint':'Betting is closed on these — submit the outcome. Tap a market to resolve it.',
+  'or.console_title':'Oracle console','or.fund_panel':'Insurance fund','or.deposit':'Top up','or.withdraw':'Withdraw','or.withdraw_hint':'How much to withdraw from your insurance fund.','or.withdraw_locked':'Cannot withdraw while you have unsettled markets (awaiting resolution or in the dispute window). Settle them first.','or.autoaccept':'Auto-accept','or.on':'On','or.off':'Off','or.autoaccept_on':'Enable auto-accept','or.autoaccept_off':'Disable auto-accept','or.settings':'Oracle settings','or.resolve_btn':'Resolve','or.my_disputes':'My markets under dispute','or.no_disputes':'None of your markets are under dispute.','or.disputes_na':'Dispute list needs a newer node.','or.saved':'Saved',
   'or.none_awaiting':'Nothing awaits your result right now.','or.scanning':'Scanning your markets… {N}','or.more':'+{N} more not shown',
   'or.sec_open':'Still open ({N})','or.sec_done':'Resolved / other ({N})',
 
@@ -515,6 +516,7 @@ var RU = {
 
   'or.title':'Оракул — мои рынки','or.none':'Вам не назначено рынков.',
   'or.awaiting':'⏳ Ожидают вашего результата ({N})','or.awaiting_hint':'Ставки закрыты — подайте исход. Нажмите на рынок, чтобы разрешить его.',
+  'or.console_title':'Кабинет оракула','or.fund_panel':'Страховой фонд','or.deposit':'Пополнить','or.withdraw':'Вывести','or.withdraw_hint':'Сколько вывести из страхового фонда.','or.withdraw_locked':'Нельзя вывести, пока есть незакрытые рынки (ждут резолва или в окне диспута). Сначала досеттлите их.','or.autoaccept':'Авто-приём','or.on':'Вкл','or.off':'Выкл','or.autoaccept_on':'Включить авто-приём','or.autoaccept_off':'Выключить авто-приём','or.settings':'Настройки оракула','or.resolve_btn':'Резолв','or.my_disputes':'Мои рынки под диспутом','or.no_disputes':'Ни один ваш рынок не в диспуте.','or.disputes_na':'Список диспутов доступен после обновления ноды.','or.saved':'Сохранено',
   'or.none_awaiting':'Сейчас ничего не ждёт вашего результата.','or.scanning':'Сканирую ваши рынки… {N}','or.more':'+{N} ещё не показаны',
   'or.sec_open':'Ещё открыты ({N})','or.sec_done':'Разрешённые / прочие ({N})',
 
@@ -840,6 +842,7 @@ var ZH = {
 
   'or.title':'预言机 — 我的市场','or.none':'没有指派给你的市场。',
   'or.awaiting':'⏳ 等待你裁决（{N}）','or.awaiting_hint':'这些市场投注已关闭 — 请提交结果。点击市场进行裁决。',
+  'or.console_title':'预言机控制台','or.fund_panel':'保险基金','or.deposit':'充值','or.withdraw':'提取','or.withdraw_hint':'从你的保险基金中提取多少。','or.withdraw_locked':'有未结算的市场（等待裁决或处于争议窗口）时无法提取。请先结算。','or.autoaccept':'自动接受','or.on':'开','or.off':'关','or.autoaccept_on':'启用自动接受','or.autoaccept_off':'停用自动接受','or.settings':'预言机设置','or.resolve_btn':'裁定','or.my_disputes':'我的争议市场','or.no_disputes':'你的市场均不在争议中。','or.disputes_na':'争议列表需要更新节点。','or.saved':'已保存',
   'or.none_awaiting':'目前没有等待你裁决的市场。','or.scanning':'正在扫描你的市场… {N}','or.more':'+{N} 未显示',
   'or.sec_open':'仍开放（{N}）','or.sec_done':'已裁决 / 其他（{N}）',
 
