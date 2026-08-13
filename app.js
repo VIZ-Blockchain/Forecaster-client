@@ -2798,6 +2798,9 @@ async function screenPool(){
   // how it works
   html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('pool.how_title'))+'</div>'+
     '<ul class="terms-list">'+['how_1','how_2','how_3','how_4','how_5'].map(function(k){return '<li>'+t('pool.'+k)+'</li>';}).join('')+'</ul></div>';
+  // Leverage risk belongs here, not on the direct-LP notice (owner q#389): the lazy pool fronts
+  // leverage loans, so its deployed capital carries that exposure — shown only while leverage is on-chain.
+  if(!leverageOff(props)) html+='<div class="card"><div class="box warn">'+esc(t('pool.lev_risk'))+'</div></div>';
   // pool state
   html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('pool.state_title'))+'</div>'+
     kv(t('pool.total_value'), fmtViz(totalValue))+
