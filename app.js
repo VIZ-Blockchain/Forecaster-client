@@ -1752,7 +1752,7 @@ async function screenMarket(id){
   if(isUnlocked()) loadMyPositions(id, m);
   if(isUnlocked()) loadMyDeferredClaims(id, m);
   if(isUnlocked()) loadMyLiquidity(id, status);
-  loadLeverage(id, ocs, isMulti, status);   // renders open form only when active; shows settled positions on resolved markets
+  loadLeverage(id, ocs, isMulti, status, m);   // renders open form only when active; shows settled positions on resolved markets
   if(dispute&&(dispute.id!=null||dispute.disputer||dispute.status!=null)) loadDisputeVotes(id, ocs);
   loadMarketBets(id, ocs, isMulti);
   loadMarketLazyAlloc(id);
@@ -2293,7 +2293,7 @@ function levResultCell(p){
   var dStr=(dRaw>0?'+':'')+fmtViz(dRaw);   // fmtViz already prefixes '-' for negatives
   return '<td><span class="badge '+cls+'">'+esc(lbl)+'</span> <span class="'+dCls+'">'+esc(dStr)+'</span></td>';
 }
-async function loadLeverage(id, ocs, isMulti, status){
+async function loadLeverage(id, ocs, isMulti, status, m){
   var box=el('lev-box'); if(!box)return;
   if(levHidden()){ var cardU=box.closest('.card'); if(cardU) cardU.remove(); return; } // user hid leverage → drop the card
   var props=await pmProps();
@@ -2301,12 +2301,38 @@ async function loadLeverage(id, ocs, isMulti, status){
   // Open form only while the market is active/pending. On a resolved/closed market keep the card ONLY to
   // show the user's own settled leverage positions (so it doesn't look like they never participated);
   // a locked user there has nothing to show → drop the card.
-  var canOpen=(status===0||status===1);
+  // Leverage is CPMM-binary only (node rejects multi/LMSR) → never offer the open form on multi markets.
+  var canOpen=(status===0||status===1) && !isMulti;
   if(!canOpen && !isUnlocked()){ var c2=box.closest('.card'); if(c2) c2.remove(); return; }
+  // Market-level consensus gates the node enforces on pm_leverage_open. Broadcast is sync-OK even when
+  // the evaluator finally rejects (testnet gotcha), so surface these up front instead of a phantom ✓:
+  //  - liquidity_sum ≥ pm_leverage_min_market_liquidity (5000 Ƶ median) — no leverage on shallow markets;
+  //  - now < betting_expiration − pm_leverage_expiration_buffer_sec (open-ended markets are exempt).
+  var levGate='';
+  if(canOpen && m){
+    var minLiqRaw=assetNum(props.pm_leverage_min_market_liquidity)*1000;
+    var liqRaw=Number(m.liquidity_sum)||0;
+    var be=assetTime(m.betting_expiration), bufS=Number(props.pm_leverage_expiration_buffer_sec)||0;
+    if(minLiqRaw>0 && liqRaw<minLiqRaw){
+      levGate=t('lev.gate_liquidity',{MIN:fmtViz(minLiqRaw),CUR:fmtViz(liqRaw)});
+    } else if(be>86400 && bufS>0 && now()>=be-bufS){
+      levGate=t('lev.gate_expiration',{H:Math.round(bufS/3600)});
+    }
+  }
   var html='';
-  if(canOpen){
+  if(canOpen && levGate){
+    html+='<div class="box warn">'+esc(levGate)+'</div>';
+  } else if(canOpen){
     html+='<div class="box err">'+esc(t('lev.risk_notice'))+'</div>'+
       '<div class="hint">'+esc(t('lev.funding_note',{R:fmtFundingRate(props.pm_leverage_funding_rate_ppm_per_day)}))+'</div>';
+    // Per-market limits the node will also enforce at open: total position ≤ ratio% of market
+    // liquidity, loan ≥ pm_min_liquidity. Shown up front so a failing quote isn't a mystery.
+    if(m){
+      var capP=Number(props.pm_leverage_max_position_ratio_percent)||0;
+      var capRaw=Math.floor((Number(m.liquidity_sum)||0)*capP/100);
+      var loanMinRaw=assetNum(props.pm_min_liquidity)*1000;
+      if(capRaw>0) html+='<div class="hint">'+esc(t('lev.cap_note',{CAP:fmtViz(capRaw),P:capP,LOAN:fmtViz(loanMinRaw)}))+'</div>';
+    }
     if(isUnlocked()){
       html+='<div class="field"><label class="lab">'+esc(t('md.outcome'))+'</label><select id="lv-oc">'+
         ocs.map(function(n,i){return '<option value="'+i+'">'+esc(n)+'</option>';}).join('')+'</select></div>'+
