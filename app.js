@@ -2311,12 +2311,24 @@ async function loadLeverage(id, ocs, isMulti, status, m){
   var levGate='';
   if(canOpen && m){
     var minLiqRaw=assetNum(props.pm_leverage_min_market_liquidity)*1000;
+    var loanMinRaw=assetNum(props.pm_min_liquidity)*1000;
     var liqRaw=Number(m.liquidity_sum)||0;
     var be=assetTime(m.betting_expiration), bufS=Number(props.pm_leverage_expiration_buffer_sec)||0;
     if(minLiqRaw>0 && liqRaw<minLiqRaw){
       levGate=t('lev.gate_liquidity',{MIN:fmtViz(minLiqRaw),CUR:fmtViz(liqRaw)});
     } else if(be>86400 && bufS>0 && now()>=be-bufS){
       levGate=t('lev.gate_expiration',{H:Math.round(bufS/3600)});
+    } else if(loanMinRaw>0){
+      // Network-wide gate: the per-position loan cap (bp share of the lazy-pool leverage fund) can fall
+      // below the loan floor (pm_min_liquidity) when the pool's free balance is low — then no position
+      // can open anywhere, on any market. Surface it instead of letting the quote/broadcast fail opaquely.
+      try{
+        var pool=await api('getLazyPool');
+        var fundP=Number(props.pm_leverage_fund_percent)||0, capBp=Number(props.pm_leverage_max_per_position_bp)||0;
+        var availF=Math.floor((Number(pool&&pool.free_balance)||0)*fundP/100)-(Number(pool&&pool.leverage_fund_used)||0);
+        var pcap=Math.floor(availF*capBp/10000);
+        if(fundP>0 && capBp>0 && pcap<loanMinRaw) levGate=t('lev.gate_pool',{CAP:fmtViz(Math.max(pcap,0)),LOAN:fmtViz(loanMinRaw)});
+      }catch(e){}
     }
   }
   var html='';
