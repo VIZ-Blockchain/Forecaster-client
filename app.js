@@ -2328,7 +2328,9 @@ async function loadLeverage(id, ocs, isMulti, status, m){
         var availF=Math.floor((Number(pool&&pool.free_balance)||0)*fundP/100)-(Number(pool&&pool.leverage_fund_used)||0);
         var pcap=Math.floor(availF*capBp/10000);
         if(fundP>0 && capBp>0 && pcap<loanMinRaw) levGate=t('lev.gate_pool',{CAP:fmtViz(Math.max(pcap,0)),LOAN:fmtViz(loanMinRaw)});
-      }catch(e){}
+      }catch(e){
+        levGate=t('lev.pool_fetch_error');
+      }
     }
   }
   var html='';
@@ -2459,8 +2461,26 @@ async function screenLeverage(){
   if(!requireUnlock())return;
   if(levHidden()){ setContent('<div class="title">'+esc(t('lev.screen_title'))+'</div>'+
     '<div class="box info">'+esc(t('lev.hidden_screen'))+' <a data-nav="#/profile">'+esc(t('tab.profile'))+' →</a></div>'); return; }
+  var props=await pmProps();
+  var levOff=leverageOff(props);
+  var poolGateHtml='';
+  if(!levOff){
+    try{
+      var pool=await api('getLazyPool');
+      var fundP=Number(props.pm_leverage_fund_percent)||0, capBp=Number(props.pm_leverage_max_per_position_bp)||0;
+      var loanMinRaw=assetNum(props.pm_min_liquidity)*1000;
+      var availF=Math.floor((Number(pool&&pool.free_balance)||0)*fundP/100)-(Number(pool&&pool.leverage_fund_used)||0);
+      var pcap=Math.floor(availF*capBp/10000);
+      if(fundP>0 && capBp>0 && loanMinRaw>0 && pcap<loanMinRaw){
+        poolGateHtml='<div class="box warn">'+esc(t('lev.gate_pool',{CAP:fmtViz(Math.max(pcap,0)),LOAN:fmtViz(loanMinRaw)}))+'</div>';
+      }
+    }catch(e){
+      poolGateHtml='<div class="box warn">'+esc(t('lev.pool_fetch_error'))+'</div>';
+    }
+  }
   setContent('<div class="title">'+esc(t('lev.screen_title'))+'</div>'+
-    (leverageOff(await pmProps())?'<div class="box info">'+esc(t('lev.disabled'))+'</div>':'')+  // chain-off banner (still lets you view/close existing positions)
+    (levOff?'<div class="box info">'+esc(t('lev.disabled'))+'</div>':'')+
+    poolGateHtml+
     '<div class="box err">'+esc(t('lev.risk_notice'))+'</div>'+
     '<div id="lev-all"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
   try{
