@@ -428,6 +428,79 @@ async function tx(label, promiseFactory, after){
        throw e; }
 }
 
+/* ------------------------------------------------------ coupon (multi-bet) */
+/* Legs are INDEPENDENT parimutuel bets sent as ONE signed transaction (N pm_place_bet ops).
+ * A graphene tx is atomic at write time: one invalid leg rejects the whole coupon — there is
+ * no "half placed" state. This is NOT a parlay: payouts do not multiply. Store: localStorage. */
+function cpnLoad(){ try{ var l=JSON.parse(localStorage.getItem('lc_coupon')||'[]'); return Array.isArray(l)?l:[]; }catch(e){ return []; } }
+function cpnSave(l){ try{ localStorage.setItem('lc_coupon', JSON.stringify(l)); }catch(e){} cpnFab(); }
+function cpnAdd(leg){
+  var l=cpnLoad(), i=-1;
+  for(var k=0;k<l.length;k++) if(l[k].market===leg.market && l[k].side===leg.side && l[k].oc===leg.oc){ i=k; break; }
+  if(i>=0){ l[i]=leg; cpnSave(l); toast('info', t('cpn.updated')); }
+  else { l.push(leg); cpnSave(l); toast('ok', t('cpn.added',{N:l.length})); }
+}
+function cpnFab(){
+  var f=el('cpn-fab');
+  if(!f){ f=document.createElement('button'); f.id='cpn-fab'; f.className='cpn-fab';
+    f.onclick=function(){ location.hash='#/coupon'; }; document.body.appendChild(f); }
+  var n=cpnLoad().length;
+  f.style.display=(n>0 && (location.hash||'').split('?')[0]!=='#/coupon')?'':'none';
+  f.textContent=t('cpn.fab',{N:n});
+}
+/* multi-op broadcast: the vendored viz.min.js serializes ops by name via broadcast.send */
+function bcSend(ops){ return new Promise(function(res,rej){
+  viz.broadcast.send({extensions:[],operations:ops},[wifFor('active')],function(err,r){ err?rej(err):res(r); }); }); }
+function screenCoupon(){
+  var legs=cpnLoad(); cpnFab();
+  if(!legs.length){ setContent(h('<div class="title">'+esc(t('cpn.title'))+'</div>',
+    '<div class="card"><div class="mut">'+esc(t('cpn.empty'))+'</div></div>')); return; }
+  var total=0;
+  var rows=legs.map(function(g,i){ total+=Number(g.amt)||0;
+    return '<div class="card">'+
+      '<div class="row" style="justify-content:space-between;align-items:center">'+
+        '<a href="#/market/'+Number(g.market)+'">'+esc(g.title||('#'+g.market))+'</a>'+
+        '<button class="btn ghost small cpn-rm" data-i="'+i+'">✕</button></div>'+
+      '<div class="mut">'+esc(g.ocLabel||'')+'</div>'+
+      '<div class="field"><label class="lab">'+esc(t('common.amount_viz'))+'</label>'+
+        '<input class="cpn-amt" data-i="'+i+'" type="number" step="0.001" min="0.001" value="'+esc(String(g.amt))+'"></div>'+
+    '</div>'; }).join('');
+  setContent(h(
+    '<div class="title">'+esc(t('cpn.title'))+'</div>',
+    '<div class="box info">'+esc(t('cpn.independent'))+'</div>',
+    rows,
+    '<div class="card"><div class="row" style="justify-content:space-between"><b>'+esc(t('cpn.total'))+'</b><b id="cpn-total">'+esc(toAsset(total))+'</b></div>'+
+    (!isUnlocked()?'<div class="box info">'+unlockLink('md.unlock_to_bet')+'</div>':'')+
+    '<button class="btn ok block mt" id="cpn-go">'+esc(t('cpn.place_all',{N:legs.length}))+'</button></div>'
+  ));
+  Array.prototype.forEach.call(document.querySelectorAll('.cpn-rm'),function(b){
+    b.onclick=function(){ var l=cpnLoad(); l.splice(Number(b.getAttribute('data-i')),1); cpnSave(l); screenCoupon(); }; });
+  Array.prototype.forEach.call(document.querySelectorAll('.cpn-amt'),function(inp){
+    inp.onchange=function(){ var l=cpnLoad(), i=Number(inp.getAttribute('data-i'));
+      if(l[i]){ l[i].amt=assetNum(inp.value); cpnSave(l); }
+      var tot=cpnLoad().reduce(function(s,g){ return s+(Number(g.amt)||0); },0);
+      var te=el('cpn-total'); if(te) te.textContent=toAsset(tot); }; });
+  var go=el('cpn-go');
+  if(go) go.onclick=function(){
+    if(!requireUnlock())return;
+    var l=cpnLoad(); if(!l.length)return;
+    for(var k=0;k<l.length;k++) if(!(Number(l[k].amt)>0)){ toast('warn',t('common.enter_amount')); return; }
+    var tot=l.reduce(function(s,g){ return s+Number(g.amt); },0);
+    var ops=l.map(function(g){ return ['pm_place_bet',{account:SESSION.account, market_id:Number(g.market),
+      side:Number(g.side), outcome_index:Number(g.oc), amount:toAsset(g.amt),
+      min_tokens:Number(g.min)||0, mode:0, extensions:[]}]; });
+    var label=t('txn.coupon',{N:l.length});
+    function doAll(){ tx(label, function(){ return bcSend(ops); },
+      function(){ cpnSave([]); toast('ok',t('cpn.placed')); setTimeout(function(){ location.hash='#/activity'; },800); }); }
+    // pre-flight: parimutuel needs LIQUID VIZ for the SUM of all legs (see single-bet pre-flight)
+    api('getAccounts',[SESSION.account]).then(function(rows){
+      var free=parseFloat(rows&&rows[0]&&rows[0].balance)||0;
+      if(tot>free){ var msg=t('bet.insufficient',{V:fmtViz(free)}); toast('warn',msg); persistErr(label,msg); return; }
+      doAll();
+    }).catch(function(){ doAll(); });
+  };
+}
+
 /* ------------------------------------------------------------- market utils */
 function parseMeta(m){
   var s=m&&(m.metadata||m.meta||m.json_metadata||m.market_metadata);
@@ -805,6 +878,7 @@ function route(){
   var parts=base.replace(/^#\//,'').split('/'); // e.g. ['market','12']
   setActiveTab(base);
   updateTopbarBalance();                          // keep the top-right balance chip fresh across navigation
+  cpnFab();                                       // coupon FAB follows navigation (hidden on empty/own screen)
   var scr=parts[0]||'markets';
   try{
     if(scr==='markets') return screenMarkets();
@@ -813,6 +887,7 @@ function route(){
     if(scr==='create')  return screenCreate();
     if(scr==='balance') return screenBalance();
     if(scr==='pool')    return screenPool();
+    if(scr==='coupon')  return screenCoupon();
     if(scr==='leverage')return screenLeverage();
     if(scr==='activity')return screenActivity(parts[1]||'');
     if(scr==='profile') return screenProfile();
@@ -1697,7 +1772,9 @@ async function screenMarket(id){
     if(!isMulti) html+='<label class="lab"><input type="checkbox" id="bt-hidden"> '+esc(t('md.hidden'))+'</label><div class="hint">'+esc(t('bet.hidden_hint'))+'</div>';
     if(risky) html+='<label class="lab"><input type="checkbox" id="bt-risk"> '+esc(t('bet.risk_confirm'))+'</label>';
     html+='<div class="box info" style="margin-top:8px">'+esc(t('bet.parimutuel_note'))+'</div>';
-    html+='<button class="btn ok block mt" id="bt-go">'+esc(t('md.place_bet_btn'))+'</button></div>';
+    html+='<button class="btn ok block mt" id="bt-go">'+esc(t('md.place_bet_btn'))+'</button>';
+    if(!instantDisabled) html+='<button class="btn ghost block mt" id="bt-cpn">'+esc(t('cpn.add'))+'</button>';
+    html+='</div>';
   }
 
   // Liquidity (add + withdraw own positions) — hidden by the user pref (few bettors provide LP)
@@ -2034,6 +2111,15 @@ function wireMarket(id,m,ocs,isMulti){
       if(assetNum(amt)>free){ var msg=t('bet.insufficient',{V:fmtViz(free)}); toast('warn',msg); persistErr(t('txn.place_bet'),msg); return; }
       doBet();
     }).catch(function(){ doBet(); });   // balance probe failed (network) → let the node be the judge
+  };
+  // add current form selection to the coupon (instant mode only; hidden/batch stay single-bet paths)
+  var cp=el('bt-cpn');
+  if(cp) cp.onclick=function(){
+    var i=Number(el('bt-oc').value), amt=el('bt-amt').value, min=Number(el('bt-min').value)||0;
+    if(!(assetNum(amt)>0)){toast('warn',t('common.enter_amount'));return;}
+    var side=isMulti?-1:(i===0?0:1), oc=isMulti?i:-1;
+    cpnAdd({market:Number(id), title:(parseMeta(m).title||('#'+id)), side:side, oc:oc,
+            ocLabel:(ocs&&ocs[i]!=null)?ocs[i]:'', amt:assetNum(amt), min:min});
   };
   // add liquidity
   var lq=el('lq-go');

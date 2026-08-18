@@ -222,3 +222,9 @@ details.raw pre{background:#0f1420; color:#c8d3e5; padding:10px; border-radius:8
 .terms-list li{list-style:disc; margin:6px 0; font-size:13px; line-height:1.45; color:var(--ink)}
 .spin{display:inline-block; width:14px; height:14px; border:2px solid var(--line); border-top-color:var(--brand); border-radius:50%; animation:sp .7s linear infinite; vertical-align:-2px}
 @keyframes sp{to{transform:rotate(360deg)}}
+
+/* coupon FAB (multi-bet) — floats above the bottom tab bar */
+.cpn-fab{position:fixed;right:14px;bottom:76px;z-index:60;border:0;border-radius:22px;
+  padding:12px 18px;font-weight:700;background:var(--brand);color:#fff;cursor:pointer;
+  box-shadow:0 4px 18px rgba(0,0,0,.45)}
+.cpn-fab:active{background:var(--brand-dark)}

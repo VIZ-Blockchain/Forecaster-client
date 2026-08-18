@@ -354,6 +354,14 @@ var EN = {
   'orp.stage_response':'Awaiting oracle response','orp.stage_decision':'Awaiting decision',
   'orp.deadline':'by {T}','orp.no_disputes':'No open disputes.',
 
+  /* coupon (multi-bet, one signed tx) */
+  'cpn.title':'Coupon','cpn.fab':'Coupon · {N}','cpn.add':'Add to coupon',
+  'cpn.added':'Added to coupon ({N})','cpn.updated':'Coupon outcome updated',
+  'cpn.empty':'The coupon is empty. Add outcomes from market pages.',
+  'cpn.independent':'Coupon legs are independent pool bets sent in ONE transaction. This is not a classic parlay: payouts do not multiply. If any leg is invalid at broadcast time, the whole coupon is rejected — nothing is placed halfway.',
+  'cpn.total':'Total','cpn.place_all':'Place all ({N})',
+  'cpn.placed':'Coupon placed — all bets are on-chain','txn.coupon':'Coupon ({N} bets)',
+
   /* boot */
   'boot.viz_missing':'viz-js-lib not found.',
   'boot.viz_hint':'viz-js-lib did not load. Download <span class="mono">viz.min.js</span> from the viz-js-lib repo and place it next to index.html, then reload.'
@@ -685,6 +693,14 @@ var RU = {
   'orp.wl_hint':'Счётчики включают рынки, ждущие планового срока расчёта — большое число это нормально, не признак проблемы.',
   'orp.stage_response':'Ждёт ответа оракула','orp.stage_decision':'Ждёт решения',
   'orp.deadline':'до {T}','orp.no_disputes':'Открытых споров нет.',
+
+  /* coupon (multi-bet, one signed tx) */
+  'cpn.title':'Купон','cpn.fab':'Купон · {N}','cpn.add':'В купон',
+  'cpn.added':'Добавлено в купон ({N})','cpn.updated':'Исход в купоне обновлён',
+  'cpn.empty':'Купон пуст. Добавляйте исходы со страниц рынков.',
+  'cpn.independent':'Ноги купона — независимые ставки в общий пул, отправляются ОДНОЙ транзакцией. Это не классический экспресс: выплаты не перемножаются. Если хоть одна нога невалидна в момент отправки, отклоняется весь купон — «поставилась половина» невозможно.',
+  'cpn.total':'Итого','cpn.place_all':'Поставить всё ({N})',
+  'cpn.placed':'Купон поставлен — все ставки в блокчейне','txn.coupon':'Купон ({N} ставок)',
 
   /* boot */
   'boot.viz_missing':'viz-js-lib не найден.',
@@ -1020,6 +1036,13 @@ var ZH = {
   'orp.wl_hint':'计数包含仍在等待其计划裁决日期的市场——数字较大属正常，并非问题。',
   'orp.stage_response':'等待预言机回应','orp.stage_decision':'等待裁定',
   'orp.deadline':'截止 {T}','orp.no_disputes':'暂无未决争议。',
+
+  'cpn.title':'投注单','cpn.fab':'投注单 · {N}','cpn.add':'加入投注单',
+  'cpn.added':'已加入投注单（{N}）','cpn.updated':'已更新投注单中的该结果',
+  'cpn.empty':'投注单为空。请在市场页面添加结果。',
+  'cpn.independent':'投注单中的各注是相互独立的奖池投注，将在同一笔交易中提交。这不是传统串关：赔付不会相乘。若提交时任一注无效，整个投注单都会被拒绝——不会出现只成交一半的情况。',
+  'cpn.total':'合计','cpn.place_all':'全部下注（{N}）',
+  'cpn.placed':'投注单已提交——所有投注已上链','txn.coupon':'投注单（{N} 注）',
 
   'boot.viz_missing':'未找到 viz-js-lib。',
   'boot.viz_hint':'viz-js-lib 未加载。请从 viz-js-lib 仓库下载 <span class="mono">viz.min.js</span> 并放到 index.html 旁边，然后刷新。'
