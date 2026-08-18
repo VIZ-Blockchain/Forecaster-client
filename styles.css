@@ -228,3 +228,15 @@ details.raw pre{background:#0f1420; color:#c8d3e5; padding:10px; border-radius:8
   padding:12px 18px;font-weight:700;background:var(--brand);color:#fff;cursor:pointer;
   box-shadow:0 4px 18px rgba(0,0,0,.45)}
 .cpn-fab:active{background:var(--brand-dark)}
+
+/* events (sportsbook) view — tappable outcome buttons on event cards */
+.ev-outs{display:flex;gap:8px;margin:8px 0 2px;flex-wrap:wrap}
+.ev-out{flex:1 1 0;min-width:72px;text-align:center;padding:8px 6px;border:1px solid var(--line);
+  border-radius:10px;background:transparent;color:inherit;cursor:pointer;font:inherit}
+.ev-out small{display:block;color:var(--muted);font-size:12px;margin-bottom:2px;overflow-wrap:anywhere}
+.ev-out b{font-size:15px}
+.ev-out:active{border-color:var(--brand)}
+.ev-out.sel{border-color:var(--yes);background:rgba(47,168,79,.12)}
+.ev-out.sel b{color:var(--yes)}
+.ev-out-more{display:flex;flex-direction:column;justify-content:center;flex:0 0 auto;text-decoration:none}
+.ev-more{display:block;text-align:center;color:var(--brand);font-size:13px;margin-top:8px;cursor:pointer}

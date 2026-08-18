@@ -1116,7 +1116,13 @@ function screenUnlock(){
 /* ========================================================================= *
  *  SCREEN: Markets list + filters
  * ========================================================================= */
-var mkFilter={status:1, showRisky:false, category:'', view:'hot', q:'', tag:'', sort:'newest'}; // status default 1=active (UX: land on markets you can bet on); view: hot | all | feed | popular; q = local search; tag = in-category tag filter; sort: newest | volume | expiration (category/tag browse, native node sort)
+var mkFilter={status:1, showRisky:false, category:'', view:'hot', q:'', tag:'', sort:'newest'}; // status default 1=active (UX: land on markets you can bet on); view: events | hot | all | feed | popular; q = local search; tag = in-category tag filter; sort: newest | volume | expiration (category/tag browse, native node sort)
+/* User pref: which markets view a bare #/markets opens with — 'hot' (market feed, shipped default)
+   or 'events' (sportsbook-style event cards). Per-user opt-in from Profile → Interface; the global
+   default stays 'hot' until the owner picks one (q#592). */
+var LS_HOME='lc_home_view';
+function homeView(){ try{ return localStorage.getItem(LS_HOME)==='events'?'events':'hot'; }catch(e){ return 'hot'; } }
+function setHomeView(v){ try{ if(v==='events') localStorage.setItem(LS_HOME,v); else localStorage.removeItem(LS_HOME); }catch(e){} }
 var lastBrowseHash='#/markets';   // remembers the last markets browse (filters/tag) so "back to markets" returns there
 var MK_PAGE=50, mkShownLimit=MK_PAGE; // paginated views (category / all-status) grow this on "load more"
 var TAG_DEEP=1000;                    // deep category window when a tag is active (client-side tag filter)
@@ -1288,8 +1294,8 @@ function catTagBar(list){
    shareable (owner request). #/markets?v=hot&c=<catId>&t=<tag>&s=<status>&q=<search>. Only non-default
    keys are emitted; category/tag only make sense in the browsable views (hot/all). */
 function marketsHash(){
-  var browse=(mkFilter.view==='hot'||mkFilter.view==='all'), p=[];
-  if(mkFilter.view && mkFilter.view!=='hot') p.push('v='+encodeURIComponent(mkFilter.view));
+  var browse=(mkFilter.view==='hot'||mkFilter.view==='all'||mkFilter.view==='events'), p=[];
+  if(mkFilter.view && mkFilter.view!==homeView()) p.push('v='+encodeURIComponent(mkFilter.view)); // the user's home view is the bare-hash default
   if(browse && mkFilter.category!=='') p.push('c='+encodeURIComponent(mkFilter.category));
   if(browse && mkFilter.category!=='' && mkFilter.tag) p.push('t='+encodeURIComponent(mkFilter.tag));
   if(browse && mkFilter.category!=='' && mkFilter.sort && mkFilter.sort!=='newest') p.push('o='+encodeURIComponent(mkFilter.sort)); // sort only applies to category/tag browse; newest=default → clean URL
@@ -1300,7 +1306,7 @@ function marketsHash(){
 function parseMarketsHash(){                       // hash is the source of truth for the markets screen
   var h=location.hash||'', qi=h.indexOf('?'), g={};
   if(qi>=0) h.slice(qi+1).split('&').forEach(function(kv){ var i=kv.indexOf('='); g[i<0?kv:kv.slice(0,i)]=i<0?'':decodeURIComponent(kv.slice(i+1)); });
-  mkFilter.view=g.v||'hot';
+  mkFilter.view=g.v||homeView();
   mkFilter.category=g.c||'';
   mkFilter.tag=g.t||'';
   mkFilter.sort=(g.o==='volume'||g.o==='expiration')?g.o:'newest';
@@ -1385,14 +1391,16 @@ async function screenMarkets(){
   lastBrowseHash=location.hash||'#/markets';        // so "← back to markets" from a market/event returns to THIS filtered view
   mkShownLimit=MK_PAGE;                             // reset pagination window on any filter/nav change
   var views='<div class="filters" id="mk-views">'+
-    viewChip('hot',t('mk.view_hot'))+viewChip('closing',t('mk.view_closing'))+viewChip('all',t('mk.view_all'))+viewChip('feed',t('mk.view_feed'))+viewChip('popular',t('mk.view_popular'))+
+    viewChip('events',t('mk.view_events'))+viewChip('hot',t('mk.view_hot'))+viewChip('closing',t('mk.view_closing'))+viewChip('all',t('mk.view_all'))+viewChip('feed',t('mk.view_feed'))+viewChip('popular',t('mk.view_popular'))+
     '<button class="btn chip" id="mk-fav-edit">'+esc(t('mk.edit_favorites'))+'</button></div>';
-  var withCats=(mkFilter.view==='hot'||mkFilter.view==='all'); // hot & all support category browsing + local search
+  var withCats=(mkFilter.view==='hot'||mkFilter.view==='all'||mkFilter.view==='events'); // these views support category browsing + local search
   var filters='';
   if(withCats){
     filters+='<input id="mk-q" type="search" placeholder="'+esc(t('mk.search_ph'))+'" value="'+esc(mkFilter.q||'')+'" style="margin-bottom:8px;width:100%">';
   }
-  if(mkFilter.view==='hot'){
+  if(mkFilter.view==='events'){
+    filters+='<div class="hint">'+esc(t('mk.events_hint'))+'</div><div class="filters" id="mk-cats"></div>';
+  } else if(mkFilter.view==='hot'){
     filters+='<div class="hint">'+esc(t('mk.hot_hint'))+'</div><div class="filters" id="mk-cats"></div>';
   } else if(mkFilter.view==='all'){
     filters+='<div class="filters" id="mk-status">'+chip('1',t('mk.f_active'),mkFilter.status)+
@@ -1474,6 +1482,8 @@ async function loadMarketList(){
     host.innerHTML=hits.length?hits.map(indexCard).join(''):'<div class="empty">'+esc(t('mk.search_none'))+'</div>';
     return;
   }
+  // Sportsbook-style events view renders its own card shape (grouped by real-world event) — own path.
+  if(mkFilter.view==='events'){ return loadEventsFeed(host); }
   // Discovery feed: stale-while-revalidate — instant paint from cached index, then refresh live below.
   if(mkFilter.view==='hot' && mkFilter.category===''){
     var cx=indexGet();
@@ -1582,6 +1592,110 @@ async function loadMarketList(){
     var moreBtn=el('mk-more-btn'); if(moreBtn) moreBtn.onclick=appendMoreMarkets;
   }catch(e){ host.innerHTML='<div class="box err">'+esc(t('mk.load_failed',{E:errText(e)}))+'</div>'; }
 }
+/* ========================================================================= *
+ *  Events (sportsbook) view — active markets grouped by real-world event
+ * ========================================================================= */
+/* Decimal parimutuel coefficient from a money share of the pool (pct of 100): coef = pool/side.
+   These are CURRENT pool ratios — parimutuel odds float until betting closes (the final payout is
+   computed from the closing pool), so the ×N is a live indicator, not a locked-in price. */
+function coefStr(pct){ if(!(pct>0)) return '—'; var c=100/pct; if(c>99) return '×99+'; return '×'+(c>=10?c.toFixed(1):c.toFixed(2)); }
+var EV_ML=/winner|moneyline|to win\b/i;   // the match-winner market fronts an event card
+var EV_WINDOW=150;                        // newest-active window the feed groups over
+async function loadEventsFeed(host){
+  var jur=getJur(), list;
+  try{
+    if(mkFilter.category!==''){
+      list=(await api('listMarketsByCategory', mkFilter.category, 0, (mkFilter.tag?TAG_DEEP:EV_WINDOW), jur||'', '', mkFilter.tag||'', mkFilter.sort||'newest'))||[];
+    } else {
+      list=(await api('listMarkets', 1, 0, EV_WINDOW, false, 'newest'))||[];
+    }
+  }catch(e){ host.innerHTML='<div class="box err">'+esc(t('mk.load_failed',{E:errText(e)}))+'</div>'; return; }
+  list=(list||[]).filter(Boolean).filter(hasTitle);
+  list=list.filter(function(m){ var e2=assetTime(m.betting_expiration); return marketStatus(m)===1 && (!e2||e2>now()); }); // active & still bettable
+  if(jur) list=list.filter(function(m){ return !marketBannedIn(m,jur); });
+  // group sibling markets by their event key (metadata.event); markets without one stand alone
+  var groups=[], byKey={};
+  list.forEach(function(m){
+    var meta=parseMeta(m), ev=String(meta.event||m.event||'');
+    var key=ev||('#'+marketId(m)), g=byKey[key];
+    if(!g){ g={ev:ev, list:[]}; byKey[key]=g; groups.push(g); }
+    g.list.push(m);
+  });
+  if(!groups.length){ host.innerHTML='<div class="empty">'+esc(t('mk.none'))+'</div>'; return; }
+  host.innerHTML=groups.map(eventFeedCard).join('')+
+    '<div class="hint" style="text-align:center;margin-top:4px">'+esc(t('ev.odds_note'))+'</div>';
+  enrichEventOdds(host);
+}
+/* One event card: the face market's title/close-time/volume + tappable outcome buttons (odds fill
+   async from weight_sums). The title navigates to the market; "+N lines" opens the event page. */
+function eventFeedCard(g){
+  var main=null;
+  for(var i=0;i<g.list.length;i++){ if(EV_ML.test(marketTitle(g.list[i]))){ main=g.list[i]; break; } }
+  if(!main){ for(var j=0;j<g.list.length;j++){ if(Number(g.list[j].market_type)!==1){ main=g.list[j]; break; } } }
+  main=main||g.list[0];
+  var id=marketId(main), meta=parseMeta(main);
+  var evTitle=main.event_title||meta.event_title||'';
+  var title=meta.title||marketTitle(main);
+  var cat=meta.category||main.category||'';
+  var exp=assetTime(main.betting_expiration);
+  var vol=main.volume!=null?main.volume:(main.total_volume!=null?main.total_volume:(main.bets_sum!=null?main.bets_sum:null));
+  var instant=!((meta.allow_instant_bet===false)||(main.allow_instant_bet===false));
+  var extra=g.list.length-1;
+  return h(
+    '<div class="card" data-market="'+id+'">',   // card itself is NOT clickable — outcome taps must not navigate
+      '<div class="card-meta" style="margin-bottom:2px">',
+        (cat?'<span>'+esc(crumbLabel(cat))+'</span>':''),
+        (exp?'<span>'+esc(t('ev.closes',{T:tsToLocal(exp)}))+'</span>':''),
+        (vol!=null?'<span class="card-vol">'+esc(t('mk.vol',{V:fmtVizK(vol)}))+'</span>'
+                  :'<span class="card-vol" data-volmkt="'+id+'"></span>'),
+      '</div>',
+      (evTitle?'<div class="mut" style="font-size:12px">'+esc(evTitle)+'</div>':''),
+      '<div class="card-q click" data-nav="#/market/'+id+'">'+esc(title)+'</div>',
+      '<div class="ev-outs" data-evmkt="'+id+'" data-t="'+esc(title)+'" data-inst="'+(instant?1:0)+'">'+
+        '<span class="mut small"><span class="spin"></span></span></div>',
+      (extra>0&&g.ev?'<a class="ev-more" data-nav="#/event/'+encodeURIComponent(g.ev)+'">'+esc(t('ev.more_lines',{N:extra}))+' →</a>':''),
+    '</div>'
+  );
+}
+/* Fill each event card's outcome buttons from get_market_weight_sums (real labels + per-outcome
+   pools; cached in WS_CACHE like enrichCardBars). Tap = add that leg to the coupon (instant markets);
+   markets with instant bets off open the market page instead (batch/hidden are single-bet paths). */
+async function enrichEventOdds(host){
+  var q=[].slice.call(host.querySelectorAll('.ev-outs[data-evmkt]'));
+  async function worker(){
+    while(q.length){
+      var slot=q.shift(), id=Number(slot.getAttribute('data-evmkt'));
+      var ws=WS_CACHE[id];
+      if(ws===undefined){ try{ ws=await api('getMarketWeightSums', id); }catch(e){ ws=null; } WS_CACHE[id]=ws; }
+      if(!slot.isConnected) continue;                       // user navigated away mid-fetch
+      var shares=wsShares(ws);
+      if(!shares.length){ slot.innerHTML='<span class="mut" style="font-size:12px">'+esc(t('ev.no_data'))+'</span>'; continue; }
+      var multi=!!(ws&&Number(ws.market_type)===1);
+      var title=slot.getAttribute('data-t')||('#'+id), inst=slot.getAttribute('data-inst')==='1';
+      var shown=shares.slice(0,4);                          // long multis: 4 tappable + "+N" → market page
+      slot.innerHTML=shown.map(function(s,i){
+        return '<button class="ev-out" data-m="'+id+'" data-i="'+i+'" data-mt="'+(multi?1:0)+'" data-inst="'+(inst?1:0)+'"'+
+          ' data-t="'+esc(title)+'" data-l="'+esc(s.label)+'">'+
+          '<small>'+esc(s.label)+'</small><b>'+esc(coefStr(s.pct))+'</b></button>';
+      }).join('')+(shares.length>4?'<a class="ev-out ev-out-more" data-nav="#/market/'+id+'"><small>…</small><b>+'+(shares.length-4)+'</b></a>':'');
+      var card=slot.closest('.card'), vslot=card&&card.querySelector('.card-vol[data-volmkt]');
+      if(vslot){ if(ws&&ws.bets_sum!=null) vslot.textContent=t('mk.vol',{V:fmtVizK(ws.bets_sum)}); vslot.removeAttribute('data-volmkt'); }
+      Array.prototype.forEach.call(slot.querySelectorAll('button.ev-out'),function(b){ b.onclick=function(){ evOutTap(b); }; });
+    }
+  }
+  var pool=[]; for(var i=0;i<6;i++) pool.push(worker());
+  try{ await Promise.all(pool); }catch(e){}
+}
+function evOutTap(btn){
+  var id=Number(btn.getAttribute('data-m')), i=Number(btn.getAttribute('data-i'));
+  var multi=btn.getAttribute('data-mt')==='1';
+  if(btn.getAttribute('data-inst')!=='1'){ go('#/market/'+id); return; }   // instant off → bet from the market page
+  var side=multi?-1:i, oc=multi?i:-1;                                      // same mapping as the bet form
+  cpnAdd({market:id, title:btn.getAttribute('data-t')||('#'+id), side:side, oc:oc,
+          ocLabel:btn.getAttribute('data-l')||'', amt:1, min:0});          // default stake 1 VIZ — editable in the coupon
+  btn.classList.add('sel');
+}
+
 /* "New & relevant" blend: normalize recency (market id) and activity (log volume), weight 0.55/0.45. */
 function rankHot(list){
   if(!list||!list.length) return list||[];
@@ -3303,7 +3417,13 @@ async function screenProfile(){
     '<label class="lab" style="margin-top:0"><input type="checkbox" id="pf-lev-show"'+(!levHidden()?' checked':'')+'> '+esc(t('lev.show_pref'))+'</label>'+
     '<div class="hint">'+esc(t('lev.pref_hint'))+'</div>'+
     '<label class="lab"><input type="checkbox" id="pf-liq-show"'+(!liqHidden()?' checked':'')+'> '+esc(t('liq.show_pref'))+'</label>'+
-    '<div class="hint">'+esc(t('liq.pref_hint'))+'</div></div>';
+    '<div class="hint">'+esc(t('liq.pref_hint'))+'</div>'+
+    '<label class="lab">'+esc(t('set.home_view'))+'</label>'+
+    '<select id="pf-home">'+
+      '<option value="hot"'+(homeView()==='hot'?' selected':'')+'>'+esc(t('mk.view_hot'))+'</option>'+
+      '<option value="events"'+(homeView()==='events'?' selected':'')+'>'+esc(t('mk.view_events'))+'</option>'+
+    '</select>'+
+    '<div class="hint">'+esc(t('set.home_view_hint'))+'</div></div>';
   html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('common.node'))+'</div><div class="kv"><b>'+esc(t('common.api'))+'</b><span class="mono">'+esc(loadNode().ws)+'</span></div><button class="btn ghost small mt" data-nav="#/node">'+esc(t('common.change_node'))+'</button></div>';
   html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('common.language'))+'</div>'+langSelHtml('pf-lang')+'</div>';
   html+=termsCardHtml();
@@ -3314,6 +3434,7 @@ async function screenProfile(){
   el('pf-lock').onclick=function(){lock();toast('ok',t('common.locked'));};
   if(el('pf-lev-show')) el('pf-lev-show').onchange=function(){ setLevHidden(!this.checked); toast('ok',t('lev.pref_saved')); };
   if(el('pf-liq-show')) el('pf-liq-show').onchange=function(){ setLiqHidden(!this.checked); toast('ok',t('lev.pref_saved')); };
+  if(el('pf-home')) el('pf-home').onchange=function(){ setHomeView(this.value); toast('ok',t('lev.pref_saved')); };
   if(el('pf-add-regular')) el('pf-add-regular').onclick=addRegularKey;
   if(el('or-reg')) el('or-reg').onclick=oracleRegisterModal;
   if(el('or-update')) el('or-update').onclick=function(){oracleUpdateModal(oracle);};
