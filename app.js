@@ -1118,9 +1118,9 @@ function screenUnlock(){
  *  SCREEN: Markets list + filters
  * ========================================================================= */
 var mkFilter={status:1, showRisky:false, category:'', view:'hot', q:'', tag:'', sort:'newest'}; // status default 1=active (UX: land on markets you can bet on); view: events | hot | all | feed | popular; q = local search; tag = in-category tag filter; sort: newest | volume | expiration (category/tag browse, native node sort)
-/* User pref: which markets view a bare #/markets opens with — 'hot' (market feed, shipped default)
-   or 'events' (sportsbook-style event cards). Per-user opt-in from Profile → Interface; the global
-   default stays 'hot' until the owner picks one (q#592). */
+/* User pref: which markets view a bare #/markets opens with — 'hot' (market feed, the shipped
+   default per q#592=B) or 'events' (sportsbook-style event cards). Per-user opt-in from
+   Profile → Interface. */
 var LS_HOME='lc_home_view';
 function homeView(){ try{ return localStorage.getItem(LS_HOME)==='events'?'events':'hot'; }catch(e){ return 'hot'; } }
 function setHomeView(v){ try{ if(v==='events') localStorage.setItem(LS_HOME,v); else localStorage.removeItem(LS_HOME); }catch(e){} }
@@ -1392,7 +1392,7 @@ async function screenMarkets(){
   lastBrowseHash=location.hash||'#/markets';        // so "← back to markets" from a market/event returns to THIS filtered view
   mkShownLimit=MK_PAGE;                             // reset pagination window on any filter/nav change
   var views='<div class="filters" id="mk-views">'+
-    viewChip('events',t('mk.view_events'))+viewChip('hot',t('mk.view_hot'))+viewChip('closing',t('mk.view_closing'))+viewChip('all',t('mk.view_all'))+viewChip('feed',t('mk.view_feed'))+viewChip('popular',t('mk.view_popular'))+
+    viewChip('hot',t('mk.view_hot'))+viewChip('events',t('mk.view_events'))+viewChip('closing',t('mk.view_closing'))+viewChip('all',t('mk.view_all'))+viewChip('feed',t('mk.view_feed'))+viewChip('popular',t('mk.view_popular'))+
     '<button class="btn chip" id="mk-fav-edit">'+esc(t('mk.edit_favorites'))+'</button></div>';
   var withCats=(mkFilter.view==='hot'||mkFilter.view==='all'||mkFilter.view==='events'); // these views support category browsing + local search
   var filters='';
