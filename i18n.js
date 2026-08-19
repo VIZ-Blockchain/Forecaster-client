@@ -327,6 +327,7 @@ var EN = {
   'xfer.title':'Transfer position','xfer.desc':'Hand bet #{ID} (or part of it) to another account.',
   'xfer.shares':'Shares to transfer','xfer.send':'Transfer','xfer.fill':'Enter a recipient and amount',
   'xfer.max':'Max: {S} shares (tap to fill). This is your position size, not whole tokens.','xfer.too_many':'More than you hold — max {S} shares.',
+  'xfer.min_note':'Partial transfer: each side must keep at least {M} — send {S} shares or more, or hand over the whole position.','xfer.part_too_small':'The part you send ({A}) is below the {M} minimum — send more shares, or hand over the whole position.','xfer.rest_too_small':'What stays with you ({A}) is below the {M} minimum — send less, or hand over the whole position.',
   'txn.transfer_position':'Transfer position',
 
   /* liquidity withdraw */
@@ -705,6 +706,7 @@ var RU = {
   'xfer.title':'Передача позиции','xfer.desc':'Передать ставку #{ID} (или её часть) другому аккаунту.',
   'xfer.shares':'Доли к передаче','xfer.send':'Передать','xfer.fill':'Укажите получателя и сумму',
   'xfer.max':'Максимум: {S} долей (тап — подставить). Это размер твоей позиции, а не целые токены.','xfer.too_many':'Больше, чем у тебя есть — максимум {S} долей.',
+  'xfer.min_note':'Частичная передача: с каждой стороны должно остаться не меньше {M} — отправь {S} долей или больше, либо передай позицию целиком.','xfer.part_too_small':'Передаваемая часть ({A}) меньше минимума {M} — увеличь число долей или передай позицию целиком.','xfer.rest_too_small':'У тебя останется {A}, это меньше минимума {M} — отправь меньше или передай позицию целиком.',
   'txn.transfer_position':'Передача позиции',
 
   /* liquidity withdraw */
@@ -1083,6 +1085,7 @@ var ZH = {
   'xfer.title':'转移仓位','xfer.desc':'将投注 #{ID}（或其一部分）转给另一个账户。',
   'xfer.shares':'转移的份额','xfer.send':'转移','xfer.fill':'请输入接收方和数量',
   'xfer.max':'最多：{S} 份额（点按填入）。这是你的仓位大小，不是整数代币。','xfer.too_many':'超过你的持有量——最多 {S} 份额。',
+  'xfer.min_note':'部分转让：双方各自都不得少于 {M} —— 请发送 {S} 份额或更多，或整仓转让。','xfer.part_too_small':'转出部分（{A}）低于最低 {M} —— 请增加份额，或整仓转让。','xfer.rest_too_small':'你剩下的（{A}）低于最低 {M} —— 请少发一些，或整仓转让。',
   'txn.transfer_position':'转移仓位',
 
   /* liquidity withdraw */

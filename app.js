@@ -2411,9 +2411,13 @@ function wireMarket(id,m,ocs,isMulti){
     var h=el('lq-min'); if(h)h.textContent=t('lq.min_hint',{V:fmtViz(minLiq)});
     var inp=el('lq-amt'); if(inp){inp.min=minLiq; inp.placeholder=minLiq.toFixed(3);}
   });
-  if(lq) lq.onclick=function(){
+  if(lq) lq.onclick=async function(){
     if(!requireUnlock())return;
     var amt=el('lq-amt').value; if(!(assetNum(amt)>0)){toast('warn',t('common.enter_amount'));return;}
+    // Read the floor AT CLICK TIME: the .then() above may not have resolved yet when someone clicks
+    // fast, and a guard that silently no-ops is exactly the opaque failure it exists to prevent.
+    // pmProps() is memoised, so this is free after the first load.
+    minLiq=assetNum((await pmProps()).pm_min_liquidity)||minLiq;
     if(minLiq>0&&assetNum(amt)<minLiq){toast('warn',t('lq.below_min',{V:fmtViz(minLiq)}));return;}
     tx(t('txn.add_liq'), function(){return bc('pmAddLiquidity', wifFor('active'), SESSION.account, id, toAsset(amt), []);},
        function(){setTimeout(function(){screenMarket(id);},1200);});
@@ -2509,7 +2513,7 @@ async function loadMyPositions(id, mkt){
         var slbl=(st===1)?t('md.pos_cancelled'):(st===2)?t('md.pos_refunded'):(st===3)?t('md.pos_settled'):t('md.pos_pending');
         last='<td><span class="badge">'+esc(slbl)+'</span></td>';
       }else{
-        last='<td><button class="btn small" data-xfer="'+bid+'" data-sh="'+shares+'">'+esc(t('md.col_transfer'))+'</button> '+
+        last='<td><button class="btn small" data-xfer="'+bid+'" data-sh="'+shares+'" data-amt="'+Number(p.amount!=null?p.amount:(p.stake||0))+'">'+esc(t('md.col_transfer'))+'</button> '+
              '<button class="btn small bad" data-cancel="'+bid+'">'+esc(t('md.col_cancel'))+'</button></td>';
       }
       return '<tr'+(st!==0&&!resolved?' class="row-muted"':'')+'><td>'+esc(oc)+'</td>'+
@@ -2523,14 +2527,26 @@ async function loadMyPositions(id, mkt){
       tx(t('txn.cancel_bet'),function(){return bc('pmCancelBet',wifFor('active'),SESSION.account,bid,0,[]);},function(){setTimeout(function(){screenMarket(id);},1200);});
     };});
     $all('[data-xfer]',box).forEach(function(b){ b.onclick=function(){
-      transferPosition(id, Number(b.getAttribute('data-xfer')), Number(b.getAttribute('data-sh'))||0);
+      transferPosition(id, Number(b.getAttribute('data-xfer')), Number(b.getAttribute('data-sh'))||0, Number(b.getAttribute('data-amt'))||0);
     };});
   }catch(e){ box.innerHTML='<div class="box err">'+esc(errText(e))+'</div>'; }
 }
 
 /* pm_transfer_position — hand a position (by bet_id, in shares) to another account */
-function transferPosition(marketId, betId, haveShares){
+function transferPosition(marketId, betId, haveShares, stakeRaw){
   if(!requireUnlock())return;
+  // A PARTIAL transfer splits one row in two, so since #432 fix A the node requires BOTH resulting
+  // rows to hold at least pm_min_bet — handing over the WHOLE position is always allowed. Without a
+  // pre-flight check the broadcast returns OK and the transfer silently never lands (phantom ✓).
+  var minBetRaw=0;
+  pmProps().then(function(p){ minBetRaw=Math.round(assetNum(p.pm_min_bet)*1000)||0; renderMinHint(); });
+  function partRaw(sh){ return (haveShares>0 && stakeRaw>0) ? Math.floor(stakeRaw*sh/haveShares) : 0; }
+  function renderMinHint(){
+    var n=el('xf-min'); if(!n||!minBetRaw||!stakeRaw)return;
+    // smallest share count whose stake still clears the floor (mirrors the node's integer division)
+    var needSh=Math.ceil(minBetRaw*haveShares/stakeRaw);
+    n.textContent=t('xfer.min_note',{M:fmtViz(minBetRaw),S:(needSh/1000).toFixed(3)});
+  }
   // Field is in SHARES = weight/1000. Build the numeric value LOCALE-INDEPENDENTLY: fmtShares() is a
   // display formatter (toLocaleString) that in comma-decimal locales (ru) returns "3,233" for 3.233 —
   // stripping non-[\d.] then deleted the comma, yielding "3233" (×1000 too big). A number input needs a
@@ -2541,8 +2557,9 @@ function transferPosition(marketId, betId, haveShares){
     '<label class="lab">'+esc(t('common.to'))+'</label><input id="xf-to" type="text" autocomplete="off" spellcheck="false" placeholder="account">',
     '<label class="lab">'+esc(t('xfer.shares'))+'</label><input id="xf-sh" type="number" step="0.001" min="0.001" max="'+maxSh+'" value="'+maxSh+'">',
     '<div class="hint" id="xf-max" style="cursor:pointer">'+esc(t('xfer.max',{S:fmtShares(haveShares)}))+'</div>',
+    '<div class="hint" id="xf-min"></div>',
     '<label class="lab">'+esc(t('common.memo'))+'</label><input id="xf-memo" type="text">'
-  ),[{label:t('common.cancel'),cls:'ghost',act:closeModal},{label:t('xfer.send'),cls:'',act:function(){
+  ),[{label:t('common.cancel'),cls:'ghost',act:closeModal},{label:t('xfer.send'),cls:'',act:async function(){
     var to=el('xf-to').value.trim().toLowerCase();
     var amount=Math.round((Number(el('xf-sh').value)||0)*1000); // display shares → raw ×1000 (= node weight)
     var memo=el('xf-memo').value||'';
@@ -2552,6 +2569,15 @@ function transferPosition(marketId, betId, haveShares){
     // returns OK so the UI would flash a false ✓ (owner hit exactly this). Cap client-side with a clear
     // message instead of a phantom success.
     if(amount>haveShares){ toast('warn',t('xfer.too_many',{S:fmtShares(haveShares)})); return; }
+    // Read the floor AT CLICK TIME, not from the pre-filled variable: the hint's pmProps() may still
+    // be in flight when someone clicks fast, and then the guard would silently no-op and let a doomed
+    // transfer broadcast. pmProps() is memoised — free once loaded.
+    minBetRaw=Math.round(assetNum((await pmProps()).pm_min_bet)*1000)||minBetRaw;
+    if(amount<haveShares && minBetRaw){          // whole-position handover skips the split floors
+      var sent=partRaw(amount), left=stakeRaw-sent;
+      if(sent<minBetRaw){ toast('warn',t('xfer.part_too_small',{M:fmtViz(minBetRaw),A:fmtViz(sent)})); return; }
+      if(left<minBetRaw){ toast('warn',t('xfer.rest_too_small',{M:fmtViz(minBetRaw),A:fmtViz(left)})); return; }
+    }
     closeModal();
     tx(t('txn.transfer_position'),function(){return bc('pmTransferPosition',wifFor('active'),SESSION.account,betId,to,amount,memo,[]);},
       function(){setTimeout(function(){screenMarket(marketId);},1200);});
