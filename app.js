@@ -472,6 +472,38 @@ function cpnFab(){
 /* multi-op broadcast: the vendored viz.min.js serializes ops by name via broadcast.send */
 function bcSend(ops){ return new Promise(function(res,rej){
   viz.broadcast.send({extensions:[],operations:ops},[wifFor('active')],function(err,r){ err?rej(err):res(r); }); }); }
+/* Legs live in localStorage indefinitely, so a coupon assembled yesterday can carry markets that
+ * have since closed. The whole transaction would then be rejected as one — correct, but the user
+ * gets a node error naming nothing. So check every leg when the screen opens, mark the dead ones,
+ * and hold "Place all" until they are gone. Same predicate the node enforces: active, and either
+ * open-ended (betting_expiration == epoch) or still before the deadline. */
+async function cpnCheckLegs(legs){
+  var dead=[];
+  await Promise.all(legs.map(async function(g,i){
+    var m; try{ m=await api('getMarket', Number(g.market)); }catch(e){ return; }  // offline → let the node judge
+    if(!m) return;
+    var be=assetTime(m.betting_expiration);
+    if(marketStatus(m)===1 && (!be || be>now())) return;
+    dead.push(i);
+    var card=document.querySelector('.cpn-amt[data-i="'+i+'"]');
+    card=card&&card.closest('.card');
+    if(card){ card.classList.add('cpn-dead');
+      var note=document.createElement('div'); note.className='box err';
+      note.textContent=t('cpn.leg_closed'); card.appendChild(note); }
+  }));
+  if(!dead.length) return;
+  var go=el('cpn-go'); if(!go) return;
+  go.disabled=true; go.classList.add('ghost');
+  var warn=document.createElement('div'); warn.className='box err';
+  warn.textContent=t('cpn.has_closed',{N:dead.length});
+  var drop=document.createElement('button'); drop.className='btn block mt'; drop.textContent=t('cpn.drop_closed');
+  drop.onclick=function(){
+    var l=cpnLoad().filter(function(_,i){ return dead.indexOf(i)<0; });
+    cpnSave(l); screenCoupon();
+  };
+  go.parentNode.insertBefore(warn, go);
+  go.parentNode.insertBefore(drop, go);
+}
 function screenCoupon(){
   var legs=cpnLoad(); cpnFab();
   if(!legs.length){ setContent(h('<div class="title">'+esc(t('cpn.title'))+'</div>',
@@ -501,6 +533,7 @@ function screenCoupon(){
       if(l[i]){ l[i].amt=assetNum(inp.value); cpnSave(l); }
       var tot=cpnLoad().reduce(function(s,g){ return s+(Number(g.amt)||0); },0);
       var te=el('cpn-total'); if(te) te.textContent=toAsset(tot); }; });
+  cpnCheckLegs(legs);
   var go=el('cpn-go');
   if(go) go.onclick=function(){
     if(!requireUnlock())return;
@@ -1910,8 +1943,14 @@ async function screenMarket(id){
   // Recent bets (getMarketBets) — transparency into the order flow
   html+='<div class="card"><details class="raw"><summary>'+esc(t('md.recent_bets'))+'</summary><div id="mkt-bets"><span class="spin"></span> '+esc(t('common.loading'))+'</div></details></div>';
 
-  // Betting form (active only)
-  if(status===1){
+  // Betting form. Active AND still inside the betting window: the node refuses every bet path
+  // once betting_expiration passes ("Betting period ended"), so showing the form after that only
+  // produces doomed transactions. betting_expiration == epoch means open-ended — no deadline.
+  if(status===1 && bettingClosed){
+    html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('md.place_bet'))+'</div>'+
+          '<div class="box info">'+esc(t('md.betting_over'))+'</div></div>';
+  }
+  if(status===1 && !bettingClosed){
     html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('md.place_bet'))+'</div>';
     html+='<div class="box warn">'+esc(t('risk.not_fixed_odds'))+'</div>';
     html+='<details class="raw"><summary>'+esc(t('risk.why_floating_q'))+'</summary><div class="hint">'+esc(t('risk.why_floating'))+'</div></details>';

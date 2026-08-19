@@ -228,6 +228,9 @@ details.raw pre{background:#0f1420; color:#c8d3e5; padding:10px; border-radius:8
   padding:12px 18px;font-weight:700;background:var(--brand);color:#fff;cursor:pointer;
   box-shadow:0 4px 18px rgba(0,0,0,.45)}
 .cpn-fab:active{background:var(--brand-dark)}
+/* a leg whose market closed while it sat in the coupon: dimmed, and its amount cannot be edited */
+.card.cpn-dead{opacity:.6}
+.card.cpn-dead .cpn-amt{pointer-events:none}
 
 /* events (sportsbook) view — tappable outcome buttons on event cards */
 .ev-outs{display:flex;gap:8px;margin:8px 0 2px;flex-wrap:wrap}
