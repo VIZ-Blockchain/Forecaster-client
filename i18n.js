@@ -27,6 +27,10 @@ var EN = {
 
   /* node screen */
   'node.title':'Node & connection','node.api_label':'API node (HTTPS JSONRPC)',
+  'node.presets_label':'Quick select','node.preset_testnet':'Testnet','node.preset_mainnet':'Mainnet',
+  'node.preset_local':'My own node',
+  'node.local_note':'Your own <b>vizd</b> on this machine. Start it with <code>rpc-endpoint = 127.0.0.1:8090</code>, let it sync, then press “Test connection”.',
+  'node.local_blocked':'<b>This page is served over HTTPS</b> and the browser blocks its requests to <code>127.0.0.1</code> (Local Network Access). A node on your own machine only works from a local copy of the client — download the client files and open <code>index.html</code> from disk, or serve them over <code>http://127.0.0.1</code>.',
   'node.api_hint':'Default: https://testnet.viz.world/','node.prefix_label':'Address prefix',
   'node.chainid_label':'Chain ID','node.chainid_sub':'(auto-detected on test if the node exposes it)',
   'node.test':'Test connection','node.connecting':'connecting…',
@@ -404,6 +408,10 @@ var RU = {
   'notif.betting_closed':'Приём ставок закрыт: {M}','notif.market_ended':'Рынок завершился: {M}',
 
   'node.title':'Узел и подключение','node.api_label':'API-узел (HTTPS JSONRPC)',
+  'node.presets_label':'Быстрый выбор','node.preset_testnet':'Тестнет','node.preset_mainnet':'Мейннет',
+  'node.preset_local':'Моя нода',
+  'node.local_note':'Ваш собственный <b>vizd</b> на этой машине. Запустите его с <code>rpc-endpoint = 127.0.0.1:8090</code>, дождитесь синхронизации и нажмите «Проверить подключение».',
+  'node.local_blocked':'<b>Эта страница открыта по HTTPS</b>, и браузер блокирует её запросы к <code>127.0.0.1</code> (Local Network Access). Своя нода работает только из локальной копии клиента — скачайте файлы клиента и откройте <code>index.html</code> с диска либо раздайте их по <code>http://127.0.0.1</code>.',
   'node.api_hint':'По умолчанию: https://testnet.viz.world/','node.prefix_label':'Префикс адресов',
   'node.chainid_label':'Chain ID','node.chainid_sub':'(определяется автоматически при проверке, если узел его отдаёт)',
   'node.test':'Проверить подключение','node.connecting':'подключение…',
@@ -766,6 +774,10 @@ var ZH = {
   'notif.betting_closed':'投注已截止：{M}','notif.market_ended':'市场已结束：{M}',
 
   'node.title':'节点与连接','node.api_label':'API 节点 (HTTPS JSONRPC)',
+  'node.presets_label':'快速选择','node.preset_testnet':'测试网','node.preset_mainnet':'主网',
+  'node.preset_local':'我的节点',
+  'node.local_note':'本机上你自己的 <b>vizd</b>。请以 <code>rpc-endpoint = 127.0.0.1:8090</code> 启动，等待同步完成后点击“测试连接”。',
+  'node.local_blocked':'<b>本页面通过 HTTPS 提供</b>，浏览器会拦截它对 <code>127.0.0.1</code> 的请求（Local Network Access）。本机节点只能在客户端的本地副本中使用——下载客户端文件并从磁盘打开 <code>index.html</code>，或通过 <code>http://127.0.0.1</code> 提供。',
   'node.api_hint':'默认：https://testnet.viz.world/','node.prefix_label':'地址前缀',
   'node.chainid_label':'链 ID','node.chainid_sub':'（测试连接时若节点公开则自动获取）',
   'node.test':'测试连接','node.connecting':'连接中…',

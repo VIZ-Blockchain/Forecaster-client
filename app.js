@@ -42,6 +42,17 @@ var COUNTRIES=[['US','United States'],['CA','Canada'],['GB','United Kingdom'],['
   ['AR','Argentina'],['MX','Mexico'],['ZA','South Africa'],['NG','Nigeria'],['KZ','Kazakhstan']];
 var VIZ_MAINNET_CHAIN = '2040effda178d4fffff5eab7a915d4019879f5205cc5392e4bcced2b6edda0cd';
 var DEFAULT_NODE = { ws:'https://testnet.viz.world/', chain_id:VIZ_MAINNET_CHAIN, prefix:'VIZ' };
+/* one-tap endpoints; "own node" = vizd running on the user's own machine (rpc-endpoint 127.0.0.1:8090) */
+var NODE_PRESETS = [
+  { key:'node.preset_testnet', ws:'https://testnet.viz.world/', chain_id:VIZ_MAINNET_CHAIN, prefix:'VIZ' },
+  { key:'node.preset_mainnet', ws:'https://api.viz.world/',     chain_id:VIZ_MAINNET_CHAIN, prefix:'VIZ' },
+  { key:'node.preset_local',   ws:'http://127.0.0.1:8090/',     chain_id:VIZ_MAINNET_CHAIN, prefix:'VIZ' }
+];
+function isLocalNode(ws){ return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/i.test(ws||''); }
+/* Chrome 138+ gates https-page → loopback behind the Local Network Access permission,
+   so the hosted PWA cannot reach a node on the user's own machine. A local copy of the
+   client (opened from disk or served over http://127.0.0.1) is same-address-space and works. */
+function localNodeUnreachable(ws){ return isLocalNode(ws) && location.protocol==='https:'; }
 
 /* in-memory unlocked session — never persisted in plaintext */
 var SESSION = null;   // { account, wifs:{active,regular,memo,master}, pubs:{} }
@@ -916,9 +927,15 @@ function screenNode(){
     '<div class="title">'+esc(t('set.title'))+'</div>',
     /* --- node --- */
     '<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('node.title'))+'</div>',
+      '<label class="lab">'+esc(t('node.presets_label'))+'</label>',
+      '<div class="filters">'+NODE_PRESETS.map(function(p,i){
+        return '<button class="btn chip'+(n.ws===p.ws?' active':'')+'" data-nodepreset="'+i+'">'+esc(t(p.key))+'</button>';
+      }).join('')+'</div>',
       '<label class="lab">'+esc(t('node.api_label'))+'</label>',
       '<input id="n-ws" type="url" value="'+esc(n.ws)+'" placeholder="https://testnet.viz.world/">',
       '<div class="hint">'+esc(t('node.api_hint'))+'</div>',
+      '<div id="n-local-note" class="box '+(localNodeUnreachable(n.ws)?'warn':'info')+' mt'+(isLocalNode(n.ws)?'':' hide')+'">'+
+        (localNodeUnreachable(n.ws)?t('node.local_blocked'):t('node.local_note'))+'</div>',
       '<label class="lab">'+esc(t('node.prefix_label'))+'</label>',
       '<input id="n-prefix" type="text" value="'+esc(n.prefix||'VIZ')+'">',
       '<label class="lab">'+esc(t('node.chainid_label'))+' <small>'+esc(t('node.chainid_sub'))+'</small></label>',
@@ -981,6 +998,19 @@ function screenNode(){
   Array.prototype.forEach.call(document.querySelectorAll('[data-imgdel]'), function(b){ b.onclick=function(){
     var hh=this.getAttribute('data-imgdel'); var p=imgPrefs(); p.hosts=p.hosts.filter(function(x){return x!==hh;}); saveImgPrefs(p); toast('ok',t('set.img_host_removed')); screenNode();
   }; });
+  function syncLocalNote(ws){
+    var note=el('n-local-note'); if(!note) return;
+    note.className='box '+(localNodeUnreachable(ws)?'warn':'info')+' mt'+(isLocalNode(ws)?'':' hide');
+    note.innerHTML=localNodeUnreachable(ws)?t('node.local_blocked'):t('node.local_note');
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-nodepreset]'), function(b){ b.onclick=function(){
+    var p=NODE_PRESETS[+this.getAttribute('data-nodepreset')]; if(!p) return;
+    el('n-ws').value=p.ws; el('n-prefix').value=p.prefix; el('n-chain').value=p.chain_id||'';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-nodepreset]'), function(x){ x.classList.remove('active'); });
+    this.classList.add('active');
+    el('n-result').innerHTML=''; syncLocalNote(p.ws);
+  }; });
+  el('n-ws').oninput=function(){ syncLocalNote(this.value.trim()); };
   el('n-test').onclick=async function(){
     var cand={ws:el('n-ws').value.trim(),prefix:el('n-prefix').value.trim()||'VIZ',chain_id:el('n-chain').value.trim()};
     el('n-result').innerHTML='<span class="spin"></span> '+esc(t('node.connecting'));
