@@ -50,10 +50,17 @@ jobs:
         # проходил штатно.
         env:
           DEBIAN_FRONTEND: noninteractive
-        timeout-minutes: 15
+        timeout-minutes: 20
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+          # Раннер тянет пакеты с azure.archive.ubuntu.com, и когда это зеркало молчит, apt
+          # ретраит его по кругу до таймаута джобы (19.08 так упали linux-сборки обоих десктоп-
+          # репозиториев). Переписываем зеркало на канонический archive.ubuntu.com и ограничиваем
+          # ожидание, чтобы отвал зеркала стоил секунд, а не всей сборки.
+          sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' \
+            /etc/apt/apt-mirrors.txt /etc/apt/sources.list 2>/dev/null || true
+          apt="sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20"
+          $apt update
+          $apt install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
             librsvg2-dev patchelf file libssl-dev build-essential curl wget
 
       - uses: dtolnay/rust-toolchain@stable
