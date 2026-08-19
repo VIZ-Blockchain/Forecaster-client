@@ -1295,8 +1295,14 @@ async function appendMoreMarkets(){
       var more=await fetchMarketsNextPage(mkMore.serverFrom);
       mkMore.serverFrom+=(more?more.length:0);
       if(!more||more.length<MK_PAGE) mkMore.server=false;      // short/empty page → no more upstream
-      if(jur) more=(more||[]).filter(function(m){return !marketBannedIn(m,jur);});
       var have={}; mkMore.all.forEach(function(m){var id=marketId(m); if(id!=null)have[id]=1;});
+      /* A FULL page we already hold in its entirety means the node is re-serving the same window and
+         paging will never advance (nodes before the list_markets offset fix stall this way on runs of
+         hidden markets). Stop offering "load more" instead of leaving a button that does nothing.
+         Checked before the jurisdiction filter on purpose: a page dropped by that filter carries ids
+         we have NOT seen, so it must keep paging. */
+      if(more&&more.length&&more.every(function(m){var id=marketId(m); return id!=null&&have[id];})) mkMore.server=false;
+      if(jur) more=(more||[]).filter(function(m){return !marketBannedIn(m,jur);});
       more=(more||[]).filter(function(m){var id=marketId(m); return id!=null && !have[id];});
       mkMore.all=mkMore.all.concat(more);
       batch=mkMore.all.slice(mkMore.cursor, mkMore.cursor+MK_PAGE);
