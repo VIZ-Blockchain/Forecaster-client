@@ -1762,7 +1762,9 @@ function eventFeedCard(g){
       '<div class="card-q click" data-nav="#/market/'+id+'">'+esc(title)+'</div>',
       '<div class="ev-outs" data-evmkt="'+id+'" data-t="'+esc(title)+'" data-inst="'+(instant?1:0)+'">'+
         '<span class="mut small"><span class="spin"></span></span></div>',
-      (extra>0&&g.ev?'<a class="ev-more" data-nav="#/event/'+encodeURIComponent(g.ev)+'">'+esc(t('ev.more_lines',{N:extra}))+' →</a>':''),
+      // Straight into the coupon-ready view: the feed already bets by tapping outcomes, so the
+      // remaining lines should behave the same way instead of dropping the user into market cards.
+      (extra>0&&g.ev?'<a class="ev-more" data-nav="#/event/'+encodeURIComponent(g.ev)+'?v=lines">'+esc(t('ev.more_lines',{N:extra}))+' →</a>':''),
     '</div>'
   );
 }
@@ -1856,6 +1858,31 @@ function marketCard(m){
  *  Uses the node's list_markets_by_event (indexed metadata.event key); each child
  *  is a normal market card. Discovery/navigation only — never bet off this list.
  * ========================================================================= */
+/* Event page view: "cards" (market cards, the classic look) or "lines" — every market of the
+   event rendered like a sportsbook line with tappable outcomes that drop straight into the coupon.
+   The view lives in the hash (#/event/<key>?v=lines) so the "more lines" link on the events feed
+   can open the coupon-ready view directly, and the choice stays shareable. */
+function eventView(){
+  var h=location.hash||'', qi=h.indexOf('?');
+  if(qi<0) return 'cards';
+  var g={};
+  h.slice(qi+1).split('&').forEach(function(kv){ var i=kv.indexOf('='); g[i<0?kv:kv.slice(0,i)]=i<0?'':decodeURIComponent(kv.slice(i+1)); });
+  return g.v==='lines'?'lines':'cards';
+}
+/* One market as a coupon line. Same markup contract as the event feed card (.ev-outs +
+   data-evmkt/data-t/data-inst), so enrichEventOdds fills the odds and evOutTap adds the leg. */
+function eventLineCard(m){
+  var id=marketId(m), meta=parseMeta(m);
+  var title=meta.title||marketTitle(m);
+  var instant=!((meta.allow_instant_bet===false)||(m.allow_instant_bet===false));
+  return h(
+    '<div class="card" data-market="'+id+'">',
+      '<div class="card-q click" data-nav="#/market/'+id+'">'+esc(title)+'</div>',
+      '<div class="ev-outs" data-evmkt="'+id+'" data-t="'+esc(title)+'" data-inst="'+(instant?1:0)+'">'+
+        '<span class="mut small"><span class="spin"></span></span></div>',
+    '</div>'
+  );
+}
 async function screenEvent(key){
   if(!key){ return screenMarkets(); }
   setContent('<div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div>');
@@ -1866,16 +1893,37 @@ async function screenEvent(key){
   list=(list||[]).filter(Boolean);
   // Prefer the readable event label (e.g. "Dota 2: A vs B") from any child; fall back to the generic title.
   var evLabel=''; for(var i=0;i<list.length;i++){ var em=parseMeta(list[i]); var et=(em&&em.event_title)||list[i].event_title; if(et){ evLabel=et; break; } }
+  var lines=eventView()==='lines', evHash='#/event/'+encodeURIComponent(key);
   var head='<div class="row"><a class="mut" data-nav="'+esc(lastBrowseHash)+'">'+esc(t('common.back_markets'))+'</a></div>'+
     '<div class="title" style="margin:6px 0">'+esc(evLabel||t('ev.title'))+'</div>'+
     '<div class="card-meta mb"><span class="mono">'+esc(key)+'</span>'+
-    (list.length?'<span>'+esc(t('ev.count',{N:list.length}))+'</span>':'')+'</div>';
+    (list.length?'<span>'+esc(t('ev.count',{N:list.length}))+'</span>':'')+'</div>'+
+    '<div class="filters">'+
+      '<button class="btn chip'+(lines?'':' active')+'" data-nav="'+esc(evHash)+'">'+esc(t('ev.view_cards'))+'</button>'+
+      '<button class="btn chip'+(lines?' active':'')+'" data-nav="'+esc(evHash)+'?v=lines">'+esc(t('ev.view_lines'))+'</button>'+
+    '</div>';
   if(!list.length){ setContent(head+'<div class="box">'+esc(t('ev.empty'))+'</div>'); return; }
   // Moneyline/winner markets float to the top — most representative of the matchup.
   var ML=/winner|moneyline|to win\b/i;
   list.sort(function(a,b){ return (ML.test(marketTitle(b))?1:0)-(ML.test(marketTitle(a))?1:0); });
-  setContent(head+list.map(marketCard).join(''));
-  enrichCardBars(el('content'));                                     // named outcome bars per sibling market
+  if(!lines){
+    setContent(head+list.map(marketCard).join(''));
+    enrichCardBars(el('content'));                                   // named outcome bars per sibling market
+    return;
+  }
+  // Coupon view: only markets that still accept bets get tappable outcomes — a leg on a closed
+  // market would make the whole coupon rejected at broadcast. The rest stay as plain cards.
+  var open=[], closed=[];
+  list.forEach(function(m){
+    var exp=assetTime(m.betting_expiration);
+    (marketStatus(m)===1 && !(exp && exp<=now()) ? open : closed).push(m);
+  });
+  setContent(head+
+    '<div class="hint mb">'+esc(t('ev.lines_hint'))+'</div>'+
+    (open.length?open.map(eventLineCard).join(''):'<div class="box">'+esc(t('ev.no_open_lines'))+'</div>')+
+    (closed.length?'<div class="section-title">'+esc(t('ev.closed_lines'))+'</div>'+closed.map(marketCard).join(''):''));
+  enrichEventOdds(el('content'));                                    // odds + tap-to-coupon on the open lines
+  if(closed.length) enrichCardBars(el('content'));
 }
 
 /* ========================================================================= *
