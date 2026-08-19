@@ -11,9 +11,17 @@ name: Desktop apps (Pake)
 # Иконка в системном трее: --show-system-tray + --system-tray-icon (Windows/macOS/Linux).
 #
 # Триггеры: ручной запуск и публикация релиза (тогда сборки прикрепляются к релизу).
+# Ручному запуску можно передать тег: тогда собираем код этого тега и докладываем файлы в его
+# релиз — так добирается платформа, чья сборка упала (перезапуск джобы берёт старую версию
+# workflow, а повторно публиковать релиз ради одного установщика не хочется).
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Тег релиза: собрать его код и прикрепить файлы к этому релизу'
+        required: false
+        default: ''
   release:
     types: [published]
 
@@ -37,6 +45,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - uses: actions/setup-node@v4
         with:
@@ -156,7 +166,8 @@ jobs:
           if-no-files-found: error
 
       - name: Attach to release
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || inputs.tag != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.event.release.tag_name }}
           files: out/*
