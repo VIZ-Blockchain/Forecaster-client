@@ -45,6 +45,12 @@ jobs:
       # WebKitGTK — движок Tauri на Linux; libayatana-appindicator — БЕЗ неё нет иконки в трее.
       - name: Linux build deps
         if: matrix.label == 'linux'
+        # Без noninteractive apt может встать на интерактивном запросе и висеть до таймаута
+        # джобы — ловил такое залипание на 27 минут при том, что соседний раннер тот же шаг
+        # проходил штатно.
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        timeout-minutes: 15
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
