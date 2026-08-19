@@ -40,6 +40,8 @@ var EN = {
   'node.no_pm_api':'This node answers, but does not serve prediction markets: it has no prediction_market_api plugin (available from HF14). Add <code>plugin = prediction_market_api</code> to config.ini and restart the node.',
   'node.behind':'The node is behind the chain by {T} — it is probably still syncing, so the data you see is stale.',
   'err.no_pm_api':'This node does not serve prediction markets (no prediction_market_api plugin). Pick another node in Settings.',
+  'err.net_local':'No answer from the node on this machine ({H}). Is vizd running and listening on that address?',
+  'err.net':'No answer from the node ({H}). Check your connection, or pick another node in Settings.',
 
   /* login */
   'login.title':'Sign in',
@@ -428,6 +430,8 @@ var RU = {
   'node.no_pm_api':'Нода отвечает, но рынки предсказаний не обслуживает: на ней нет плагина prediction_market_api (появился в HF14). Добавьте <code>plugin = prediction_market_api</code> в config.ini и перезапустите ноду.',
   'node.behind':'Нода отстаёт от цепи на {T} — скорее всего ещё синхронизируется, данные вы видите устаревшие.',
   'err.no_pm_api':'Эта нода не обслуживает рынки предсказаний (нет плагина prediction_market_api). Выберите другую ноду в настройках.',
+  'err.net_local':'Нода на этой машине ({H}) не отвечает. Запущен ли vizd и слушает ли он этот адрес?',
+  'err.net':'Нода ({H}) не отвечает. Проверьте связь или выберите другую ноду в настройках.',
 
   'login.title':'Вход',
   'login.info':'Ключи вычисляются локально и хранятся <b>зашифрованными вашим PIN</b> только в этом браузере. Наружу уходят лишь подписанные транзакции на выбранный узел.',
@@ -801,6 +805,8 @@ var ZH = {
   'node.no_pm_api':'节点有响应，但不提供预测市场服务：缺少 prediction_market_api 插件（HF14 起提供）。请在 config.ini 中加入 <code>plugin = prediction_market_api</code> 并重启节点。',
   'node.behind':'节点落后链上 {T}，很可能仍在同步，你看到的数据已过时。',
   'err.no_pm_api':'该节点不提供预测市场服务（缺少 prediction_market_api 插件）。请在设置中更换节点。',
+  'err.net_local':'本机节点（{H}）无响应。vizd 是否已启动并监听该地址？',
+  'err.net':'节点（{H}）无响应。请检查网络，或在设置中更换节点。',
 
   'login.title':'登录',
   'login.info':'密钥在本地生成，并<b>用你的 PIN 加密</b>后仅保存在此浏览器中。除向所选节点广播已签名交易外，不会向任何地方发送数据。',

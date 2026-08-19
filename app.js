@@ -162,8 +162,16 @@ function fmtLag(sec){ sec=Math.max(0,Number(sec)||0);
 function rawErr(e){ if(!e)return ''; if(typeof e==='string')return e;
   return String(e.message || (e.error&&(e.error.message||e.error)) || JSON.stringify(e)); }
 function noPmApi(e){ return RE_NO_PM_API.test(rawErr(e)); }
+// Сетевой отказ приходит от браузера как «Failed to fetch» (в Safari — «Load failed»), и в таком
+// виде уезжал прямо пользователю. Для ноды на своей машине причина почти всегда одна — vizd ещё
+// не запущен, — поэтому подсказку даём разную для локального адреса и для удалённого.
+var RE_NET_FAIL=/(Failed to fetch|NetworkError|Load failed|connection appears to be offline)/i;
+function nodeHost(){ try{ return new URL(loadNode().ws).host; }catch(e){ return ''; } }
 function errText(e){ if(!e)return t('common.unknown_error');
-  return noPmApi(e) ? t('err.no_pm_api') : rawErr(e); }
+  if(noPmApi(e)) return t('err.no_pm_api');
+  var s=rawErr(e);
+  if(RE_NET_FAIL.test(s)) return t(isLocalNode(loadNode().ws)?'err.net_local':'err.net',{H:nodeHost()});
+  return s; }
 function clip(s,n){ s=String(s==null?'':s); n=n||44; return s.length>n?s.slice(0,n-1)+'…':s; }
 
 /* ---- corner notifications (clickable → navigate to a market) ---- */
