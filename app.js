@@ -42,11 +42,13 @@ var COUNTRIES=[['US','United States'],['CA','Canada'],['GB','United Kingdom'],['
   ['AR','Argentina'],['MX','Mexico'],['ZA','South Africa'],['NG','Nigeria'],['KZ','Kazakhstan']];
 var VIZ_MAINNET_CHAIN = '2040effda178d4fffff5eab7a915d4019879f5205cc5392e4bcced2b6edda0cd';
 var DEFAULT_NODE = { ws:'https://testnet.viz.world/', chain_id:VIZ_MAINNET_CHAIN, prefix:'VIZ' };
-/* one-tap endpoints; "own node" = vizd running on the user's own machine (rpc-endpoint 127.0.0.1:8090) */
+/* "own node" = vizd running on the user's own machine (rpc-endpoint 127.0.0.1:8090) */
+var LOCAL_NODE = { ws:'http://127.0.0.1:8090/', chain_id:VIZ_MAINNET_CHAIN, prefix:'VIZ' };
+/* one-tap endpoints for the node screen */
 var NODE_PRESETS = [
   { key:'node.preset_testnet', ws:'https://testnet.viz.world/', chain_id:VIZ_MAINNET_CHAIN, prefix:'VIZ' },
   { key:'node.preset_mainnet', ws:'https://api.viz.world/',     chain_id:VIZ_MAINNET_CHAIN, prefix:'VIZ' },
-  { key:'node.preset_local',   ws:'http://127.0.0.1:8090/',     chain_id:VIZ_MAINNET_CHAIN, prefix:'VIZ' }
+  Object.assign({ key:'node.preset_local' }, LOCAL_NODE)
 ];
 function isLocalNode(ws){ return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/i.test(ws||''); }
 /* Chrome 138+ gates https-page → loopback behind the Local Network Access permission,
@@ -214,7 +216,15 @@ async function seedWatch(){
 }
 
 /* ------------------------------------------------------ node / chain config */
-function loadNode(){ try{var n=JSON.parse(localStorage.getItem(LS_NODE));if(n&&n.ws)return n;}catch(e){} return Object.assign({},DEFAULT_NODE); }
+/* A copy opened straight from disk is the one shipped next to a node the user runs
+   themselves (the desktop bundle), and file:// is one of the few origins a browser
+   lets reach 127.0.0.1 at all — so start it on the local node instead of the public
+   testnet. Only the default moves; an explicit choice still wins. */
+function loadNode(){
+  try{var n=JSON.parse(localStorage.getItem(LS_NODE));if(n&&n.ws)return n;}catch(e){}
+  if(location.protocol==='file:') return Object.assign({},LOCAL_NODE);
+  return Object.assign({},DEFAULT_NODE);
+}
 function saveNode(n){ localStorage.setItem(LS_NODE, JSON.stringify(n)); }
 
 /* ---- user jurisdiction ('' = none / show all) ---- */
