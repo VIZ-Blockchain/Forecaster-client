@@ -2059,7 +2059,8 @@ async function screenMarket(id){
     html+='<div class="card" id="liq-card"><div class="section-title" style="margin-top:0">'+esc(t('md.liquidity'))+'</div>'+
       '<div class="box info">'+esc(t('lq.risk_notice'))+'</div>';
     if(status===0||status===1){
-      html+='<div class="field"><label class="lab">'+esc(t('md.add_liq'))+'</label><input id="lq-amt" type="number" step="0.001" min="0.001" placeholder="50.000"></div>'+
+      html+='<div class="field"><label class="lab">'+esc(t('md.add_liq'))+'</label><input id="lq-amt" type="number" step="0.001" min="0.001" placeholder="100.000"></div>'+
+      '<div class="hint" id="lq-min"></div>'+
       '<button class="btn ghost" id="lq-go">'+esc(t('md.add_liq_btn'))+'</button>'+
       (isMulti?'<div class="hint">'+esc(t('md.multi_lmsr'))+'</div>':'');
     }
@@ -2400,9 +2401,20 @@ function wireMarket(id,m,ocs,isMulti){
   };
   // add liquidity
   var lq=el('lq-go');
+  // Minimum contribution (pm_min_liquidity): the SAME floor as creating a market, and it applies to
+  // topping one up. Every call mints its own liquidity row, so micro-deposits are refused on-chain —
+  // show the number up front and refuse locally, or the user gets an opaque broadcast failure.
+  var minLiq=0;
+  if(lq) pmProps().then(function(p){
+    minLiq=assetNum(p.pm_min_liquidity)||0;
+    if(!(minLiq>0))return;
+    var h=el('lq-min'); if(h)h.textContent=t('lq.min_hint',{V:fmtViz(minLiq)});
+    var inp=el('lq-amt'); if(inp){inp.min=minLiq; inp.placeholder=minLiq.toFixed(3);}
+  });
   if(lq) lq.onclick=function(){
     if(!requireUnlock())return;
     var amt=el('lq-amt').value; if(!(assetNum(amt)>0)){toast('warn',t('common.enter_amount'));return;}
+    if(minLiq>0&&assetNum(amt)<minLiq){toast('warn',t('lq.below_min',{V:fmtViz(minLiq)}));return;}
     tx(t('txn.add_liq'), function(){return bc('pmAddLiquidity', wifFor('active'), SESSION.account, id, toAsset(amt), []);},
        function(){setTimeout(function(){screenMarket(id);},1200);});
   };
