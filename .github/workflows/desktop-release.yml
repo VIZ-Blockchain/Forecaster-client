@@ -1,0 +1,130 @@
+name: Desktop apps (Pake)
+
+# Собирает десктоп-обёртки Forecaster через Pake (Tauri) для Windows, macOS и Linux.
+#
+# Почему из ЛОКАЛЬНОЙ копии клиента (--use-local-file), а не из URL сайта:
+#   1) приложение работает без интернета и не зависит от доступности Pages;
+#   2) страница, отданная по https, не может достучаться до ноды пользователя на 127.0.0.1 —
+#      Chromium 138+ режет https → loopback гейтом Local Network Access ДО preflight. Локальный
+#      origin такого гейта не имеет, поэтому «Моя нода» в десктопе работает.
+#
+# Иконка в системном трее: --show-system-tray + --system-tray-icon (Windows/macOS/Linux).
+#
+# Триггеры: ручной запуск и публикация релиза (тогда сборки прикрепляются к релизу).
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            label: linux
+          - os: windows-latest
+            label: windows
+          - os: macos-latest
+            label: macos
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # WebKitGTK — движок Tauri на Linux; libayatana-appindicator — БЕЗ неё нет иконки в трее.
+      - name: Linux build deps
+        if: matrix.label == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev patchelf file libssl-dev build-essential curl wget
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: pake-${{ matrix.label }}
+
+      # Статика клиента как есть, без служебных файлов репозитория.
+      - name: Stage client files
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp index.html app.js i18n.js styles.css sw.js manifest.json dist/
+          cp viz.min.js ton-lite.js tonconnect-ui.min.js tonconnect-manifest.json dist/
+          cp logo.png logo-text.svg favicon.ico favicon-16x16.png favicon-32x32.png \
+             favicon-96x96.png apple-icon-180x180.png android-icon-192x192.png dist/
+          test -s dist/index.html && test -s dist/app.js
+
+      # Иконка приложения: Windows требует .ico, macOS — .icns, Linux берёт .png.
+      - name: Prepare icons
+        shell: bash
+        run: |
+          mkdir -p build
+          cp desktop/tray.png build/tray.png
+          case "${{ matrix.label }}" in
+            windows) cp desktop/icon.ico build/icon.ico ;;
+            linux)   cp logo.png build/icon.png ;;
+            macos)
+              mkdir -p build/icon.iconset
+              for s in 16 32 64 128 256 512; do
+                sips -z $s $s logo.png --out build/icon.iconset/icon_${s}x${s}.png >/dev/null
+              done
+              cp logo.png build/icon.iconset/icon_512x512@2x.png
+              iconutil -c icns build/icon.iconset -o build/icon.icns
+              ;;
+          esac
+
+      - name: Install pake-cli
+        run: npm install -g pake-cli
+
+      - name: Build desktop app
+        shell: bash
+        run: |
+          case "${{ matrix.label }}" in
+            windows) ICON=build/icon.ico ;;
+            macos)   ICON=build/icon.icns ;;
+            *)       ICON=build/icon.png ;;
+          esac
+          pake ./dist \
+            --name Forecaster \
+            --icon "$ICON" \
+            --use-local-file \
+            --show-system-tray \
+            --system-tray-icon build/tray.png \
+            --width 1200 \
+            --height 860
+
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          mkdir -p out
+          # Pake кладёт установщик в текущую директорию; расширение зависит от платформы.
+          find . -maxdepth 2 \( -name '*.msi' -o -name '*.exe' -o -name '*.dmg' \
+            -o -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' \) \
+            -not -path './node_modules/*' -exec cp {} out/ \;
+          ls -la out
+          test -n "$(ls -A out)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forecaster-${{ matrix.label }}
+          path: out/*
+          if-no-files-found: error
+
+      - name: Attach to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
