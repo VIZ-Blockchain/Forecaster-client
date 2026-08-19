@@ -113,7 +113,7 @@ jobs:
           # Pake кладёт установщик в текущую директорию; расширение зависит от платформы.
           find . -maxdepth 2 \( -name '*.msi' -o -name '*.exe' -o -name '*.dmg' \
             -o -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' \) \
-            -not -path './node_modules/*' -exec cp {} out/ \;
+            -not -path './node_modules/*' -not -path './out/*' -exec cp {} out/ \;
           ls -la out
           test -n "$(ls -A out)"
 
