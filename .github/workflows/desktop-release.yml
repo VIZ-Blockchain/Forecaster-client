@@ -106,6 +106,25 @@ jobs:
             --width 1200 \
             --height 860
 
+      # Pake прописывает в .desktop собственную заглушку: Name=forecaster и Comment «Turn any
+      # webpage into a desktop app with Rust», а Categories оставляет пустым. В меню приложений
+      # это выглядит чужой программой без раздела — переписываем на свои значения.
+      # AppImage несёт такой же .desktop внутри, но его правка требует пересборки образа — не трогаем.
+      - name: Polish Linux desktop entry
+        if: matrix.label == 'linux'
+        shell: bash
+        run: |
+          deb=$(ls *.deb)
+          tmp=$(mktemp -d)
+          dpkg-deb -R "$deb" "$tmp"
+          for f in "$tmp"/usr/share/applications/*.desktop; do
+            sed -i -e 's/^Name=.*/Name=Forecaster/' \
+                   -e 's|^Comment=.*|Comment=Prediction markets on VIZ|' \
+                   -e 's/^Categories=.*/Categories=Network;Finance;/' "$f"
+          done
+          dpkg-deb -b "$tmp" "$deb"
+          grep -h '^\(Name\|Comment\|Categories\)=' "$tmp"/usr/share/applications/*.desktop
+
       - name: Collect artifacts
         shell: bash
         run: |
