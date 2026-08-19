@@ -37,6 +37,9 @@ var EN = {
   'node.connected':'Connected. Head block <b>{N}</b> at {T} UTC.','node.chainid_shown':'Chain ID: {ID}',
   'node.chainid_missing':'<b>Chain ID not exposed by node</b> — set it manually to sign transactions.',
   'node.conn_failed':'Connection failed: {E}','node.save':'Save','node.saved':'Node saved',
+  'node.no_pm_api':'This node answers, but does not serve prediction markets: it has no prediction_market_api plugin (available from HF14). Add <code>plugin = prediction_market_api</code> to config.ini and restart the node.',
+  'node.behind':'The node is behind the chain by {T} — it is probably still syncing, so the data you see is stale.',
+  'err.no_pm_api':'This node does not serve prediction markets (no prediction_market_api plugin). Pick another node in Settings.',
 
   /* login */
   'login.title':'Sign in',
@@ -422,6 +425,9 @@ var RU = {
   'node.connected':'Подключено. Головной блок <b>{N}</b> в {T} UTC.','node.chainid_shown':'Chain ID: {ID}',
   'node.chainid_missing':'<b>Узел не отдаёт Chain ID</b> — укажите его вручную для подписи транзакций.',
   'node.conn_failed':'Ошибка подключения: {E}','node.save':'Сохранить','node.saved':'Узел сохранён',
+  'node.no_pm_api':'Нода отвечает, но рынки предсказаний не обслуживает: на ней нет плагина prediction_market_api (появился в HF14). Добавьте <code>plugin = prediction_market_api</code> в config.ini и перезапустите ноду.',
+  'node.behind':'Нода отстаёт от цепи на {T} — скорее всего ещё синхронизируется, данные вы видите устаревшие.',
+  'err.no_pm_api':'Эта нода не обслуживает рынки предсказаний (нет плагина prediction_market_api). Выберите другую ноду в настройках.',
 
   'login.title':'Вход',
   'login.info':'Ключи вычисляются локально и хранятся <b>зашифрованными вашим PIN</b> только в этом браузере. Наружу уходят лишь подписанные транзакции на выбранный узел.',
@@ -792,6 +798,9 @@ var ZH = {
   'node.connected':'已连接。最新区块 <b>{N}</b>，时间 {T} UTC。','node.chainid_shown':'链 ID：{ID}',
   'node.chainid_missing':'<b>节点未公开链 ID</b> — 请手动填写以便签名交易。',
   'node.conn_failed':'连接失败：{E}','node.save':'保存','node.saved':'节点已保存',
+  'node.no_pm_api':'节点有响应，但不提供预测市场服务：缺少 prediction_market_api 插件（HF14 起提供）。请在 config.ini 中加入 <code>plugin = prediction_market_api</code> 并重启节点。',
+  'node.behind':'节点落后链上 {T}，很可能仍在同步，你看到的数据已过时。',
+  'err.no_pm_api':'该节点不提供预测市场服务（缺少 prediction_market_api 插件）。请在设置中更换节点。',
 
   'login.title':'登录',
   'login.info':'密钥在本地生成，并<b>用你的 PIN 加密</b>后仅保存在此浏览器中。除向所选节点广播已签名交易外，不会向任何地方发送数据。',

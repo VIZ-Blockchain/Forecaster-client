@@ -44,6 +44,9 @@ var VIZ_MAINNET_CHAIN = '2040effda178d4fffff5eab7a915d4019879f5205cc5392e4bcced2
 var DEFAULT_NODE = { ws:'https://testnet.viz.world/', chain_id:VIZ_MAINNET_CHAIN, prefix:'VIZ' };
 /* "own node" = vizd running on the user's own machine (rpc-endpoint 127.0.0.1:8090) */
 var LOCAL_NODE = { ws:'http://127.0.0.1:8090/', chain_id:VIZ_MAINNET_CHAIN, prefix:'VIZ' };
+// Насколько head ноды может отстать от часов, прежде чем это стоит показать. Блок раз в 3 с,
+// так что пара минут — это уже не сетевой джиттер, а догон цепи.
+var NODE_LAG_WARN_SEC = 180;
 /* one-tap endpoints for the node screen */
 var NODE_PRESETS = [
   { key:'node.preset_testnet', ws:'https://testnet.viz.world/', chain_id:VIZ_MAINNET_CHAIN, prefix:'VIZ' },
@@ -147,8 +150,20 @@ function toast(type,text,timeout){
   if(timeout!==false) setTimeout(function(){ if(d.parentNode)d.parentNode.removeChild(d); }, timeout||4500);
   return d;
 }
-function errText(e){ if(!e)return t('common.unknown_error'); if(typeof e==='string')return e;
-  return e.message || (e.error&&(e.error.message||e.error)) || JSON.stringify(e); }
+// Нода без PM-плагина отвечает сырым C++-ассертом («api_itr != _registered_apis.end(): Could not
+// find API prediction_market_api»). Пользователю это ни о чём не говорит — подменяем объяснением.
+var RE_NO_PM_API=/Could not find API\s+prediction_market_api/i;
+// Отставание ноды показываем крупной единицей: «4571 s» читается хуже, чем «1 h».
+function fmtLag(sec){ sec=Math.max(0,Number(sec)||0);
+  if(sec>=86400)return Math.round(sec/86400)+' d';
+  if(sec>=3600)return Math.round(sec/3600)+' h';
+  if(sec>=60)return Math.round(sec/60)+' min';
+  return sec+' s'; }
+function rawErr(e){ if(!e)return ''; if(typeof e==='string')return e;
+  return String(e.message || (e.error&&(e.error.message||e.error)) || JSON.stringify(e)); }
+function noPmApi(e){ return RE_NO_PM_API.test(rawErr(e)); }
+function errText(e){ if(!e)return t('common.unknown_error');
+  return noPmApi(e) ? t('err.no_pm_api') : rawErr(e); }
 function clip(s,n){ s=String(s==null?'':s); n=n||44; return s.length>n?s.slice(0,n-1)+'…':s; }
 
 /* ---- corner notifications (clickable → navigate to a market) ---- */
@@ -317,7 +332,15 @@ async function testConnection(n){
     var cid=cfg&&(cfg.CHAIN_ID||cfg.VIZ_CHAIN_ID||cfg.STEEM_CHAIN_ID||cfg.WORLD_CHAIN_ID);
     if(cid && n) n.chain_id=cid;
   }catch(e){}
-  return {props:props, latency:latency};
+  // Ответ database_api ещё не значит, что ноду можно использовать: без плагина
+  // prediction_market_api приложению нечего показывать, и «Подключено» вводило в заблуждение —
+  // экран узла горел зелёным, а лента молча оставалась пустой (проверено на мейннет-ноде до HF14).
+  var pm=true;
+  try{ await api('getPmChainProperties'); }catch(e){ if(noPmApi(e))pm=false; }
+  // Нода могла ещё не догнать цепь (снапшот-бутстрап, догон после простоя) — тогда данные есть,
+  // но они старые. Время цепи приходит без таймзоны, это UTC.
+  var lag=Math.max(0, Math.round(Date.now()/1000 - Date.parse(props.time+'Z')/1000));
+  return {props:props, latency:latency, pm:pm, lag:lag};
 }
 
 /* ---------------------------------------------------------- PIN-based vault */
@@ -1062,7 +1085,11 @@ function screenNode(){
       el('n-chain').value=cand.chain_id||'';
       applyStatus(r.latency, r.props);
       el('n-result').innerHTML='<div class="box info">'+t('node.connected',{N:r.props.head_block_number,T:esc(r.props.time)})+' ('+t('status.latency',{N:r.latency})+')'+
-        (cand.chain_id?'<br>'+t('node.chainid_shown',{ID:'<span class="mono">'+esc(cand.chain_id)+'</span>'}):'<br>'+t('node.chainid_missing'))+'</div>';
+        (cand.chain_id?'<br>'+t('node.chainid_shown',{ID:'<span class="mono">'+esc(cand.chain_id)+'</span>'}):'<br>'+t('node.chainid_missing'))+'</div>'
+        // Связь есть — но годна ли нода для работы? Без PM-плагина приложению нечего показывать,
+        // а отставший head даёт устаревшие данные. И то и другое молчало до этой правки.
+        +(r.pm?'':'<div class="box warn">'+t('node.no_pm_api')+'</div>')
+        +(r.lag>NODE_LAG_WARN_SEC?'<div class="box warn">'+t('node.behind',{T:esc(fmtLag(r.lag))})+'</div>':'');
     }catch(e){ CHAIN_OK=false; setNodeStatus('offline'); el('n-result').innerHTML='<div class="box err">'+t('node.conn_failed',{E:esc(errText(e))})+'</div>'; }
   };
   el('n-save').onclick=function(){
