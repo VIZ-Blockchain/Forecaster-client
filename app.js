@@ -3163,22 +3163,25 @@ function screenCreate(){
  *  SCREEN: Balance / wallet
  * ========================================================================= */
 /* ========================================================================= *
- *  Swap VIZ ↔ GRAM (#/swap) — StonFi pool quote + TON Connect (q#597=B)
+ *  Swap VIZ ↔ GRAM (#/swap) — StonFi/DeDust pool quote + TON Connect (q#597=B)
  *  Phase 1: live quote from the on-chain pool, TON wallet connect, and the
  *  VIZ→bridge peg-in leg (a plain transfer to gram.gate with the TON address
  *  as memo). Phase 2: the TON-side legs run in-app via TON Connect
- *  sendTransaction — StonFi v2 swap both ways plus the wVIZ→VIZ peg-out.
- *  Bodies are built by ton-lite.js (byte-verified against @ton/core); router,
- *  jetton wallets, min_ask and gas come from api.ston.fi swap/simulate at send
- *  time (per StonFi docs the router must not be hardcoded). StonFi links stay
- *  as a fallback path.
+ *  sendTransaction — StonFi v2 swap both ways, DeDust vault swap both ways,
+ *  plus the wVIZ→VIZ peg-out. Bodies are built by ton-lite.js (byte-verified
+ *  against @ton/core for StonFi, @dedust/sdk for DeDust); router/jetton-wallets
+ *  /min_ask/gas come from api.ston.fi swap/simulate, DeDust vault addresses are
+ *  the factory's native + wVIZ jetton vault. Web-app links stay as fallback.
  * ========================================================================= */
 var SWAP_POOL='EQDbEgxGk05lGwPGMT44d8Lh0556wXz-0JOVIrfrkeERn39a';               // StonFi wVIZ/GRAM pool
 var WVIZ_MINTER='EQAHujyCaWPjfNaAKHSPDlJZJd2mhWl203eLWShz8PM3_VIZ';             // wVIZ jetton master
 var BRIDGE_ACCOUNT='gram.gate';                                                  // VIZ-side bridge account (peg-in target)
 var STONFI_SWAP_URL='https://app.ston.fi/swap?chartVisible=false&ft=TON&tt='+WVIZ_MINTER;
 var DEDUST_POOL='EQCLB_BYETb6FESEsTPAIwEie4r9EFhFpJTEjlykGXcqr2LD';                   // DeDust wVIZ/GRAM pool
-function dedustSwapUrl(){ return 'https://app.dedust.io/swap?from='+(swapDir==='v2g'?WVIZ_MINTER:'TON')+'&to='+(swapDir==='v2g'?'TON':WVIZ_MINTER); }
+var DEDUST_NATIVE_VAULT='EQDa4VOnTYlLvDJ0gZjNYm5PXfSmmtL6Vs6A_CZEtXCNICq_';           // DeDust native vault (TON side)
+var DEDUST_JETTON_VAULT='EQCfSKSxZYrNHLFcuoCDr17xMKVZ_iIV5c67aCt2w-V8rl_G';           // DeDust wVIZ jetton vault
+/* DeDust web-app deep link: /swap/<FROM>/<TO> (native TON is labelled "GRAM"). */
+function dedustSwapUrl(){ return swapDir==='g2v' ? 'https://app.dedust.io/swap/GRAM/'+WVIZ_MINTER : 'https://app.dedust.io/swap/'+WVIZ_MINTER+'/GRAM'; }
 var GRAM_SVG='<svg viewBox="0 0 24 24" width="15" height="15" style="vertical-align:-2px"><path d="M12 3 21 8 12 21 3 8Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 3v18" stroke="currentColor" stroke-width="1.2"/></svg>';
 var swapDir='v2g';                    // v2g = VIZ→GRAM, g2v = GRAM→VIZ
 var SWAP_POOLS=null;                  // {stonfi:{viz,gram,feePct}, dedust:{...}} — both pools' live reserves
@@ -3276,12 +3279,12 @@ function swapPoolChip(id, dex, res){
   var liq=swapLiqStr(res);
   return '<button class="btn chip'+(SWAP_DEX===id?' active':'')+'" id="swp-pool-'+id+'">'+esc(dex)+' <span class="mut">'+liq+'</span></button>';
 }
-/* Execution area of the DEX leg: in-app StonFi swap, or a DeDust web-app link (in-app DeDust not wired yet). */
+/* Execution area of the DEX leg: in-app swap (StonFi or DeDust) + a web-app fallback link. */
 function swapDexExecHtml(){
-  if(SWAP_DEX==='dedust')
-    return '<a class="btn block mt" href="'+dedustSwapUrl()+'" target="_blank" rel="noopener">'+esc(t('swp.open_dedust'))+'</a>';
+  var link=SWAP_DEX==='dedust'?dedustSwapUrl():STONFI_SWAP_URL;
+  var openLabel=SWAP_DEX==='dedust'?t('swp.open_dedust'):t('swp.open_stonfi');
   return '<button class="btn block mt" id="swp-dexgo">'+esc(t('swp.dex_btn'))+'</button>'+
-    '<a class="hint" style="display:block;text-align:center;margin-top:8px" href="'+STONFI_SWAP_URL+'" target="_blank" rel="noopener">'+esc(t('swp.open_stonfi'))+'</a>';
+    '<a class="hint" style="display:block;text-align:center;margin-top:8px" href="'+link+'" target="_blank" rel="noopener">'+esc(openLabel)+'</a>';
 }
 /* The DEX swap step card (shared by both directions: v2g step 2, g2v step 1). */
 function swapDexCardHtml(){
@@ -3330,31 +3333,61 @@ function wireSwapDexGo(){
     btn.disabled=true; var old=btn.textContent; btn.textContent='…';
     try{
       await loadTonLite();
-      var deadline=Math.floor(Date.now()/1000)+900;
-      if(swapDir==='v2g'){                                     // wVIZ → GRAM: TEP-74 transfer to the router
-        var units=Math.round(amt*1e3);
-        var sim=await stonfiSimulate(WVIZ_MINTER, TON_ZERO, units);
-        var jw=await wvizWalletOf(user);
-        var body=TONLITE.jettonTransferBody({amount:units, destination:sim.router_address, response:user,
-          forwardTon:(sim.gas_params&&sim.gas_params.forward_gas)||'240000000',
-          forwardPayload:TONLITE.stonfiSwapBody({askJettonWallet:sim.ask_jetton_wallet, refund:user,
-            deadline:deadline, minAsk:sim.min_ask_units})});
-        await tcSend(jw, (sim.gas_params&&sim.gas_params.gas_budget)||'300000000', body);
-      } else {                                                 // GRAM → wVIZ: pTON transfer to the router's pTON wallet
-        var nano=Math.round(amt*1e9);
-        var sim2=await stonfiSimulate(TON_ZERO, WVIZ_MINTER, nano);
-        var pton=sim2.router&&sim2.router.pton_wallet_address;
-        if(!pton) throw new Error('router pTON wallet unavailable');
-        var body2=TONLITE.ptonTransferBody({amount:nano, refund:user,
-          forwardPayload:TONLITE.stonfiSwapBody({askJettonWallet:sim2.ask_jetton_wallet, refund:user,
-            deadline:deadline, minAsk:sim2.min_ask_units})});
-        // pTON: attached value = offer + forward gas + pTON transfer gas (0.01)
-        await tcSend(pton, BigInt(nano)+BigInt((sim2.gas_params&&sim2.gas_params.forward_gas)||'300000000')+10000000n, body2);
-      }
+      if(SWAP_DEX==='dedust') await dedustSwapSend(amt, user);
+      else await stonfiSwapSend(amt, user);
       toast('ok',t('swp.dex_sent'));
     }catch(e){ toast('err',errText(e)); }
     btn.disabled=false; btn.textContent=old;
   };
+}
+/* StonFi v2 in-app swap: simulate() is authoritative for router, jetton wallets, min_ask (1%
+ * slippage) and gas; ton-lite.js builds the body cell (byte-verified against @ton/core). */
+async function stonfiSwapSend(amt, user){
+  var deadline=Math.floor(Date.now()/1000)+900;
+  if(swapDir==='v2g'){                                         // wVIZ → GRAM: TEP-74 transfer to the router
+    var units=Math.round(amt*1e3);
+    var sim=await stonfiSimulate(WVIZ_MINTER, TON_ZERO, units);
+    var jw=await wvizWalletOf(user);
+    var body=TONLITE.jettonTransferBody({amount:units, destination:sim.router_address, response:user,
+      forwardTon:(sim.gas_params&&sim.gas_params.forward_gas)||'240000000',
+      forwardPayload:TONLITE.stonfiSwapBody({askJettonWallet:sim.ask_jetton_wallet, refund:user,
+        deadline:deadline, minAsk:sim.min_ask_units})});
+    await tcSend(jw, (sim.gas_params&&sim.gas_params.gas_budget)||'300000000', body);
+  } else {                                                     // GRAM → wVIZ: pTON transfer to the router's pTON wallet
+    var nano=Math.round(amt*1e9);
+    var sim2=await stonfiSimulate(TON_ZERO, WVIZ_MINTER, nano);
+    var pton=sim2.router&&sim2.router.pton_wallet_address;
+    if(!pton) throw new Error('router pTON wallet unavailable');
+    var body2=TONLITE.ptonTransferBody({amount:nano, refund:user,
+      forwardPayload:TONLITE.stonfiSwapBody({askJettonWallet:sim2.ask_jetton_wallet, refund:user,
+        deadline:deadline, minAsk:sim2.min_ask_units})});
+    // pTON: attached value = offer + forward gas + pTON transfer gas (0.01)
+    await tcSend(pton, BigInt(nano)+BigInt((sim2.gas_params&&sim2.gas_params.forward_gas)||'300000000')+10000000n, body2);
+  }
+}
+/* DeDust in-app swap: bodies byte-verified against dedust-io/sdk (VaultNative/VaultJetton). The
+ * quote/limit come from the live pool reserves already in SWAP_RES (1% slippage). Vault addresses
+ * are the DeDust factory's native vault + the wVIZ jetton vault (both immutable on mainnet). */
+async function dedustSwapSend(amt, user){
+  if(!SWAP_RES) throw new Error('pool quote unavailable');
+  var q=swapQuote(amt, swapDir, SWAP_RES);
+  if(!q) throw new Error('quote failed');
+  var deadline=Math.floor(Date.now()/1000)+900;
+  var limit=Math.floor(q.out*0.99);                            // min received, 1% slippage
+  if(swapDir==='v2g'){                                         // wVIZ → GRAM: TEP-74 transfer to the jetton vault
+    var units=Math.round(amt*1e3);                             // wVIZ: 3 decimals
+    var jw=await wvizWalletOf(user);
+    var body=TONLITE.jettonTransferBody({amount:units, destination:DEDUST_JETTON_VAULT, response:user,
+      forwardTon:250000000,                                    // 0.25 TON funds the swap inside the vault
+      forwardPayload:TONLITE.dedustSwapBody({kind:'jetton', poolAddress:DEDUST_POOL, limit:Math.floor(limit*1e9),
+        deadline:deadline, recipient:user})});
+    await tcSend(jw, '300000000', body);                       // 0.3 TON value (0.05 transfer + 0.25 forward)
+  } else {                                                     // GRAM → wVIZ: TON to the native vault
+    var nano=Math.round(amt*1e9);                              // TON: 9 decimals
+    var body=TONLITE.dedustSwapBody({kind:'native', amount:nano, poolAddress:DEDUST_POOL, limit:Math.floor(limit*1e3),
+      deadline:deadline, recipient:user});
+    await tcSend(DEDUST_NATIVE_VAULT, BigInt(nano)+250000000n, body);  // amount + 0.25 TON gas
+  }
 }
 async function screenSwap(){
   if(!requireUnlock())return;

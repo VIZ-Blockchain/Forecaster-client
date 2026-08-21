@@ -159,6 +159,32 @@ function ptonTransferBody(o){
     .storeMaybeRef(o.forwardPayload||null)
     .endCell();
 }
+/* DeDust vault swap: shared swap-params cell (deadline is uint32 here, unlike StonFi's uint64).
+ * recipient = output wallet (set explicitly — for jetton→native the vault otherwise returns
+ * the output to the jetton wallet, not the user), referral/fulfill/reject left empty. */
+function dedustSwapParams(o){
+  return beginCell()
+    .storeUint(o.deadline||0,32)
+    .storeAddress(o.recipient?parseAddress(o.recipient):null)
+    .storeAddress(o.referral?parseAddress(o.referral):null)
+    .storeMaybeRef(o.fulfillPayload||null)
+    .storeMaybeRef(o.rejectPayload||null)
+    .endCell();
+}
+/* DeDust vault swap body, two variants (op + layout per dedust-io/sdk Vault.ts):
+ *  native (TON→jetton):  op:32 queryId:64 amount:Coins pool:Addr reserved:1 limit:Coins next:MaybeRef params:^Cell
+ *  jetton (jetton→TON):  op:32 pool:Addr reserved:1 limit:Coins next:MaybeRef params:^Cell (amount rides the TEP-74 wrapper) */
+function dedustSwapBody(o){
+  var native=o.kind==='native';
+  var b=beginCell().storeUint(native?0xea06185d:0xe3a0d482,32);
+  if(native) b.storeUint(o.queryId||0,64).storeCoins(o.amount);
+  b.storeAddress(parseAddress(o.poolAddress))
+   .storeUint(0,1)
+   .storeCoins(o.limit||0)
+   .storeMaybeRef(o.next||null)
+   .storeRef(dedustSwapParams(o));
+  return b.endCell();
+}
 
 /* ---- bytes/base64/utf8 (browser + node) ---- */
 function utf8(s){ if(typeof TextEncoder!=='undefined') return new TextEncoder().encode(s);
@@ -172,7 +198,8 @@ function hexToU8(h){ var u8=new Uint8Array(h.length/2); for(var i=0;i<u8.length;
 var TONLITE={beginCell:beginCell, cellToBoc:cellToBoc, cellToBocBase64:cellToBocBase64,
   parseAddress:parseAddress, toFriendly:toFriendly,
   commentCell:commentCell, jettonTransferBody:jettonTransferBody,
-  stonfiSwapBody:stonfiSwapBody, ptonTransferBody:ptonTransferBody};
+  stonfiSwapBody:stonfiSwapBody, ptonTransferBody:ptonTransferBody,
+  dedustSwapBody:dedustSwapBody, dedustSwapParams:dedustSwapParams};
 if(typeof module!=='undefined'&&module.exports) module.exports=TONLITE;
 if(typeof window!=='undefined') window.TONLITE=TONLITE;
 })();
