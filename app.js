@@ -498,6 +498,8 @@ async function createAccountViaPow(login, btn){
   login = (login||'').trim().toLowerCase();
   if(!/^[a-z0-9-]{3,16}$/.test(login)) throw new Error(t('login.login_bad'));
   btn.textContent = t('login.creating');
+  var avail = await regApi('check-login-available', {account_login: login});
+  if(avail.result !== 'success') throw new Error(t('login.login_taken'));
   var ch = await regApi('get-challenge');
   btn.textContent = t('login.mining', {N:0});
   var nonce = await regGrindNonce(ch.id, ch.challenge, function(n){ btn.textContent = t('login.mining', {N:n}); });
