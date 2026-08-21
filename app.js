@@ -33,6 +33,13 @@ var LS_LOCK     = 'lc_lock_signal';  // localStorage broadcast to lock every tab
 var DEFAULT_AUTOLOCK = 600;          // 10 min
 var BC = (typeof BroadcastChannel!=='undefined') ? new BroadcastChannel('lc_wallet') : null; // cross-tab relay
 
+/* Free account registration via the start.viz.world proof-of-work open API. The account
+   is created on the VIZ MAINNET (the faucet), independent of the node this client points at. */
+var REG_BASE = 'https://start.viz.world';
+var REG_POW_OFFSET = 3;    // must match config.pow.offset on the server
+var REG_POW_PREFIX = '51'; // must match config.pow.prefix ('51' → the "Z" of VI-Z)
+var REG_GRIND_CHUNK = 400; // nonces per tick, so the UI stays responsive
+
 /* Common jurisdictions for the settings picker (ISO 3166-1 alpha-2 + English name). */
 var COUNTRIES=[['US','United States'],['CA','Canada'],['GB','United Kingdom'],['DE','Germany'],
   ['FR','France'],['ES','Spain'],['IT','Italy'],['NL','Netherlands'],['CH','Switzerland'],
@@ -451,6 +458,81 @@ async function persistSession(sess,pin){
   var blob=await encryptVault({account:sess.account,wifs:sess.wifs}, pin);
   localStorage.setItem(LS_VAULT, JSON.stringify(blob));
   localStorage.setItem(LS_ACCT, sess.account);
+}
+
+/* ------------------------------------------- account creation (PoW open API) */
+/* CSPRNG password — the account's master password; shown for backup, never sent. */
+function regPassGen(length){
+  var charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+-=_:;.,@!^&*$';
+  var out = '', rnd = new Uint32Array(length); crypto.getRandomValues(rnd);
+  for(var i=0;i<length;i++) out += charset.charAt(rnd[i] % charset.length);
+  return out;
+}
+/* Cross-origin call to the start.viz.world open API (form-urlencoded, JSON back). */
+async function regApi(action, data){
+  var r = await fetch(REG_BASE + '/ajax/' + action + '/', {
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:new URLSearchParams(data||{}).toString()
+  });
+  return r.json();
+}
+/* Grind a nonce whose throwaway key carries the required prefix; yields to keep the UI alive. */
+function regGrindNonce(id, challenge, onProgress){
+  return new Promise(function(resolve){
+    var nonce = 0;
+    function step(){
+      for(var i=0;i<REG_GRIND_CHUNK;i++){
+        nonce++;
+        var wif = viz.auth.toWif(''+id, ''+challenge, nonce);
+        if(viz.auth.wifToPublic(wif).substr(REG_POW_OFFSET, REG_POW_PREFIX.length) === REG_POW_PREFIX){ resolve(nonce); return; }
+      }
+      if(onProgress) onProgress(nonce);
+      setTimeout(step, 0);
+    }
+    step();
+  });
+}
+/* Register @login on mainnet via the PoW faucet, then hand the user the keys for backup. */
+async function createAccountViaPow(login, btn){
+  login = (login||'').trim().toLowerCase();
+  if(!/^[a-z0-9-]{3,16}$/.test(login)) throw new Error(t('login.login_bad'));
+  btn.textContent = t('login.creating');
+  var ch = await regApi('get-challenge');
+  btn.textContent = t('login.mining', {N:0});
+  var nonce = await regGrindNonce(ch.id, ch.challenge, function(n){ btn.textContent = t('login.mining', {N:n}); });
+  var password = regPassGen(100);
+  var keys = viz.auth.getPrivateKeys(login, password, ['master','active','regular','memo']);
+  btn.textContent = t('login.creating');
+  var res = await regApi('account-create', {
+    challenge_id: ch.id, challenge_resolver: nonce, account_login: login,
+    public_master: keys.masterPubkey, public_active: keys.activePubkey,
+    public_regular: keys.regularPubkey, public_memo: keys.memoPubkey
+  });
+  if(res.result !== 'success'){
+    var msg = res.result === 'login not available' ? t('login.login_taken')
+            : (res.result === 'too much attempts' ? t('login.too_many')
+            : t('login.create_failed', {E: res.result || 'unknown'}));
+    throw new Error(msg);
+  }
+  showRegBackup(login, keys, password);
+}
+/* Keys are the only access to the new account; force a backup before storing a PIN-locked session. */
+function showRegBackup(login, keys, password){
+  var sess = { account:login, wifs:{active:keys.active, regular:keys.regular, memo:keys.memo}, pubs:{active:keys.activePubkey} };
+  var fields = ['master','active','regular','memo'].map(function(role){
+    return '<label class="lab">'+esc(role)+'</label>'
+      + '<input class="mono" readonly value="'+esc(keys[role])+'" onclick="this.select()">';
+  }).join('');
+  openModal(t('reg.backup_title', {ACC:login}), h(
+    '<div class="box warn">'+t('reg.backup_info', {ACC:login})+'</div>',
+    '<label class="lab">'+esc(t('reg.backup_password'))+'</label>',
+    '<input class="mono" readonly value="'+esc(password)+'" onclick="this.select()">',
+    fields
+  ), [
+    {label:t('common.cancel'), cls:'ghost', act:function(){ closeModal(); toast('warn', t('reg.backup_skipped', {ACC:login})); }},
+    {label:t('reg.backup_continue'), cls:'', act:function(){ closeModal(); askNewPin(sess); }}
+  ]);
 }
 function wifFor(role){ // active default; regular used for dispute votes
   if(!SESSION) throw new Error(t('toast.wallet_locked'));
@@ -1117,6 +1199,7 @@ function screenLogin(){
       '<div class="filters">',
         '<button class="btn chip active" id="m-wif">'+esc(t('login.mode_wif'))+'</button>',
         '<button class="btn chip" id="m-pass">'+esc(t('login.mode_pass'))+'</button>',
+        '<button class="btn chip" id="m-new">'+esc(t('login.mode_new'))+'</button>',
       '</div>',
       '<label class="lab">'+esc(t('login.account'))+' <span class="mut">('+esc(t('login.optional'))+')</span></label>',
       '<input id="lg-acc" type="text" autocomplete="off" spellcheck="false" placeholder="'+esc(t('login.account_ph_opt'))+'">',
@@ -1131,18 +1214,32 @@ function screenLogin(){
         '<label class="lab">'+esc(t('login.password'))+'</label>',
         '<input id="lg-pass" type="password" autocomplete="off" placeholder="'+esc(t('login.password_ph'))+'">',
       '</div>',
+      '<div id="lg-new-fields" class="hide">',
+        '<div class="box info">'+t('login.create_info')+'</div>',
+      '</div>',
       '<button class="btn block mt" id="lg-go">'+esc(t('login.verify'))+'</button>',
     '</div>',
     '<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('common.language'))+'</div>'+langSelHtml('lg-lang')+'</div>'
   ));
   wireLangSel('lg-lang');
   var mode='wif';
-  el('m-pass').onclick=function(){mode='pass';el('m-pass').classList.add('active');el('m-wif').classList.remove('active');el('lg-pass-fields').classList.remove('hide');el('lg-wif-fields').classList.add('hide');};
-  el('m-wif').onclick=function(){mode='wif';el('m-wif').classList.add('active');el('m-pass').classList.remove('active');el('lg-wif-fields').classList.remove('hide');el('lg-pass-fields').classList.add('hide');};
+  function setLoginMode(m){
+    mode=m;
+    ['m-wif','m-pass','m-new'].forEach(function(id){ el(id).classList.toggle('active', id==='m-'+m); });
+    el('lg-wif-fields').classList.toggle('hide', m!=='wif');
+    el('lg-pass-fields').classList.toggle('hide', m!=='pass');
+    el('lg-new-fields').classList.toggle('hide', m!=='new');
+    el('lg-acc-hint').classList.toggle('hide', m==='new');
+    el('lg-go').textContent = m==='new' ? t('login.create_btn') : t('login.verify');
+  }
+  el('m-pass').onclick=function(){setLoginMode('pass');};
+  el('m-wif').onclick=function(){setLoginMode('wif');};
+  el('m-new').onclick=function(){setLoginMode('new');};
   el('lg-go').onclick=async function(){
     var acc=el('lg-acc').value.trim().toLowerCase();
-    var btn=el('lg-go'); btn.disabled=true; btn.textContent=t('login.verifying');
+    var btn=el('lg-go'); btn.disabled=true; btn.textContent = mode==='new' ? t('login.creating') : t('login.verifying');
     try{
+      if(mode==='new'){ await createAccountViaPow(acc, btn); btn.disabled=false; btn.textContent=t('login.create_btn'); return; }
       // WIF mode with no login typed → resolve the account from the active key (the faucet hands out
       // keys and users often don't note the generated name). get_key_references maps pubkey → account.
       if(mode!=='pass' && !acc){ acc=await resolveAccountFromKey(el('lg-active').value.trim()); if(acc) el('lg-acc').value=acc; }
@@ -1151,7 +1248,7 @@ function screenLogin(){
         ? await buildSessionFromPassword(acc, el('lg-pass').value)
         : await buildSessionFromWif(acc, el('lg-active').value.trim(), el('lg-regular').value.trim());
       askNewPin(sess);
-    }catch(e){ toast('err',errText(e),7000); btn.disabled=false; btn.textContent=t('login.verify'); }
+    }catch(e){ toast('err',errText(e),7000); btn.disabled=false; btn.textContent = mode==='new' ? t('login.create_btn') : t('login.verify'); }
   };
 }
 
