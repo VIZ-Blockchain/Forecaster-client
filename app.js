@@ -2930,17 +2930,50 @@ function disputeCreate(id,ocs){
     closeModal(); tx(t('txn.open_dispute'),function(){return bc('pmDisputeCreate',wifFor('active'),SESSION.account,id,oc,reason,[]);},function(){setTimeout(function(){screenMarket(id);},1500);});
   }}]);
 }
-function disputeVote(id,ocs){
+async function disputeVote(id,ocs){
   if(!requireUnlock())return;
   if(!SESSION.wifs.regular){toast('warn',t('dp.vote_regular_warn'));}
+  // Dispute ballots are FREE, so the node gates them by EFFECTIVE VESTING (the unit the tally weighs):
+  // pm_dispute_vote_min_vesting (1000 VIZ default, HF14 median). Show the floor up front and refuse
+  // locally below it — otherwise the broadcast returns OK and the vote silently never lands.
+  var floorRaw=Math.round(assetNum((await pmProps()).pm_dispute_vote_min_vesting)*1000)||0;
   openModal(t('dp.vote_title'), h(
     '<label class="lab">'+esc(t('dp.vote_outcome'))+'</label><select id="v-oc"><option value="-1">'+esc(t('dp.uphold'))+'</option>'+
       ocs.map(function(n,i){return '<option value="'+i+'">'+esc(n)+'</option>';}).join('')+'</select>',
-    '<label class="lab">'+esc(t('dp.vote_weight'))+'</label><input id="v-pct" type="number" min="0" max="100" value="100">'
+    '<label class="lab">'+esc(t('dp.vote_weight'))+'</label><input id="v-pct" type="number" min="0" max="100" value="100">',
+    floorRaw?('<p class="mut small">'+esc(t('dp.vote_min',{V:fmtViz(floorRaw)}))+'</p>'):''
   ),[{label:t('common.cancel'),cls:'ghost',act:closeModal},{label:t('dp.vote'),cls:'',act:function(){
     var oc=Number(el('v-oc').value), pct=toBP(el('v-pct').value);
-    closeModal(); tx(t('txn.dispute_vote'),function(){return bc('pmDisputeVote',wifFor('regular'),SESSION.account,id,oc,pct,[]);},function(){setTimeout(function(){screenMarket(id);},1500);});
+    disputeVoteSend(id,oc,pct,floorRaw);
   }}]);
+}
+function disputeVoteSend(id,oc,pct,floorRaw){
+  function doSend(){ closeModal(); tx(t('txn.dispute_vote'),function(){return bc('pmDisputeVote',wifFor('regular'),SESSION.account,id,oc,pct,[]);},function(){setTimeout(function(){screenMarket(id);},1500);}); }
+  if(!floorRaw){ doSend(); return; }
+  // Pre-flight vesting check: a ballot below the floor is rejected on-chain (the node weighs the tally
+  // by effective vesting), and on testnet a sync broadcast can return OK while the apply rejects —
+  // showing a false ✓. Verify up front and give a clear message instead of a phantom success.
+  effectiveVestingRaw(SESSION.account).then(function(eff){
+    if(eff==null){ doSend(); return; }   // probe failed (network) → let the node be the judge
+    if(eff<floorRaw){ var msg=t('dp.vote_below_min',{HAVE:fmtViz(eff),V:fmtViz(floorRaw)}); toast('warn',msg); persistErr(t('txn.dispute_vote'),msg); return; }
+    doSend();
+  }).catch(function(){ doSend(); });
+}
+/* Effective vesting in RAW VIZ (raw = share_type ×1000, what fmtViz divides by 1000). Mirrors the
+   node's effective_vesting_shares() = vesting − delegated + received, converted to VIZ via the
+   vesting share price (total_vesting_fund / total_vesting_shares). Returns null when the probe
+   fails (missing account/DGP or network) so the caller falls through to the node — a probe failure
+   must NOT be mistaken for "0 vesting", or a network hiccup would refuse a valid voter. */
+function effectiveVestingRaw(name){
+  return Promise.all([api('getAccounts',[name]), api('getDynamicGlobalProperties')]).then(function(r){
+    var acc=(r[0]&&r[0][0]);
+    if(!acc) return null;
+    var dgp=r[1]||{};
+    var eff=assetNum(acc.vesting_shares)-assetNum(acc.delegated_vesting_shares)+assetNum(acc.received_vesting_shares);
+    var tvf=assetNum(dgp.total_vesting_fund), tvs=assetNum(dgp.total_vesting_shares);
+    if(!(tvs>0)) return null;
+    return Math.round(eff*tvf/tvs*1000);   // display SHARES × (VIZ per SHARE) → display VIZ → raw VIZ
+  }).catch(function(){ return null; });
 }
 function disputeResolve(id,ocs,m){
   if(!requireUnlock())return;
