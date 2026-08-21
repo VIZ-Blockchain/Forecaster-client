@@ -3177,9 +3177,13 @@ var SWAP_POOL='EQDbEgxGk05lGwPGMT44d8Lh0556wXz-0JOVIrfrkeERn39a';               
 var WVIZ_MINTER='EQAHujyCaWPjfNaAKHSPDlJZJd2mhWl203eLWShz8PM3_VIZ';             // wVIZ jetton master
 var BRIDGE_ACCOUNT='gram.gate';                                                  // VIZ-side bridge account (peg-in target)
 var STONFI_SWAP_URL='https://app.ston.fi/swap?chartVisible=false&ft=TON&tt='+WVIZ_MINTER;
+var DEDUST_POOL='EQCLB_BYETb6FESEsTPAIwEie4r9EFhFpJTEjlykGXcqr2LD';                   // DeDust wVIZ/GRAM pool
+function dedustSwapUrl(){ return 'https://app.dedust.io/swap?from='+(swapDir==='v2g'?WVIZ_MINTER:'TON')+'&to='+(swapDir==='v2g'?'TON':WVIZ_MINTER); }
 var GRAM_SVG='<svg viewBox="0 0 24 24" width="15" height="15" style="vertical-align:-2px"><path d="M12 3 21 8 12 21 3 8Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 3v18" stroke="currentColor" stroke-width="1.2"/></svg>';
 var swapDir='v2g';                    // v2g = VIZ→GRAM, g2v = GRAM→VIZ
-var SWAP_RES=null;                    // last pool snapshot {viz, gram, feePct}
+var SWAP_POOLS=null;                  // {stonfi:{viz,gram,feePct}, dedust:{...}} — both pools' live reserves
+var SWAP_DEX='stonfi';                // selected DEX for the swap leg ('stonfi' | 'dedust')
+var SWAP_RES=null;                    // active pool snapshot {viz, gram, feePct} = SWAP_POOLS[SWAP_DEX]
 var TC_UI=null;                       // TonConnectUI singleton (SDK is lazy-loaded: 400k, swap-only)
 function tcAddress(){ try{ var a=TC_UI&&TC_UI.account&&TC_UI.account.address; return a?TON_CONNECT_UI.toUserFriendlyAddress(a):''; }catch(e){ return ''; } }
 function loadTonConnectSdk(){
@@ -3223,14 +3227,29 @@ function tcSend(toFriendly, amountNano, bodyCell){
     messages: [{address:toFriendly, amount:String(amountNano), payload:TONLITE.cellToBocBase64(bodyCell)}]
   });
 }
-async function fetchSwapPool(){
+async function fetchSwapPools(){
+  // StonFi via public REST (fee units 0.01% → 0.3% total)
   var r=await fetch('https://api.ston.fi/v1/pools/'+SWAP_POOL);
-  var d=await r.json(); var p=d&&d.pool; if(!p||p.reserve0==null) throw new Error('pool data unavailable');
+  var d=await r.json(); var p=d&&d.pool; if(!p||p.reserve0==null) throw new Error('StonFi pool unavailable');
   var t0viz=String(p.token0_address||'').toUpperCase().indexOf('VIZ')>=0;      // wVIZ side by minter address
-  var viz=Number(t0viz?p.reserve0:p.reserve1)/1e3;                             // wVIZ: 3 decimals
-  var gram=Number(t0viz?p.reserve1:p.reserve0)/1e9;                            // GRAM (TON): 9 decimals
-  var feePct=(Number(p.lp_fee||20)+Number(p.protocol_fee||10))/100;           // StonFi fee units = 0.01% → 0.3% total
-  return {viz:viz, gram:gram, feePct:feePct};
+  var stonfi={
+    viz:Number(t0viz?p.reserve0:p.reserve1)/1e3,                               // wVIZ: 3 decimals
+    gram:Number(t0viz?p.reserve1:p.reserve0)/1e9,                              // GRAM (TON): 9 decimals
+    feePct:(Number(p.lp_fee||20)+Number(p.protocol_fee||10))/100
+  };
+  // DeDust: their REST does not index our pool → read reserves straight from the pool
+  // contract (native balance = GRAM side, jetton balance = wVIZ side), cf. viz/tools/wviz-liquidity.php.
+  // Non-fatal: if DeDust is unreadable we degrade to StonFi-only rather than fail the whole screen.
+  var dedust=null;
+  try{
+    var na=await (await fetch('https://tonapi.io/v2/accounts/'+DEDUST_POOL)).json();
+    var gram=Number(na&&na.balance||0)/1e9;
+    var jj=await (await fetch('https://tonapi.io/v2/accounts/'+DEDUST_POOL+'/jettons')).json();
+    var viz=0;
+    (jj&&jj.balances||[]).forEach(function(b){ if(String((b.jetton&&b.jetton.symbol)||'').toUpperCase().indexOf('VIZ')>=0) viz=Number(b.balance)/1e3; });
+    if(viz>0&&gram>0) dedust={viz:viz, gram:gram, feePct:0.25};               // DeDust volatile-pool fee
+  }catch(e){ dedust=null; }
+  return {stonfi:stonfi, dedust:dedust};
 }
 /* Constant-product quote: out = R_out·Δ/(R_in+Δ) with the DEX fee taken off the input. */
 function swapQuote(amtIn, dir, res){
@@ -3243,99 +3262,65 @@ function swapQuote(amtIn, dir, res){
   return {out:out, mid:mid, impact:impact};
 }
 function swapNodeIsMainnet(){ var ws=String((loadNode()||{}).ws||''); return !/testnet/i.test(ws); }
-async function screenSwap(){
-  if(!requireUnlock())return;
-  setContent('<div class="title">'+esc(t('swp.title'))+' '+GRAM_SVG+'</div><div id="swp-box"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
-  var res=null, err='';
-  try{ res=await fetchSwapPool(); SWAP_RES=res; }catch(e){ err=errText(e); }
-  var box=el('swp-box'); if(!box) return;
-  if(!res){ box.innerHTML='<div class="box err">'+esc(t('swp.pool_failed',{E:err}))+'</div>'; return; }
-  var mainnet=swapNodeIsMainnet();
-  var html='<div class="card">'+
-    '<div class="filters">'+
-      '<button class="btn chip'+(swapDir==='v2g'?' active':'')+'" id="swp-v2g">VIZ → GRAM</button>'+
-      '<button class="btn chip'+(swapDir==='g2v'?' active':'')+'" id="swp-g2v">GRAM → VIZ</button></div>'+
-    '<label class="lab">'+esc(t('swp.amount',{S:swapDir==='v2g'?'VIZ':'GRAM'}))+'</label>'+
-    '<input id="swp-amt" type="number" step="0.001" min="0">'+
-    '<div class="kv"><b>'+esc(t('swp.receive'))+'</b><span id="swp-out">—</span></div>'+
-    '<div class="kv"><b>'+esc(t('swp.rate'))+'</b><span id="swp-rate">—</span></div>'+
-    '<div class="kv"><b>'+esc(t('swp.impact'))+'</b><span id="swp-imp">—</span></div>'+
-    '<div class="hint">'+esc(t('swp.pool_line',{V:fmtVizK(Math.round(res.viz*1000)), G:res.gram.toFixed(1), F:res.feePct}))+'</div>'+
-  '</div>';
-  html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('swp.wallet'))+'</div>'+
-    '<div id="tc-root"></div><div class="hint" id="tc-addr"></div></div>';
-  if(swapDir==='v2g'){
-    html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('swp.step1_v2g'))+'</div>'+
-      '<div class="hint mb">'+esc(t('swp.pegin_hint',{B:BRIDGE_ACCOUNT}))+'</div>'+
-      '<label class="lab">'+esc(t('swp.ton_addr'))+'</label><input id="swp-tonaddr" type="text" placeholder="UQ…">'+
-      '<label class="lab">'+esc(t('common.amount_viz'))+'</label><input id="swp-pegamt" type="number" step="0.001" min="0.001">'+
-      (mainnet?'':'<div class="box warn">'+esc(t('swp.testnet_block'))+'</div>')+
-      '<button class="btn block mt" id="swp-pegin"'+(mainnet?'':' disabled')+'>'+esc(t('swp.pegin_btn'))+'</button></div>';
-    html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('swp.step2_v2g'))+'</div>'+
-      '<div class="hint mb">'+esc(t('swp.dex_hint'))+'</div>'+
-      '<label class="lab">'+esc(t('swp.dex_amt',{S:'wVIZ'}))+'</label><input id="swp-dexamt" type="number" step="0.001" min="0.001">'+
-      '<div class="kv"><b>'+esc(t('swp.min_recv'))+'</b><span id="swp-dexmin">—</span></div>'+
-      '<button class="btn block mt" id="swp-dexgo">'+esc(t('swp.dex_btn'))+'</button>'+
-      '<a class="hint" style="display:block;text-align:center;margin-top:8px" href="'+STONFI_SWAP_URL+'" target="_blank" rel="noopener">'+esc(t('swp.open_stonfi'))+'</a></div>';
-  } else {
-    html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('swp.step1_g2v'))+'</div>'+
-      '<div class="hint mb">'+esc(t('swp.dex_hint'))+'</div>'+
-      '<label class="lab">'+esc(t('swp.dex_amt',{S:'GRAM'}))+'</label><input id="swp-dexamt" type="number" step="0.001" min="0.001">'+
-      '<div class="kv"><b>'+esc(t('swp.min_recv'))+'</b><span id="swp-dexmin">—</span></div>'+
-      '<button class="btn block mt" id="swp-dexgo">'+esc(t('swp.dex_btn'))+'</button>'+
-      '<a class="hint" style="display:block;text-align:center;margin-top:8px" href="'+STONFI_SWAP_URL+'" target="_blank" rel="noopener">'+esc(t('swp.open_stonfi'))+'</a></div>';
-    html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('swp.step2_g2v'))+'</div>'+
-      '<div class="hint mb">'+esc(t('swp.pegout_hint'))+'</div>'+
-      '<label class="lab">'+esc(t('swp.dex_amt',{S:'wVIZ'}))+'</label><input id="swp-poamt" type="number" step="0.001" min="0.001">'+
-      '<label class="lab">'+esc(t('swp.viz_acct'))+'</label><input id="swp-poacct" type="text" value="'+esc(SESSION.account||'')+'">'+
-      '<div class="hint mb">'+esc(t('swp.pegout_fee'))+'</div>'+
-      '<button class="btn block mt" id="swp-pogo">'+esc(t('swp.pegout_btn'))+'</button>'+
-      '<a class="hint" style="display:block;text-align:center;margin-top:8px" href="https://gateway.viz.cx" target="_blank" rel="noopener">gateway.viz.cx</a></div>';
-  }
-  html+='<div class="hint" style="text-align:center">'+esc(t('swp.bridge_note'))+'</div>';
-  box.innerHTML=html;
-  el('swp-v2g').onclick=function(){ if(swapDir!=='v2g'){swapDir='v2g'; screenSwap();} };
-  el('swp-g2v').onclick=function(){ if(swapDir!=='g2v'){swapDir='g2v'; screenSwap();} };
-  el('swp-amt').oninput=function(){
-    var q=swapQuote(assetNum(this.value), swapDir, SWAP_RES);
-    var outSym=swapDir==='v2g'?'GRAM':'VIZ', inSym=swapDir==='v2g'?'VIZ':'GRAM';
-    el('swp-out').textContent=q?q.out.toFixed(3)+' '+outSym:'—';
-    el('swp-rate').textContent=SWAP_RES?('1 '+inSym+' ≈ '+swapQuote(1,swapDir,SWAP_RES).out.toFixed(swapDir==='v2g'?6:3)+' '+outSym):'—';
-    el('swp-imp').textContent=q?q.impact.toFixed(2)+'%':'—';
-    if(q&&el('swp-pegamt')&&swapDir==='v2g') el('swp-pegamt').value=assetNum(this.value)||'';
-  };
-  // TON Connect: lazy-load the vendored SDK and mount its connect button
-  try{
-    await loadTonConnectSdk();
-    if(!TC_UI){
-      TC_UI=new TON_CONNECT_UI.TonConnectUI({
-        manifestUrl:'https://viz-blockchain.github.io/Forecaster-client/tonconnect-manifest.json',
-        buttonRootId:'tc-root'
-      });
-      TC_UI.onStatusChange(function(){ syncTcState(); });
-    } else { TC_UI.uiOptions={buttonRootId:'tc-root'}; }
-    syncTcState();
-  }catch(e){ var tr=el('tc-root'); if(tr) tr.innerHTML='<div class="box warn">'+esc(errText(e))+'</div>'; }
-  function syncTcState(){
-    var a=tcAddress(), ad=el('tc-addr');
-    if(ad) ad.textContent=a?t('swp.connected',{A:a}):t('swp.not_connected');
-    var ta=el('swp-tonaddr'); if(ta&&a&&!ta.value) ta.value=a;                 // prefill peg-in memo with the connected wallet
-  }
-  var peg=el('swp-pegin');
-  if(peg) peg.onclick=function(){
-    var addr=(el('swp-tonaddr').value||'').trim(), amt=el('swp-pegamt').value;
-    if(!/^(EQ|UQ)[A-Za-z0-9_-]{46}$/.test(addr)){ toast('warn',t('swp.bad_addr')); return; }
-    if(!(assetNum(amt)>0)){ toast('warn',t('bal.fill_recipient')); return; }
-    tx(t('swp.pegin_btn'),function(){ return bc('transfer',wifFor('active'),SESSION.account,BRIDGE_ACCOUNT,toAsset(amt),addr); },
-      function(){ toast('ok',t('swp.pegin_sent',{A:addr})); });
-  };
-  var dexAmt=el('swp-dexamt');
-  if(dexAmt) dexAmt.oninput=function(){
-    var q=swapQuote(assetNum(this.value), swapDir, SWAP_RES);
-    el('swp-dexmin').textContent=q?(q.out*0.99).toFixed(swapDir==='v2g'?6:3)+' '+(swapDir==='v2g'?'GRAM':'wVIZ'):'—';
-  };
-  /* In-app DEX leg: StonFi v2 swap via TON Connect. simulate() is authoritative for router,
-   * jetton wallets, min_ask (1% slippage) and gas; ton-lite.js builds the body cell. */
+function swapDexName(){ return SWAP_DEX==='dedust'?'DeDust':'StonFi'; }
+/* Liquidity shorthand for a pool: "12.3k wVIZ / 2.1k GRAM". */
+function swapLiqStr(res){
+  function k(x){ return x>=1e6?(x/1e6).toFixed(1)+'M':(x>=1000?(x/1000).toFixed(1)+'k':x.toFixed(1)); }
+  return k(res.viz)+' wVIZ / '+k(res.gram)+' GRAM';
+}
+function swapPoolLineText(){
+  var r=SWAP_RES; if(!r) return '';
+  return t('swp.pool_line',{D:swapDexName(), L:swapLiqStr(r), F:r.feePct});
+}
+function swapPoolChip(id, dex, res){
+  var liq=swapLiqStr(res);
+  return '<button class="btn chip'+(SWAP_DEX===id?' active':'')+'" id="swp-pool-'+id+'">'+esc(dex)+' <span class="mut">'+liq+'</span></button>';
+}
+/* Execution area of the DEX leg: in-app StonFi swap, or a DeDust web-app link (in-app DeDust not wired yet). */
+function swapDexExecHtml(){
+  if(SWAP_DEX==='dedust')
+    return '<a class="btn block mt" href="'+dedustSwapUrl()+'" target="_blank" rel="noopener">'+esc(t('swp.open_dedust'))+'</a>';
+  return '<button class="btn block mt" id="swp-dexgo">'+esc(t('swp.dex_btn'))+'</button>'+
+    '<a class="hint" style="display:block;text-align:center;margin-top:8px" href="'+STONFI_SWAP_URL+'" target="_blank" rel="noopener">'+esc(t('swp.open_stonfi'))+'</a>';
+}
+/* The DEX swap step card (shared by both directions: v2g step 2, g2v step 1). */
+function swapDexCardHtml(){
+  var isV2g=swapDir==='v2g';
+  var h='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t(isV2g?'swp.step2_v2g':'swp.step1_g2v'))+'</div>';
+  if(SWAP_POOLS){ h+='<div class="filters" id="swp-pools">'+swapPoolChip('stonfi','StonFi',SWAP_POOLS.stonfi);
+    if(SWAP_POOLS.dedust) h+=swapPoolChip('dedust','DeDust',SWAP_POOLS.dedust);
+    h+='</div>'; }
+  h+='<div class="hint mb" id="swp-dexhint">'+esc(t(SWAP_DEX==='dedust'?'swp.dedust_hint':'swp.dex_hint'))+'</div>';
+  h+='<label class="lab">'+esc(t('swp.dex_amt',{S:isV2g?'wVIZ':'GRAM'}))+'</label><input id="swp-dexamt" type="number" step="0.001" min="0.001">';
+  h+='<div class="kv"><b>'+esc(t('swp.min_recv'))+'</b><span id="swp-dexmin">—</span></div>';
+  h+='<div id="swp-dexgo-wrap">'+swapDexExecHtml()+'</div></div>';
+  return h;
+}
+/* Recompute all live quote numbers from the current inputs + selected pool. */
+function refreshSwapQuote(){
+  var amtEl=el('swp-amt'), a=amtEl?assetNum(amtEl.value):0;
+  var q=swapQuote(a, swapDir, SWAP_RES);
+  var outSym=swapDir==='v2g'?'GRAM':'VIZ', inSym=swapDir==='v2g'?'VIZ':'GRAM';
+  var out=el('swp-out'); if(out) out.textContent=q?q.out.toFixed(3)+' '+outSym:'—';
+  var rate=el('swp-rate'); if(rate) rate.textContent=SWAP_RES?('1 '+inSym+' ≈ '+swapQuote(1,swapDir,SWAP_RES).out.toFixed(swapDir==='v2g'?6:3)+' '+outSym):'—';
+  var imp=el('swp-imp'); if(imp) imp.textContent=q?q.impact.toFixed(2)+'%':'—';
+  var dexEl=el('swp-dexamt');
+  if(dexEl){ var dq=swapQuote(assetNum(dexEl.value), swapDir, SWAP_RES);
+    var dm=el('swp-dexmin'); if(dm) dm.textContent=dq?(dq.out*0.99).toFixed(swapDir==='v2g'?6:3)+' '+(swapDir==='v2g'?'GRAM':'wVIZ'):'—'; }
+}
+/* Switch the active pool in place (keeps amount inputs + TON Connect mount). */
+function applySwapPool(){
+  SWAP_RES=SWAP_POOLS&&SWAP_POOLS[SWAP_DEX]||null;
+  var sc=el('swp-pool-stonfi'), dc=el('swp-pool-dedust');
+  if(sc) sc.classList.toggle('active', SWAP_DEX==='stonfi');
+  if(dc) dc.classList.toggle('active', SWAP_DEX==='dedust');
+  var pl=el('swp-poolline'); if(pl) pl.textContent=swapPoolLineText();
+  var dh=el('swp-dexhint'); if(dh) dh.textContent=t(SWAP_DEX==='dedust'?'swp.dedust_hint':'swp.dex_hint');
+  var wrap=el('swp-dexgo-wrap'); if(wrap){ wrap.innerHTML=swapDexExecHtml(); wireSwapDexGo(); }
+  refreshSwapQuote();
+}
+/* Wire the in-app StonFi swap button (re-created whenever the execution area re-renders on pool change). */
+function wireSwapDexGo(){
   var dexGo=el('swp-dexgo');
   if(dexGo) dexGo.onclick=async function(){
     var btn=this, amt=assetNum(el('swp-dexamt').value);
@@ -3370,6 +3355,87 @@ async function screenSwap(){
     }catch(e){ toast('err',errText(e)); }
     btn.disabled=false; btn.textContent=old;
   };
+}
+async function screenSwap(){
+  if(!requireUnlock())return;
+  setContent('<div class="title">'+esc(t('swp.title'))+' '+GRAM_SVG+'</div><div id="swp-box"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
+  var res=null, err='';
+  try{ SWAP_POOLS=await fetchSwapPools(); if(!SWAP_POOLS[SWAP_DEX]) SWAP_DEX='stonfi'; SWAP_RES=SWAP_POOLS[SWAP_DEX]||null; res=SWAP_RES; }catch(e){ err=errText(e); }
+  var box=el('swp-box'); if(!box) return;
+  if(!res){ box.innerHTML='<div class="box err">'+esc(t('swp.pool_failed',{E:err}))+'</div>'; return; }
+  var mainnet=swapNodeIsMainnet();
+  var html='<div class="card">'+
+    '<div class="filters">'+
+      '<button class="btn chip'+(swapDir==='v2g'?' active':'')+'" id="swp-v2g">VIZ → GRAM</button>'+
+      '<button class="btn chip'+(swapDir==='g2v'?' active':'')+'" id="swp-g2v">GRAM → VIZ</button></div>'+
+    '<label class="lab">'+esc(t('swp.amount',{S:swapDir==='v2g'?'VIZ':'GRAM'}))+'</label>'+
+    '<input id="swp-amt" type="number" step="0.001" min="0">'+
+    '<div class="kv"><b>'+esc(t('swp.receive'))+'</b><span id="swp-out">—</span></div>'+
+    '<div class="kv"><b>'+esc(t('swp.rate'))+'</b><span id="swp-rate">—</span></div>'+
+    '<div class="kv"><b>'+esc(t('swp.impact'))+'</b><span id="swp-imp">—</span></div>'+
+    '<div class="hint" id="swp-poolline">'+esc(swapPoolLineText())+'</div>'+
+  '</div>';
+  html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('swp.wallet'))+'</div>'+
+    '<div id="tc-root"></div><div class="hint" id="tc-addr"></div></div>';
+  if(swapDir==='v2g'){
+    html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('swp.step1_v2g'))+'</div>'+
+      '<div class="hint mb">'+esc(t('swp.pegin_hint',{B:BRIDGE_ACCOUNT}))+'</div>'+
+      '<label class="lab">'+esc(t('swp.ton_addr'))+'</label><input id="swp-tonaddr" type="text" placeholder="UQ…">'+
+      '<label class="lab">'+esc(t('common.amount_viz'))+'</label><input id="swp-pegamt" type="number" step="0.001" min="0.001">'+
+      (mainnet?'':'<div class="box warn">'+esc(t('swp.testnet_block'))+'</div>')+
+      '<button class="btn block mt" id="swp-pegin"'+(mainnet?'':' disabled')+'>'+esc(t('swp.pegin_btn'))+'</button></div>';
+    html+=swapDexCardHtml();
+  } else {
+    html+=swapDexCardHtml();
+    html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('swp.step2_g2v'))+'</div>'+
+      '<div class="hint mb">'+esc(t('swp.pegout_hint'))+'</div>'+
+      '<label class="lab">'+esc(t('swp.dex_amt',{S:'wVIZ'}))+'</label><input id="swp-poamt" type="number" step="0.001" min="0.001">'+
+      '<label class="lab">'+esc(t('swp.viz_acct'))+'</label><input id="swp-poacct" type="text" value="'+esc(SESSION.account||'')+'">'+
+      '<div class="hint mb">'+esc(t('swp.pegout_fee'))+'</div>'+
+      '<button class="btn block mt" id="swp-pogo">'+esc(t('swp.pegout_btn'))+'</button>'+
+      '<a class="hint" style="display:block;text-align:center;margin-top:8px" href="https://gateway.viz.cx" target="_blank" rel="noopener">gateway.viz.cx</a></div>';
+  }
+  html+='<div class="hint" style="text-align:center">'+esc(t('swp.bridge_note'))+'</div>';
+  box.innerHTML=html;
+  el('swp-v2g').onclick=function(){ if(swapDir!=='v2g'){swapDir='v2g'; screenSwap();} };
+  el('swp-g2v').onclick=function(){ if(swapDir!=='g2v'){swapDir='g2v'; screenSwap();} };
+  var sc=el('swp-pool-stonfi'), dc=el('swp-pool-dedust');
+  if(sc) sc.onclick=function(){ if(SWAP_DEX!=='stonfi'){SWAP_DEX='stonfi'; applySwapPool();} };
+  if(dc) dc.onclick=function(){ if(SWAP_DEX!=='dedust'){SWAP_DEX='dedust'; applySwapPool();} };
+  el('swp-amt').oninput=function(){
+    if(el('swp-pegamt')&&swapDir==='v2g') el('swp-pegamt').value=this.value||'';
+    refreshSwapQuote();
+  };
+  // TON Connect: lazy-load the vendored SDK and mount its connect button
+  try{
+    await loadTonConnectSdk();
+    if(!TC_UI){
+      TC_UI=new TON_CONNECT_UI.TonConnectUI({
+        manifestUrl:'https://viz-blockchain.github.io/Forecaster-client/tonconnect-manifest.json',
+        buttonRootId:'tc-root'
+      });
+      TC_UI.onStatusChange(function(){ syncTcState(); });
+    } else { TC_UI.uiOptions={buttonRootId:'tc-root'}; }
+    syncTcState();
+  }catch(e){ var tr=el('tc-root'); if(tr) tr.innerHTML='<div class="box warn">'+esc(errText(e))+'</div>'; }
+  function syncTcState(){
+    var a=tcAddress(), ad=el('tc-addr');
+    if(ad) ad.textContent=a?t('swp.connected',{A:a}):t('swp.not_connected');
+    var ta=el('swp-tonaddr'); if(ta&&a&&!ta.value) ta.value=a;                 // prefill peg-in memo with the connected wallet
+  }
+  var peg=el('swp-pegin');
+  if(peg) peg.onclick=function(){
+    var addr=(el('swp-tonaddr').value||'').trim(), amt=el('swp-pegamt').value;
+    if(!/^(EQ|UQ)[A-Za-z0-9_-]{46}$/.test(addr)){ toast('warn',t('swp.bad_addr')); return; }
+    if(!(assetNum(amt)>0)){ toast('warn',t('bal.fill_recipient')); return; }
+    tx(t('swp.pegin_btn'),function(){ return bc('transfer',wifFor('active'),SESSION.account,BRIDGE_ACCOUNT,toAsset(amt),addr); },
+      function(){ toast('ok',t('swp.pegin_sent',{A:addr})); });
+  };
+  var dexAmt=el('swp-dexamt');
+  if(dexAmt) dexAmt.oninput=refreshSwapQuote;
+  /* In-app DEX leg: StonFi v2 swap via TON Connect. simulate() is authoritative for router,
+   * jetton wallets, min_ask (1% slippage) and gas; ton-lite.js builds the body cell. */
+  wireSwapDexGo();
   /* In-app peg-out: wVIZ jetton transfer to the bridge multisig, VIZ account as the
    * text comment — mirrors viz-gateway site/pegout.mjs (value 0.1, forward 0.05 TON). */
   var pogo=el('swp-pogo');
