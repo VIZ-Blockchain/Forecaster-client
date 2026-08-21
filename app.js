@@ -515,10 +515,22 @@ async function createAccountViaPow(login, btn){
             : t('login.create_failed', {E: res.result || 'unknown'}));
     throw new Error(msg);
   }
-  showRegBackup(login, keys, password);
+  showRegBackup(login, keys);
 }
-/* Keys are the only access to the new account; force a backup before storing a PIN-locked session. */
-function showRegBackup(login, keys, password){
+/* Keys are the only access to the new account; save a file + show them like start.viz.world,
+   then force a backup before storing a PIN-locked session. */
+function downloadRegFile(login, keys){
+  var txt = 'VIZ registration\r\nAccount: ' + login
+    + '\r\nMaster: ' + keys.master + '\r\nActive: ' + keys.active
+    + '\r\nRegular: ' + keys.regular + '\r\nMemo: ' + keys.memo + '\r\n';
+  var a = document.createElement('a');
+  a.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(txt);
+  a.download = 'viz-registration.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+function showRegBackup(login, keys){
   var sess = { account:login, wifs:{active:keys.active, regular:keys.regular, memo:keys.memo}, pubs:{active:keys.activePubkey} };
   var fields = ['master','active','regular','memo'].map(function(role){
     return '<label class="lab">'+esc(role)+'</label>'
@@ -526,13 +538,14 @@ function showRegBackup(login, keys, password){
   }).join('');
   openModal(t('reg.backup_title', {ACC:login}), h(
     '<div class="box warn">'+t('reg.backup_info', {ACC:login})+'</div>',
-    '<label class="lab">'+esc(t('reg.backup_password'))+'</label>',
-    '<input class="mono" readonly value="'+esc(password)+'" onclick="this.select()">',
-    fields
+    fields,
+    '<div class="hint">'+t('reg.backup_download')+'</div>'
   ), [
     {label:t('common.cancel'), cls:'ghost', act:function(){ closeModal(); toast('warn', t('reg.backup_skipped', {ACC:login})); }},
+    {label:t('reg.backup_download_btn'), cls:'', act:function(){ downloadRegFile(login, keys); }},
     {label:t('reg.backup_continue'), cls:'', act:function(){ closeModal(); askNewPin(sess); }}
   ]);
+  downloadRegFile(login, keys); // auto-download, like start.viz.world
 }
 function wifFor(role){ // active default; regular used for dispute votes
   if(!SESSION) throw new Error(t('toast.wallet_locked'));
