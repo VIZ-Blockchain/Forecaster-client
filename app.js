@@ -493,6 +493,15 @@ function regGrindNonce(id, challenge, onProgress){
     step();
   });
 }
+/* A PoW registration always lands on MAINNET — if the client is still on the testnet
+   default, point it at mainnet so the fresh account (and its markets) are visible. */
+function switchNodeToMainnet(){
+  var ws = String((loadNode()||{}).ws||'');
+  if(!/testnet/i.test(ws)) return false;   // already mainnet or a user's own node — leave it
+  var m = { ws:'https://api.viz.world/', chain_id:VIZ_MAINNET_CHAIN, prefix:'VIZ' };
+  saveNode(m); applyNode(m);
+  return true;
+}
 /* Register @login on mainnet via the PoW faucet, then hand the user the keys for backup. */
 async function createAccountViaPow(login, btn){
   login = (login||'').trim().toLowerCase();
@@ -517,6 +526,7 @@ async function createAccountViaPow(login, btn){
             : t('login.create_failed', {E: res.result || 'unknown'}));
     throw new Error(msg);
   }
+  if(switchNodeToMainnet()) toast('ok', t('reg.switched_mainnet'));
   showRegBackup(login, keys);
 }
 /* Keys are the only access to the new account; save a file + show them like start.viz.world,
