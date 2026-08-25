@@ -3334,10 +3334,10 @@ var BRIDGE_ACCOUNT='gram.gate';                                                 
 var STONFI_SWAP_URL='https://app.ston.fi/swap?chartVisible=false&ft=TON&tt='+WVIZ_MINTER;
 var DEDUST_POOL='EQCLB_BYETb6FESEsTPAIwEie4r9EFhFpJTEjlykGXcqr2LD';                   // DeDust wVIZ/GRAM pool
 var DEDUST_NATIVE_VAULT='EQDa4VOnTYlLvDJ0gZjNYm5PXfSmmtL6Vs6A_CZEtXCNICq_';           // DeDust native vault (TON side)
-var DEDUST_JETTON_VAULT='EQCfSKSxZYrNHLFcuoCDr17xMKVZ_iIV5c67aCt2w-V8rl_G';           // DeDust wVIZ jetton vault
-var USDT_MINTER='EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sFo';             // USD₮ jetton master (TON mainnet)
+var DEDUST_JETTON_VAULT='EQBX5VGAqjnthTSqh6jmdxQzg6Fm9I98fwJWre0mhMLs2EpN';          // DeDust wVIZ jetton vault (factory-derived)
+var USDT_MINTER='EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs';             // USD₮ jetton master (TON mainnet)
 var DEDUST_USDT_POOL='EQD2xIjE9-UrYu1ZE6OokC7bas1WYppiF9NhLYSkF0CG2Dtq';       // DeDust wVIZ/USDT pool (dedust_v2_cpmm)
-var DEDUST_USDT_VAULT='';                       // DeDust USDT jetton vault — to be looked up
+var DEDUST_USDT_VAULT='EQBl69cE084biWkDa324Jea4tshg-imEjZcVREMAm6IByn3o';        // DeDust USDT jetton vault (factory-derived)
 /* DeDust web-app deep link: /swap/<FROM>/<TO>. */
 function dedustSwapUrl(){
   var sym=pairSym();
