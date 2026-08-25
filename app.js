@@ -3558,8 +3558,8 @@ async function stonfiSwapSend(amt, user){
   }
 }
 /* DeDust in-app swap: bodies byte-verified against dedust-io/sdk (VaultNative/VaultJetton).
- * GRAM pair: native vault (TON→jetton) + wVIZ jetton vault. USDT pair: both directions go through
- * jetton vaults (USDT jetton vault + wVIZ jetton vault). Quote/limit from SWAP_RES (1% slippage). */
+ * GRAM pair: native vault (TON→jetton). Jetton pairs (USDT↔wVIZ): jetton transfer goes directly
+ * to the pool (pool handles swap internally, vaults NOT used for jetton-to-jetton). */
 async function dedustSwapSend(amt, user){
   if(!SWAP_RES) throw new Error('pool quote unavailable');
   var q=swapQuote(amt, swapDir, SWAP_RES);
@@ -3567,10 +3567,10 @@ async function dedustSwapSend(amt, user){
   var deadline=Math.floor(Date.now()/1000)+900;
   var limit=Math.floor(q.out*0.99);
   var pool=pairDedustPool(), dec=pairDec();
-  if(swapDir==='v2t'){                                         // wVIZ → token: TEP-74 to wVIZ jetton vault
+  if(swapDir==='v2t'){                                         // wVIZ → token: TEP-74 directly to pool
     var units=Math.round(amt*1e3);
     var jw=await wvizWalletOf(user);
-    var body=TONLITE.jettonTransferBody({amount:units, destination:DEDUST_JETTON_VAULT, response:user,
+    var body=TONLITE.jettonTransferBody({amount:units, destination:pool, response:user,
       forwardTon:250000000,
       forwardPayload:TONLITE.dedustSwapBody({kind:'jetton', poolAddress:pool, limit:Math.floor(limit*Math.pow(10,dec)),
         deadline:deadline, recipient:user})});
@@ -3580,10 +3580,10 @@ async function dedustSwapSend(amt, user){
     var body2=TONLITE.dedustSwapBody({kind:'native', amount:nano, poolAddress:pool, limit:Math.floor(limit*1e3),
       deadline:deadline, recipient:user});
     await tcSend(DEDUST_NATIVE_VAULT, BigInt(nano)+250000000n, body2);
-  } else {                                                     // USDT → wVIZ: TEP-74 to USDT jetton vault
+  } else {                                                     // USDT → wVIZ: TEP-74 directly to pool
     var units2=Math.round(amt*Math.pow(10,dec));
     var ijw=await jettonWalletOf(USDT_MINTER, user);
-    var body3=TONLITE.jettonTransferBody({amount:units2, destination:DEDUST_USDT_VAULT, response:user,
+    var body3=TONLITE.jettonTransferBody({amount:units2, destination:pool, response:user,
       forwardTon:250000000,
       forwardPayload:TONLITE.dedustSwapBody({kind:'jetton', poolAddress:pool, limit:Math.floor(limit*1e3),
         deadline:deadline, recipient:user})});
