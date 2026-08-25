@@ -3336,8 +3336,8 @@ var DEDUST_POOL='EQCLB_BYETb6FESEsTPAIwEie4r9EFhFpJTEjlykGXcqr2LD';             
 var DEDUST_NATIVE_VAULT='EQDa4VOnTYlLvDJ0gZjNYm5PXfSmmtL6Vs6A_CZEtXCNICq_';           // DeDust native vault (TON side)
 var DEDUST_JETTON_VAULT='EQCfSKSxZYrNHLFcuoCDr17xMKVZ_iIV5c67aCt2w-V8rl_G';           // DeDust wVIZ jetton vault
 var USDT_MINTER='EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sFo';             // USD₮ jetton master (TON mainnet)
-var DEDUST_USDT_POOL='';                        // DeDust wVIZ/USDT pool — owner to look up
-var DEDUST_USDT_VAULT='';                       // DeDust USDT jetton vault — owner to look up
+var DEDUST_USDT_POOL='EQD2xIjE9-UrYu1ZE6OokC7bas1WYppiF9NhLYSkF0CG2Dtq';       // DeDust wVIZ/USDT pool (dedust_v2_cpmm)
+var DEDUST_USDT_VAULT='';                       // DeDust USDT jetton vault — to be looked up
 /* DeDust web-app deep link: /swap/<FROM>/<TO>. */
 function dedustSwapUrl(){
   var sym=pairSym();
