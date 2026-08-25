@@ -3598,9 +3598,6 @@ async function screenSwap(){
   try{
     SWAP_POOLS=await fetchSwapPools();
     var pp=SWAP_POOLS[swapPair];
-    if(!pp||(!pp.stonfi&&!pp.dedust)){
-      if(swapPair!=='gram'){ swapPair='gram'; pp=SWAP_POOLS.gram; }
-    }
     if(!pairHasStonfi()||!pp.stonfi) if(SWAP_DEX==='stonfi') SWAP_DEX=pp.dedust?'dedust':'stonfi';
     SWAP_RES=pp&&pp[SWAP_DEX]||null; res=SWAP_RES;
   }catch(e){ err=errText(e); }
