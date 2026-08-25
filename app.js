@@ -3335,13 +3335,28 @@ var STONFI_SWAP_URL='https://app.ston.fi/swap?chartVisible=false&ft=TON&tt='+WVI
 var DEDUST_POOL='EQCLB_BYETb6FESEsTPAIwEie4r9EFhFpJTEjlykGXcqr2LD';                   // DeDust wVIZ/GRAM pool
 var DEDUST_NATIVE_VAULT='EQDa4VOnTYlLvDJ0gZjNYm5PXfSmmtL6Vs6A_CZEtXCNICq_';           // DeDust native vault (TON side)
 var DEDUST_JETTON_VAULT='EQCfSKSxZYrNHLFcuoCDr17xMKVZ_iIV5c67aCt2w-V8rl_G';           // DeDust wVIZ jetton vault
-/* DeDust web-app deep link: /swap/<FROM>/<TO> (native TON is labelled "GRAM"). */
-function dedustSwapUrl(){ return swapDir==='g2v' ? 'https://app.dedust.io/swap/GRAM/'+WVIZ_MINTER : 'https://app.dedust.io/swap/'+WVIZ_MINTER+'/GRAM'; }
+var USDT_MINTER='EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sFo';             // USD₮ jetton master (TON mainnet)
+var DEDUST_USDT_POOL='';                        // DeDust wVIZ/USDT pool — owner to look up
+var DEDUST_USDT_VAULT='';                       // DeDust USDT jetton vault — owner to look up
+/* DeDust web-app deep link: /swap/<FROM>/<TO>. */
+function dedustSwapUrl(){
+  var sym=pairSym();
+  if(swapPair==='usdt') return 'https://app.dedust.io/swap/'+(swapDir==='t2v'?'USDT':WVIZ_MINTER)+'/'+(swapDir==='t2v'?WVIZ_MINTER:'USDT');
+  return swapDir==='t2v' ? 'https://app.dedust.io/swap/GRAM/'+WVIZ_MINTER : 'https://app.dedust.io/swap/'+WVIZ_MINTER+'/GRAM';
+}
 var GRAM_SVG='<svg viewBox="0 0 24 24" width="15" height="15" style="vertical-align:-2px"><path d="M12 3 21 8 12 21 3 8Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 3v18" stroke="currentColor" stroke-width="1.2"/></svg>';
-var swapDir='v2g';                    // v2g = VIZ→GRAM, g2v = GRAM→VIZ
-var SWAP_POOLS=null;                  // {stonfi:{viz,gram,feePct}, dedust:{...}} — both pools' live reserves
-var SWAP_DEX='stonfi';                // selected DEX for the swap leg ('stonfi' | 'dedust')
-var SWAP_RES=null;                    // active pool snapshot {viz, gram, feePct} = SWAP_POOLS[SWAP_DEX]
+var USDT_SVG='<svg viewBox="0 0 24 24" width="15" height="15" style="vertical-align:-2px"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M7 8h10M12 8v8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>';
+var swapPair='gram';                   // 'gram' | 'usdt' — selected token pair
+var swapDir='v2t';                     // v2t = VIZ→token, t2v = token→VIZ
+var SWAP_POOLS=null;                   // {gram:{stonfi:{…},dedust:{…}}, usdt:{dedust:{…}}}
+var SWAP_DEX='stonfi';                 // selected DEX for the swap leg ('stonfi' | 'dedust')
+var SWAP_RES=null;                     // active pool snapshot {viz, gram, feePct}
+function pairSym(){ return swapPair==='usdt'?'USDT':'GRAM'; }
+function pairIcon(){ return swapPair==='usdt'?USDT_SVG:GRAM_SVG; }
+function pairDec(){ return swapPair==='usdt'?6:9; }
+function pairHasStonfi(){ return swapPair==='gram'; }
+function pairDedustPool(){ return swapPair==='usdt'?DEDUST_USDT_POOL:DEDUST_POOL; }
+function pairDedustUsable(){ var p=pairDedustPool(); return p&&p.indexOf('TODO')<0&&p.length>10; }
 var TC_UI=null;                       // TonConnectUI singleton (SDK is lazy-loaded: 400k, swap-only)
 function tcAddress(){ try{ var a=TC_UI&&TC_UI.account&&TC_UI.account.address; return a?TON_CONNECT_UI.toUserFriendlyAddress(a):''; }catch(e){ return ''; } }
 function loadTonConnectSdk(){
@@ -3379,6 +3394,15 @@ async function wvizWalletOf(owner){
   if(!d||d.success===false||!raw) throw new Error('jetton wallet lookup failed');
   return TONLITE.toFriendly(TONLITE.parseAddress(raw));               // bounceable EQ… for sendTransaction
 }
+/* Generic jetton wallet lookup: resolves owner's wallet for any jetton minter. */
+async function jettonWalletOf(minter, owner){
+  if(minter===WVIZ_MINTER) return wvizWalletOf(owner);
+  var u='https://tonapi.io/v2/blockchain/accounts/'+minter+'/methods/get_wallet_address?args='+encodeURIComponent(owner);
+  var r=await fetch(u); var d=await r.json();
+  var raw=d&&d.decoded&&d.decoded.jetton_wallet_address;
+  if(!d||d.success===false||!raw) throw new Error('jetton wallet lookup failed');
+  return TONLITE.toFriendly(TONLITE.parseAddress(raw));
+}
 function tcSend(toFriendly, amountNano, bodyCell){
   return TC_UI.sendTransaction({
     validUntil: Math.floor(Date.now()/1000)+300,
@@ -3386,45 +3410,55 @@ function tcSend(toFriendly, amountNano, bodyCell){
   });
 }
 async function fetchSwapPools(){
-  // StonFi via public REST (fee units 0.01% → 0.3% total)
-  var r=await fetch('https://api.ston.fi/v1/pools/'+SWAP_POOL);
-  var d=await r.json(); var p=d&&d.pool; if(!p||p.reserve0==null) throw new Error('StonFi pool unavailable');
-  var t0viz=String(p.token0_address||'').toUpperCase().indexOf('VIZ')>=0;      // wVIZ side by minter address
-  var stonfi={
-    viz:Number(t0viz?p.reserve0:p.reserve1)/1e3,                               // wVIZ: 3 decimals
-    gram:Number(t0viz?p.reserve1:p.reserve0)/1e9,                              // GRAM (TON): 9 decimals
-    feePct:(Number(p.lp_fee||20)+Number(p.protocol_fee||10))/100
-  };
-  // DeDust: their REST does not index our pool → read reserves straight from the pool
-  // contract (native balance = GRAM side, jetton balance = wVIZ side), cf. viz/tools/wviz-liquidity.php.
-  // Non-fatal: if DeDust is unreadable we degrade to StonFi-only rather than fail the whole screen.
-  var dedust=null;
+  var out={gram:{stonfi:null,dedust:null}, usdt:{dedust:null}};
+  // --- GRAM pair: StonFi + DeDust ---
+  try{
+    var r=await fetch('https://api.ston.fi/v1/pools/'+SWAP_POOL);
+    var d=await r.json(); var p=d&&d.pool;
+    if(p&&p.reserve0!=null){
+      var t0viz=String(p.token0_address||'').toUpperCase().indexOf('VIZ')>=0;
+      out.gram.stonfi={viz:Number(t0viz?p.reserve0:p.reserve1)/1e3, gram:Number(t0viz?p.reserve1:p.reserve0)/1e9,
+        feePct:(Number(p.lp_fee||20)+Number(p.protocol_fee||10))/100};
+    }
+  }catch(e){}
   try{
     var na=await (await fetch('https://tonapi.io/v2/accounts/'+DEDUST_POOL)).json();
     var gram=Number(na&&na.balance||0)/1e9;
     var jj=await (await fetch('https://tonapi.io/v2/accounts/'+DEDUST_POOL+'/jettons')).json();
     var viz=0;
     (jj&&jj.balances||[]).forEach(function(b){ if(String((b.jetton&&b.jetton.symbol)||'').toUpperCase().indexOf('VIZ')>=0) viz=Number(b.balance)/1e3; });
-    if(viz>0&&gram>0) dedust={viz:viz, gram:gram, feePct:0.25};               // DeDust volatile-pool fee
-  }catch(e){ dedust=null; }
-  return {stonfi:stonfi, dedust:dedust};
+    if(viz>0&&gram>0) out.gram.dedust={viz:viz, gram:gram, feePct:0.25};
+  }catch(e){}
+  // --- USDT pair: DeDust only (jetton balances on the pool contract) ---
+  if(DEDUST_USDT_POOL){
+    try{
+      var jj2=await (await fetch('https://tonapi.io/v2/accounts/'+DEDUST_USDT_POOL+'/jettons')).json();
+      var uv=0, uu=0;
+      (jj2&&jj2.balances||[]).forEach(function(b){
+        var sym=String((b.jetton&&b.jetton.symbol)||'').toUpperCase();
+        if(sym.indexOf('VIZ')>=0) uv=Number(b.balance)/1e3;
+        if(sym.indexOf('USD')>=0) uu=Number(b.balance)/1e6;
+      });
+      if(uv>0&&uu>0) out.usdt.dedust={viz:uv, gram:uu, feePct:0.25};
+    }catch(e){}
+  }
+  return out;
 }
 /* Constant-product quote: out = R_out·Δ/(R_in+Δ) with the DEX fee taken off the input. */
 function swapQuote(amtIn, dir, res){
   if(!(amtIn>0)||!res) return null;
-  var inR=dir==='v2g'?res.viz:res.gram, outR=dir==='v2g'?res.gram:res.viz;
+  var inR=dir==='v2t'?res.viz:res.gram, outR=dir==='v2t'?res.gram:res.viz;
   var eff=amtIn*(1-res.feePct/100);
   var out=outR*eff/(inR+eff);
-  var mid=outR/inR;                                                            // marginal price before the trade
-  var impact=mid>0?Math.max(0,(1-(out/amtIn)/mid)*100):0;                      // % worse than mid (fee incl.)
+  var mid=outR/inR;
+  var impact=mid>0?Math.max(0,(1-(out/amtIn)/mid)*100):0;
   return {out:out, mid:mid, impact:impact};
 }
 function swapNodeIsMainnet(){ var ws=String((loadNode()||{}).ws||''); return !/testnet/i.test(ws); }
 function swapDexName(){ return SWAP_DEX==='dedust'?'DeDust':'StonFi'; }
-/* Liquidity shorthand for a pool: "12.3k wVIZ / 2.1k GRAM". */
 function swapLiqStr(res){
   function k(x){ return x>=1e6?(x/1e6).toFixed(1)+'M':(x>=1000?(x/1000).toFixed(1)+'k':x.toFixed(1)); }
-  return k(res.viz)+' wVIZ / '+k(res.gram)+' GRAM';
+  return k(res.viz)+' wVIZ / '+k(res.gram)+' '+pairSym();
 }
 function swapPoolLineText(){
   var r=SWAP_RES; if(!r) return '';
@@ -3434,41 +3468,45 @@ function swapPoolChip(id, dex, res){
   var liq=swapLiqStr(res);
   return '<button class="btn chip'+(SWAP_DEX===id?' active':'')+'" id="swp-pool-'+id+'">'+esc(dex)+' <span class="mut">'+liq+'</span></button>';
 }
-/* Execution area of the DEX leg: in-app swap (StonFi or DeDust) + a web-app fallback link. */
+/* Execution area of the DEX leg: in-app swap + a web-app fallback link. */
 function swapDexExecHtml(){
   var link=SWAP_DEX==='dedust'?dedustSwapUrl():STONFI_SWAP_URL;
   var openLabel=SWAP_DEX==='dedust'?t('swp.open_dedust'):t('swp.open_stonfi');
   return '<button class="btn block mt" id="swp-dexgo">'+esc(t('swp.dex_btn'))+'</button>'+
     '<a class="hint" style="display:block;text-align:center;margin-top:8px" href="'+link+'" target="_blank" rel="noopener">'+esc(openLabel)+'</a>';
 }
-/* The DEX swap step card (shared by both directions: v2g step 2, g2v step 1). */
+/* The DEX swap step card (shared by both directions). */
 function swapDexCardHtml(){
-  var isV2g=swapDir==='v2g';
-  var h='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t(isV2g?'swp.step2_v2g':'swp.step1_g2v'))+'</div>';
-  if(SWAP_POOLS){ h+='<div class="filters" id="swp-pools">'+swapPoolChip('stonfi','StonFi',SWAP_POOLS.stonfi);
-    if(SWAP_POOLS.dedust) h+=swapPoolChip('dedust','DeDust',SWAP_POOLS.dedust);
+  var isV2t=swapDir==='v2t', sym=pairSym();
+  var h='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t(isV2t?'swp.step2_v2t':'swp.step1_t2v',{P:sym}))+'</div>';
+  var pp=SWAP_POOLS&&SWAP_POOLS[swapPair];
+  if(pp){ h+='<div class="filters" id="swp-pools">';
+    if(pairHasStonfi()&&pp.stonfi) h+=swapPoolChip('stonfi','StonFi',pp.stonfi);
+    if(pp.dedust) h+=swapPoolChip('dedust','DeDust',pp.dedust);
     h+='</div>'; }
   h+='<div class="hint mb" id="swp-dexhint">'+esc(t(SWAP_DEX==='dedust'?'swp.dedust_hint':'swp.dex_hint'))+'</div>';
-  h+='<label class="lab">'+esc(t('swp.dex_amt',{S:isV2g?'wVIZ':'GRAM'}))+'</label><input id="swp-dexamt" type="number" step="0.001" min="0.001">';
+  h+='<label class="lab">'+esc(t('swp.dex_amt',{S:isV2t?'wVIZ':sym}))+'</label><input id="swp-dexamt" type="number" step="0.001" min="0.001">';
   h+='<div class="kv"><b>'+esc(t('swp.min_recv'))+'</b><span id="swp-dexmin">—</span></div>';
   h+='<div id="swp-dexgo-wrap">'+swapDexExecHtml()+'</div></div>';
   return h;
 }
 /* Recompute all live quote numbers from the current inputs + selected pool. */
 function refreshSwapQuote(){
+  var sym=pairSym(), dec=pairDec();
   var amtEl=el('swp-amt'), a=amtEl?assetNum(amtEl.value):0;
   var q=swapQuote(a, swapDir, SWAP_RES);
-  var outSym=swapDir==='v2g'?'GRAM':'VIZ', inSym=swapDir==='v2g'?'VIZ':'GRAM';
-  var out=el('swp-out'); if(out) out.textContent=q?q.out.toFixed(3)+' '+outSym:'—';
-  var rate=el('swp-rate'); if(rate) rate.textContent=SWAP_RES?('1 '+inSym+' ≈ '+swapQuote(1,swapDir,SWAP_RES).out.toFixed(swapDir==='v2g'?6:3)+' '+outSym):'—';
+  var outSym=swapDir==='v2t'?sym:'VIZ', inSym=swapDir==='v2t'?'VIZ':sym;
+  var out=el('swp-out'); if(out) out.textContent=q?q.out.toFixed(dec>6?6:3)+' '+outSym:'—';
+  var rate=el('swp-rate'); if(rate) rate.textContent=SWAP_RES?('1 '+inSym+' ≈ '+swapQuote(1,swapDir,SWAP_RES).out.toFixed(dec>6?6:3)+' '+outSym):'—';
   var imp=el('swp-imp'); if(imp) imp.textContent=q?q.impact.toFixed(2)+'%':'—';
   var dexEl=el('swp-dexamt');
   if(dexEl){ var dq=swapQuote(assetNum(dexEl.value), swapDir, SWAP_RES);
-    var dm=el('swp-dexmin'); if(dm) dm.textContent=dq?(dq.out*0.99).toFixed(swapDir==='v2g'?6:3)+' '+(swapDir==='v2g'?'GRAM':'wVIZ'):'—'; }
+    var dm=el('swp-dexmin'); if(dm) dm.textContent=dq?(dq.out*0.99).toFixed(dec>6?6:3)+' '+(swapDir==='v2t'?sym:'wVIZ'):'—'; }
 }
 /* Switch the active pool in place (keeps amount inputs + TON Connect mount). */
 function applySwapPool(){
-  SWAP_RES=SWAP_POOLS&&SWAP_POOLS[SWAP_DEX]||null;
+  var pp=SWAP_POOLS&&SWAP_POOLS[swapPair];
+  SWAP_RES=pp&&pp[SWAP_DEX]||null;
   var sc=el('swp-pool-stonfi'), dc=el('swp-pool-dedust');
   if(sc) sc.classList.toggle('active', SWAP_DEX==='stonfi');
   if(dc) dc.classList.toggle('active', SWAP_DEX==='dedust');
@@ -3495,11 +3533,11 @@ function wireSwapDexGo(){
     btn.disabled=false; btn.textContent=old;
   };
 }
-/* StonFi v2 in-app swap: simulate() is authoritative for router, jetton wallets, min_ask (1%
- * slippage) and gas; ton-lite.js builds the body cell (byte-verified against @ton/core). */
+/* StonFi v2 in-app swap (GRAM pair only): simulate() is authoritative for router, jetton wallets,
+ * min_ask (1% slippage) and gas; ton-lite.js builds the body cell (byte-verified against @ton/core). */
 async function stonfiSwapSend(amt, user){
   var deadline=Math.floor(Date.now()/1000)+900;
-  if(swapDir==='v2g'){                                         // wVIZ → GRAM: TEP-74 transfer to the router
+  if(swapDir==='v2t'){                                         // wVIZ → GRAM: TEP-74 transfer to the router
     var units=Math.round(amt*1e3);
     var sim=await stonfiSimulate(WVIZ_MINTER, TON_ZERO, units);
     var jw=await wvizWalletOf(user);
@@ -3516,47 +3554,67 @@ async function stonfiSwapSend(amt, user){
     var body2=TONLITE.ptonTransferBody({amount:nano, refund:user,
       forwardPayload:TONLITE.stonfiSwapBody({askJettonWallet:sim2.ask_jetton_wallet, refund:user,
         deadline:deadline, minAsk:sim2.min_ask_units})});
-    // pTON: attached value = offer + forward gas + pTON transfer gas (0.01)
     await tcSend(pton, BigInt(nano)+BigInt((sim2.gas_params&&sim2.gas_params.forward_gas)||'300000000')+10000000n, body2);
   }
 }
-/* DeDust in-app swap: bodies byte-verified against dedust-io/sdk (VaultNative/VaultJetton). The
- * quote/limit come from the live pool reserves already in SWAP_RES (1% slippage). Vault addresses
- * are the DeDust factory's native vault + the wVIZ jetton vault (both immutable on mainnet). */
+/* DeDust in-app swap: bodies byte-verified against dedust-io/sdk (VaultNative/VaultJetton).
+ * GRAM pair: native vault (TON→jetton) + wVIZ jetton vault. USDT pair: both directions go through
+ * jetton vaults (USDT jetton vault + wVIZ jetton vault). Quote/limit from SWAP_RES (1% slippage). */
 async function dedustSwapSend(amt, user){
   if(!SWAP_RES) throw new Error('pool quote unavailable');
   var q=swapQuote(amt, swapDir, SWAP_RES);
   if(!q) throw new Error('quote failed');
   var deadline=Math.floor(Date.now()/1000)+900;
-  var limit=Math.floor(q.out*0.99);                            // min received, 1% slippage
-  if(swapDir==='v2g'){                                         // wVIZ → GRAM: TEP-74 transfer to the jetton vault
-    var units=Math.round(amt*1e3);                             // wVIZ: 3 decimals
+  var limit=Math.floor(q.out*0.99);
+  var pool=pairDedustPool(), dec=pairDec();
+  if(swapDir==='v2t'){                                         // wVIZ → token: TEP-74 to wVIZ jetton vault
+    var units=Math.round(amt*1e3);
     var jw=await wvizWalletOf(user);
     var body=TONLITE.jettonTransferBody({amount:units, destination:DEDUST_JETTON_VAULT, response:user,
-      forwardTon:250000000,                                    // 0.25 TON funds the swap inside the vault
-      forwardPayload:TONLITE.dedustSwapBody({kind:'jetton', poolAddress:DEDUST_POOL, limit:Math.floor(limit*1e9),
+      forwardTon:250000000,
+      forwardPayload:TONLITE.dedustSwapBody({kind:'jetton', poolAddress:pool, limit:Math.floor(limit*Math.pow(10,dec)),
         deadline:deadline, recipient:user})});
-    await tcSend(jw, '300000000', body);                       // 0.3 TON value (0.05 transfer + 0.25 forward)
-  } else {                                                     // GRAM → wVIZ: TON to the native vault
-    var nano=Math.round(amt*1e9);                              // TON: 9 decimals
-    var body=TONLITE.dedustSwapBody({kind:'native', amount:nano, poolAddress:DEDUST_POOL, limit:Math.floor(limit*1e3),
+    await tcSend(jw, '300000000', body);
+  } else if(swapPair==='gram'){                                // GRAM → wVIZ: TON to native vault
+    var nano=Math.round(amt*1e9);
+    var body2=TONLITE.dedustSwapBody({kind:'native', amount:nano, poolAddress:pool, limit:Math.floor(limit*1e3),
       deadline:deadline, recipient:user});
-    await tcSend(DEDUST_NATIVE_VAULT, BigInt(nano)+250000000n, body);  // amount + 0.25 TON gas
+    await tcSend(DEDUST_NATIVE_VAULT, BigInt(nano)+250000000n, body2);
+  } else {                                                     // USDT → wVIZ: TEP-74 to USDT jetton vault
+    var units2=Math.round(amt*Math.pow(10,dec));
+    var ijw=await jettonWalletOf(USDT_MINTER, user);
+    var body3=TONLITE.jettonTransferBody({amount:units2, destination:DEDUST_USDT_VAULT, response:user,
+      forwardTon:250000000,
+      forwardPayload:TONLITE.dedustSwapBody({kind:'jetton', poolAddress:pool, limit:Math.floor(limit*1e3),
+        deadline:deadline, recipient:user})});
+    await tcSend(ijw, '300000000', body3);
   }
 }
 async function screenSwap(){
   if(!requireUnlock())return;
-  setContent('<div class="title">'+esc(t('swp.title'))+' '+GRAM_SVG+'</div><div id="swp-box"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
+  var sym=pairSym();
+  setContent('<div class="title">'+esc(t('swp.title'))+' '+pairIcon()+'</div><div id="swp-box"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
   var res=null, err='';
-  try{ SWAP_POOLS=await fetchSwapPools(); if(!SWAP_POOLS[SWAP_DEX]) SWAP_DEX='stonfi'; SWAP_RES=SWAP_POOLS[SWAP_DEX]||null; res=SWAP_RES; }catch(e){ err=errText(e); }
+  try{
+    SWAP_POOLS=await fetchSwapPools();
+    var pp=SWAP_POOLS[swapPair];
+    if(!pp||(!pp.stonfi&&!pp.dedust)){
+      if(swapPair!=='gram'){ swapPair='gram'; pp=SWAP_POOLS.gram; }
+    }
+    if(!pairHasStonfi()||!pp.stonfi) if(SWAP_DEX==='stonfi') SWAP_DEX=pp.dedust?'dedust':'stonfi';
+    SWAP_RES=pp&&pp[SWAP_DEX]||null; res=SWAP_RES;
+  }catch(e){ err=errText(e); }
   var box=el('swp-box'); if(!box) return;
   if(!res){ box.innerHTML='<div class="box err">'+esc(t('swp.pool_failed',{E:err}))+'</div>'; return; }
   var mainnet=swapNodeIsMainnet();
   var html='<div class="card">'+
     '<div class="filters">'+
-      '<button class="btn chip'+(swapDir==='v2g'?' active':'')+'" id="swp-v2g">VIZ → GRAM</button>'+
-      '<button class="btn chip'+(swapDir==='g2v'?' active':'')+'" id="swp-g2v">GRAM → VIZ</button></div>'+
-    '<label class="lab">'+esc(t('swp.amount',{S:swapDir==='v2g'?'VIZ':'GRAM'}))+'</label>'+
+      '<button class="btn chip'+(swapPair==='gram'?' active':'')+'" id="swp-p-gram">'+GRAM_SVG+' GRAM</button>'+
+      '<button class="btn chip'+(swapPair==='usdt'?' active':'')+'" id="swp-p-usdt">'+USDT_SVG+' USDT</button></div>'+
+    '<div class="filters">'+
+      '<button class="btn chip'+(swapDir==='v2t'?' active':'')+'" id="swp-v2t">VIZ → '+esc(sym)+'</button>'+
+      '<button class="btn chip'+(swapDir==='t2v'?' active':'')+'" id="swp-t2v">'+esc(sym)+' → VIZ</button></div>'+
+    '<label class="lab">'+esc(t('swp.amount',{S:swapDir==='v2t'?'VIZ':sym}))+'</label>'+
     '<input id="swp-amt" type="number" step="0.001" min="0">'+
     '<div class="kv"><b>'+esc(t('swp.receive'))+'</b><span id="swp-out">—</span></div>'+
     '<div class="kv"><b>'+esc(t('swp.rate'))+'</b><span id="swp-rate">—</span></div>'+
@@ -3565,8 +3623,8 @@ async function screenSwap(){
   '</div>';
   html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('swp.wallet'))+'</div>'+
     '<div id="tc-root"></div><div class="hint" id="tc-addr"></div></div>';
-  if(swapDir==='v2g'){
-    html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('swp.step1_v2g'))+'</div>'+
+  if(swapDir==='v2t'){
+    html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('swp.step1_v2t'))+'</div>'+
       '<div class="hint mb">'+esc(t('swp.pegin_hint',{B:BRIDGE_ACCOUNT}))+'</div>'+
       '<label class="lab">'+esc(t('swp.ton_addr'))+'</label><input id="swp-tonaddr" type="text" placeholder="UQ…">'+
       '<label class="lab">'+esc(t('common.amount_viz'))+'</label><input id="swp-pegamt" type="number" step="0.001" min="0.001">'+
@@ -3575,7 +3633,7 @@ async function screenSwap(){
     html+=swapDexCardHtml();
   } else {
     html+=swapDexCardHtml();
-    html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('swp.step2_g2v'))+'</div>'+
+    html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('swp.step2_t2v'))+'</div>'+
       '<div class="hint mb">'+esc(t('swp.pegout_hint'))+'</div>'+
       '<label class="lab">'+esc(t('swp.dex_amt',{S:'wVIZ'}))+'</label><input id="swp-poamt" type="number" step="0.001" min="0.001">'+
       '<label class="lab">'+esc(t('swp.viz_acct'))+'</label><input id="swp-poacct" type="text" value="'+esc(SESSION.account||'')+'">'+
@@ -3585,16 +3643,17 @@ async function screenSwap(){
   }
   html+='<div class="hint" style="text-align:center">'+esc(t('swp.bridge_note'))+'</div>';
   box.innerHTML=html;
-  el('swp-v2g').onclick=function(){ if(swapDir!=='v2g'){swapDir='v2g'; screenSwap();} };
-  el('swp-g2v').onclick=function(){ if(swapDir!=='g2v'){swapDir='g2v'; screenSwap();} };
+  el('swp-p-gram').onclick=function(){ if(swapPair!=='gram'){swapPair='gram'; screenSwap();} };
+  el('swp-p-usdt').onclick=function(){ if(swapPair!=='usdt'){swapPair='usdt'; screenSwap();} };
+  el('swp-v2t').onclick=function(){ if(swapDir!=='v2t'){swapDir='v2t'; screenSwap();} };
+  el('swp-t2v').onclick=function(){ if(swapDir!=='t2v'){swapDir='t2v'; screenSwap();} };
   var sc=el('swp-pool-stonfi'), dc=el('swp-pool-dedust');
   if(sc) sc.onclick=function(){ if(SWAP_DEX!=='stonfi'){SWAP_DEX='stonfi'; applySwapPool();} };
   if(dc) dc.onclick=function(){ if(SWAP_DEX!=='dedust'){SWAP_DEX='dedust'; applySwapPool();} };
   el('swp-amt').oninput=function(){
-    if(el('swp-pegamt')&&swapDir==='v2g') el('swp-pegamt').value=this.value||'';
+    if(el('swp-pegamt')&&swapDir==='v2t') el('swp-pegamt').value=this.value||'';
     refreshSwapQuote();
   };
-  // TON Connect: lazy-load the vendored SDK and mount its connect button
   try{
     await loadTonConnectSdk();
     if(!TC_UI){
@@ -3609,7 +3668,7 @@ async function screenSwap(){
   function syncTcState(){
     var a=tcAddress(), ad=el('tc-addr');
     if(ad) ad.textContent=a?t('swp.connected',{A:a}):t('swp.not_connected');
-    var ta=el('swp-tonaddr'); if(ta&&a&&!ta.value) ta.value=a;                 // prefill peg-in memo with the connected wallet
+    var ta=el('swp-tonaddr'); if(ta&&a&&!ta.value) ta.value=a;
   }
   var peg=el('swp-pegin');
   if(peg) peg.onclick=function(){
@@ -3621,11 +3680,7 @@ async function screenSwap(){
   };
   var dexAmt=el('swp-dexamt');
   if(dexAmt) dexAmt.oninput=refreshSwapQuote;
-  /* In-app DEX leg: StonFi v2 swap via TON Connect. simulate() is authoritative for router,
-   * jetton wallets, min_ask (1% slippage) and gas; ton-lite.js builds the body cell. */
   wireSwapDexGo();
-  /* In-app peg-out: wVIZ jetton transfer to the bridge multisig, VIZ account as the
-   * text comment — mirrors viz-gateway site/pegout.mjs (value 0.1, forward 0.05 TON). */
   var pogo=el('swp-pogo');
   if(pogo) pogo.onclick=async function(){
     var btn=this, amt=assetNum(el('swp-poamt').value), acct=(el('swp-poacct').value||'').trim();
@@ -3666,7 +3721,7 @@ async function screenBalance(){
     html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('bal.lazy_pool'))+'</div>'+
       '<div class="hint mb">'+esc(t('pool.lead'))+'</div>'+
       '<button class="btn block" data-nav="#/pool">'+esc(t('pool.open_btn'))+'</button></div>';
-    html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('swp.title'))+' '+GRAM_SVG+'</div>'+
+    html+='<div class="card"><div class="section-title" style="margin-top:0">'+esc(t('swp.title'))+'</div>'+
       '<div class="hint mb">'+esc(t('swp.lead'))+'</div>'+
       '<button class="btn block" data-nav="#/swap">'+esc(t('swp.open_btn'))+'</button></div>';
     if(!leverageOff(await pmProps()) && !levHidden())            // hide entry while chain-disabled OR user-hidden
