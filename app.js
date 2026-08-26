@@ -3411,6 +3411,7 @@ function tcSend(toFriendly, amountNano, bodyCell){
 }
 async function fetchSwapPools(){
   var out={gram:{stonfi:null,dedust:null}, usdt:{dedust:null}};
+  var errs=[];
   // --- GRAM pair: StonFi + DeDust ---
   try{
     var r=await fetch('https://api.ston.fi/v1/pools/'+SWAP_POOL);
@@ -3419,8 +3420,8 @@ async function fetchSwapPools(){
       var t0viz=String(p.token0_address||'').toUpperCase().indexOf('VIZ')>=0;
       out.gram.stonfi={viz:Number(t0viz?p.reserve0:p.reserve1)/1e3, gram:Number(t0viz?p.reserve1:p.reserve0)/1e9,
         feePct:(Number(p.lp_fee||20)+Number(p.protocol_fee||10))/100};
-    }
-  }catch(e){}
+    } else { errs.push('StonFi: no reserves'); }
+  }catch(e){ errs.push('StonFi: '+errText(e)); }
   try{
     var na=await (await fetch('https://tonapi.io/v2/accounts/'+DEDUST_POOL)).json();
     var gram=Number(na&&na.balance||0)/1e9;
@@ -3428,7 +3429,8 @@ async function fetchSwapPools(){
     var viz=0;
     (jj&&jj.balances||[]).forEach(function(b){ if(String((b.jetton&&b.jetton.symbol)||'').toUpperCase().indexOf('VIZ')>=0) viz=Number(b.balance)/1e3; });
     if(viz>0&&gram>0) out.gram.dedust={viz:viz, gram:gram, feePct:0.25};
-  }catch(e){}
+    else { errs.push('DeDust GRAM: '+(viz===0?'no wVIZ':'no GRAM')+' balance'); }
+  }catch(e){ errs.push('DeDust GRAM: '+errText(e)); }
   // --- USDT pair: DeDust only (jetton balances on the pool contract) ---
   if(DEDUST_USDT_POOL){
     try{
@@ -3440,9 +3442,10 @@ async function fetchSwapPools(){
         if(sym.indexOf('USD')>=0) uu=Number(b.balance)/1e6;
       });
       if(uv>0&&uu>0) out.usdt.dedust={viz:uv, gram:uu, feePct:0.25};
-    }catch(e){}
+      else { errs.push('DeDust USDT: '+(uv===0?'no wVIZ':'no USDT')+' balance'); }
+    }catch(e){ errs.push('DeDust USDT: '+errText(e)); }
   }
-  return out;
+  return {pools:out, errs:errs};
 }
 /* Constant-product quote: out = R_out·Δ/(R_in+Δ) with the DEX fee taken off the input. */
 function swapQuote(amtIn, dir, res){
@@ -3594,15 +3597,22 @@ async function screenSwap(){
   if(!requireUnlock())return;
   var sym=pairSym();
   setContent('<div class="title">'+esc(t('swp.title'))+' '+pairIcon()+'</div><div id="swp-box"><div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div></div>');
-  var res=null, err='';
+  var res=null, err='', errs=[];
   try{
-    SWAP_POOLS=await fetchSwapPools();
+    var fp=await fetchSwapPools();
+    SWAP_POOLS=fp.pools; errs=fp.errs||[];
     var pp=SWAP_POOLS[swapPair];
     if(!pairHasStonfi()||!pp.stonfi) if(SWAP_DEX==='stonfi') SWAP_DEX=pp.dedust?'dedust':'stonfi';
     SWAP_RES=pp&&pp[SWAP_DEX]||null; res=SWAP_RES;
   }catch(e){ err=errText(e); }
   var box=el('swp-box'); if(!box) return;
-  if(!res){ box.innerHTML='<div class="box err">'+esc(t('swp.pool_failed',{E:err}))+'</div>'; return; }
+  if(!res){
+    var detail=err||(errs.length?errs.join('; '):t('swp.pool_no_detail'));
+    box.innerHTML='<div class="box err">'+esc(t('swp.pool_failed',{E:detail}))+
+      '</div><p style="text-align:center;margin-top:8px"><button class="btn" id="swp-retry">'+esc(t('swp.retry'))+'</button></p>';
+    var rb=el('swp-retry'); if(rb) rb.onclick=function(){ screenSwap(); };
+    return;
+  }
   var mainnet=swapNodeIsMainnet();
   var html='<div class="card">'+
     '<div class="filters">'+
