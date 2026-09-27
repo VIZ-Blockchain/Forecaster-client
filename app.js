@@ -2080,6 +2080,11 @@ async function screenMarket(id){
   var isOracle=SESSION && m.oracle===SESSION.account;
   var risky=(m.risk_score!=null && Number(m.risk_score)<50)||!!m.under_collateralized;
   var instantDisabled=(meta.allow_instant_bet===false)||(m.allow_instant_bet===false);
+  // allow_batch=false + allow_instant_bet=false means the market has NO usable bet path at all:
+  // instant is gated off and there is no commit-reveal queue to fall back to. Such a market must
+  // not offer the button (a direct mode=1 send would be rejected once HF15 lands the evaluator gate).
+  var batchOff=(meta.allow_batch===false)||(m.allow_batch===false);
+  var betBlocked=instantDisabled&&batchOff;
 
   var winIdx=winningIndex(m);            // oracle-decided outcome (-1 if none yet)
   var isResolved=(status===3 && winIdx>=0);
@@ -2168,16 +2173,17 @@ async function screenMarket(id){
     if(!isUnlocked()) html+='<div class="box info">'+unlockLink('md.unlock_to_bet')+'</div>';
     if(risky) html+='<div class="box err">'+esc(t('bet.risk_warning'))+'</div>';
     if(instantDisabled) html+='<div class="box warn">'+esc(t('md.instant_disabled'))+'</div>';
+    if(betBlocked) html+='<div class="box err">'+esc(t('bet.batch_off'))+'</div>';
     html+='<div class="field"><label class="lab">'+esc(t('md.outcome'))+'</label><select id="bt-oc">'+
       ocs.map(function(n,i){return '<option value="'+i+'">'+esc(n)+'</option>';}).join('')+'</select></div>';
     html+='<div class="field"><label class="lab">'+esc(t('common.amount_viz'))+'</label><input id="bt-amt" type="number" step="0.001" min="0.001" placeholder="10.000"></div>';
     html+='<div class="hint">'+esc(t('bet.slippage_note'))+'</div>';
     html+='<div class="field"><label class="lab">'+esc(t('md.min_tokens'))+'</label><input id="bt-min" type="number" step="1" min="0" value="0"></div>';
-    html+='<label class="lab"><input type="checkbox" id="bt-batch"'+(instantDisabled?' checked':'')+'> '+esc(t('md.batch'))+'</label><div class="hint">'+esc(t('bet.batch_hint'))+'</div>';
-    if(!isMulti) html+='<label class="lab"><input type="checkbox" id="bt-hidden"> '+esc(t('md.hidden'))+'</label><div class="hint">'+esc(t('bet.hidden_hint'))+'</div>';
+    if(!batchOff) html+='<label class="lab"><input type="checkbox" id="bt-batch"'+(instantDisabled?' checked':'')+'> '+esc(t('md.batch'))+'</label><div class="hint">'+esc(t('bet.batch_hint'))+'</div>';
+    if(!isMulti && !batchOff) html+='<label class="lab"><input type="checkbox" id="bt-hidden"> '+esc(t('md.hidden'))+'</label><div class="hint">'+esc(t('bet.hidden_hint'))+'</div>';
     if(risky) html+='<label class="lab"><input type="checkbox" id="bt-risk"> '+esc(t('bet.risk_confirm'))+'</label>';
     html+='<div class="box info" style="margin-top:8px">'+esc(t('bet.parimutuel_note'))+'</div>';
-    html+='<button class="btn ok block mt" id="bt-go">'+esc(t('md.place_bet_btn'))+'</button>';
+    if(!betBlocked) html+='<button class="btn ok block mt" id="bt-go">'+esc(t('md.place_bet_btn'))+'</button>';
     if(!instantDisabled) html+='<button class="btn ghost block mt" id="bt-cpn">'+esc(t('cpn.add'))+'</button>';
     html+='</div>';
   }
@@ -2501,11 +2507,16 @@ function wireMarket(id,m,ocs,isMulti){
     var i=Number(el('bt-oc').value), amt=el('bt-amt').value, min=Number(el('bt-min').value)||0;
     if(!(assetNum(amt)>0)){toast('warn',t('common.enter_amount'));return;}
     var side=isMulti?-1:(i===0?0:1), oc=isMulti?i:-1;
-    var mode=el('bt-batch')&&el('bt-batch').checked?1:0;
     var hidden=el('bt-hidden')&&el('bt-hidden').checked;
+    // Queued bets go through commit-reveal ONLY. A direct mode=1 place-bet is not a supported path:
+    // it bypasses the market's allow_instant_bet gate, and once HF15 gates the evaluator it is
+    // rejected outright — on testnet a sync broadcast still answers "ok" on a final reject, so a
+    // doomed bet would read as a silent false success. Both checkboxes mean "queue it", so both
+    // route through the commit -> reveal pair.
+    var queued=(el('bt-batch')&&el('bt-batch').checked)||hidden;
     function doBet(){
-      if(hidden) return placeHiddenBet(id,side,oc,amt,min);
-      tx(t('txn.place_bet'), function(){return bc('pmPlaceBet', wifFor('active'), SESSION.account, id, side, oc, toAsset(amt), min, mode, []);},
+      if(queued) return placeHiddenBet(id,side,oc,amt,min);
+      tx(t('txn.place_bet'), function(){return bc('pmPlaceBet', wifFor('active'), SESSION.account, id, side, oc, toAsset(amt), min, 0, []);},
          function(){ setTimeout(function(){screenMarket(id);},1200); });
     }
     // Pre-flight liquid-balance check: a parimutuel bet needs enough LIQUID VIZ — powered-up SHARES do
@@ -2572,7 +2583,15 @@ function placeHiddenBet(id,side,oc,amt,min){
   var commitment=viz.formatter.predictionMarketCommitment(id, SESSION.account, side, oc, toAsset(amt), min, salt);
   // stash the reveal so it survives reload
   var pend=JSON.parse(localStorage.getItem('lc_reveal')||'[]');
-  tx(t('txn.commit'), function(){return bc('pmCommitBet', wifFor('active'), SESSION.account, id, commitment, toAsset(amt), 2000, []);},
+  tx(t('txn.commit'), function(){
+      // The node asserts no_reveal_fee_percent == the CURRENT consensus median
+      // (pm_commit_no_reveal_penalty_percent), so it cannot be hardcoded: a governance change to the
+      // penalty would silently turn every commit-reveal bet into a rejected transaction.
+      return pmProps().then(function(p){
+        var fee=Number(p&&p.pm_commit_no_reveal_penalty_percent); if(!isFinite(fee)||fee<0)fee=2000;
+        return bc('pmCommitBet', wifFor('active'), SESSION.account, id, commitment, toAsset(amt), fee, []);
+      });
+    },
     function(r){
       pend.push({market:id,side:side,oc:oc,amount:toAsset(amt),min:min,salt:salt,ts:now()});
       localStorage.setItem('lc_reveal',JSON.stringify(pend));
