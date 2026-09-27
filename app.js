@@ -2406,10 +2406,15 @@ function renderKlineSvg(series, ocs, isMulti){
   return svg+axis+legend+volumeSvg(series);
 }
 
-function assetTime(v){ // betting_expiration may be ISO string or epoch
-  if(v==null)return 0; if(typeof v==='number')return v;
-  var ms=Date.parse(v); return isNaN(ms)?Number(v)||0:Math.floor(ms/1000);
-}
+/* Chain time (betting_expiration / accept_deadline / result_expiration) → unixtime seconds.
+   FIXED 27.09: this used to Date.parse() the raw value, but the node emits a bare
+   "YYYY-MM-DDThh:mm:ss" with NO 'Z', and ECMAScript reads that as LOCAL time — every deadline was
+   therefore shifted by the viewer's UTC offset. At +04 (owner) betting closed 4 h early: still-open
+   markets dropped out of the feed/lines views and the bet form switched to "awaiting result"; at
+   −05 a market that had really closed stayed bettable for 5 h, so the coupon was built and then
+   rejected at broadcast. chainTime() marks a bare ISO string as UTC; keep assetTime as the alias
+   the 31 call sites already use. */
+function assetTime(v){ return chainTime(v); }
 function outcomePrices(full,n,isMulti){
   var m=full.market||full;
   // 1) binary: implied probability from CPMM collateral reserves (market price; 50/50 when fresh)
