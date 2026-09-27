@@ -1366,14 +1366,19 @@ var mkMore=null;
    node returns a full page of matching-status rows instead of the client over-fetching and dropping
    the rest). The status arg post-dates the vendored viz.min.js and older nodes, so call via rawApi and
    fall back to the plain (status-less) api() + client-side filter when the node rejects the extra arg.
-   CAT_STATUS_OK caches the probe so a pre-status node isn't retried every page. */
+   CAT_STATUS_OK caches the probe so a pre-status node isn't retried every page.
+   Тот же вызов отдаёт и show_risky (8-й арг ноды): он следует галке «показывать рискованные», а не
+   захардкоженному false. Галка OFF (дефолт) — путь и поведение прежние, поэтому рискует только тот,
+   кто сам попросил рискованное; при галке ON в не-All видах передаём status=-1 (any) — ровно то, что
+   и так подставляла нода по умолчанию в legacy-вызове. */
 var CAT_STATUS_OK=null;
 async function fetchCatPage(from, limit){
   var jur=getJur();
   var wantStatus=(mkFilter.view==='all' && mkFilter.status!=null && mkFilter.status!==-1);
-  if(wantStatus && CAT_STATUS_OK!==false){
+  var wantRisky=!!mkFilter.showRisky;
+  if((wantStatus || wantRisky) && CAT_STATUS_OK!==false){
     try{
-      var p=[mkFilter.category, from, limit, jur||'', '', mkFilter.tag||'', mkFilter.sort||'newest', true, false, mkFilter.status];
+      var p=[mkFilter.category, from, limit, jur||'', '', mkFilter.tag||'', mkFilter.sort||'newest', true, wantRisky, wantStatus?mkFilter.status:-1];
       var r=(await rawApi('prediction_market_api','list_markets_by_category',p))||[];
       r.forEach(function(m){ if(m&&typeof m.market==='number') m.id=m.market; }); // id←market (normApi does this for api())
       CAT_STATUS_OK=true; return r;
@@ -1382,6 +1387,25 @@ async function fetchCatPage(from, limit){
   var r2=(await api('listMarketsByCategory', mkFilter.category, from, limit, jur||'', '', mkFilter.tag||'', mkFilter.sort||'newest'))||[];
   if(wantStatus) r2=r2.filter(function(m){return marketStatus(m)===mkFilter.status;}); // fallback filter (no-op on new node)
   return r2;
+}
+/* Дети события через rawApi: нода принимает у list_markets_by_event ЧЕТВЁРТЫЙ арг show_risky, но
+   вендоренная viz.min.js объявляет только (event, from, limit) — значит «дружелюбный» api() флаг
+   передать не может, и листать событие при погашенном risk-floor оракле нечем (нода такие рынки
+   молча выкидывает → пустая страница события без объяснения). Зовём rawApi ТОЛЬКО когда галка
+   «показывать рискованные» включена: при OFF путь и поведение прежние (api()), а при ON — 4-й арг.
+   Отказ (старая нода / сборка либы без арга) кэшируем в EV_RISKY_OK, чтобы не долбить её на каждой
+   странице, и молча падаем на штатный вызов. id←market правим руками: normApi-овский BYINDEX_RE
+   покрывает только by-index листинги, by_event в него не входит (как и в rawApi-пути категорий). */
+var EV_RISKY_OK=null;
+async function fetchEventMarkets(key, from, limit){
+  if(mkFilter.showRisky && EV_RISKY_OK!==false){
+    try{
+      var r=(await rawApi('prediction_market_api','list_markets_by_event',[key, from, limit, true]))||[];
+      r.forEach(function(m){ if(m&&typeof m.market==='number') m.id=m.market; });
+      EV_RISKY_OK=true; return r;
+    }catch(e){ EV_RISKY_OK=false; }
+  }
+  return (await api('listMarketsByEvent', key, from, limit))||[];
 }
 /* Fetch the next server page for the CURRENT filter (only the server-paginated shapes: a category
    with no tag, or a single-status All view). Returns [] for cache-complete shapes. */
@@ -2015,7 +2039,7 @@ async function screenEvent(key){
   if(!key){ return screenMarkets(); }
   setContent('<div class="empty"><span class="spin"></span> '+esc(t('common.loading'))+'</div>');
   var list;
-  try{ list=await api('listMarketsByEvent', key, 0, 200); }
+  try{ list=await fetchEventMarkets(key, 0, 200); }
   catch(e){ setContent('<div class="row"><a class="mut" data-nav="'+esc(lastBrowseHash)+'">'+esc(t('common.back_markets'))+'</a></div>'+
       '<div class="box err">'+esc(errText(e))+'</div>'); return; }
   list=(list||[]).filter(Boolean);
