@@ -51,8 +51,9 @@ var VIZ_MAINNET_CHAIN = '2040effda178d4fffff5eab7a915d4019879f5205cc5392e4bcced2
 var DEFAULT_NODE = { ws:'https://testnet.viz.world/', chain_id:VIZ_MAINNET_CHAIN, prefix:'VIZ' };
 /* "own node" = vizd running on the user's own machine (rpc-endpoint 127.0.0.1:8090) */
 var LOCAL_NODE = { ws:'http://127.0.0.1:8090/', chain_id:VIZ_MAINNET_CHAIN, prefix:'VIZ' };
-// Насколько head ноды может отстать от часов, прежде чем это стоит показать. Блок раз в 3 с,
-// так что пара минут — это уже не сетевой джиттер, а догон цепи.
+// Насколько head ноды может отстать от часов, прежде чем это стоит показать. Порог задан в СТЕННЫХ
+// часах, а не в блоках: с HF16 слот стал 1 с (было 3), и любое «N блоков × 3 с» здесь устарело бы
+// молча. Три минуты — уже не сетевой джиттер, а догон цепи (замер не нужен: порог — контракт).
 var NODE_LAG_WARN_SEC = 180;
 /* one-tap endpoints for the node screen */
 var NODE_PRESETS = [
